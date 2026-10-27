@@ -1,0 +1,1905 @@
+--- v077/MISSION_CODEX.md
++++ v078/MISSION_CODEX.md
+@@ -1,4 +1,7 @@
+-# Mission courante — Lot 2B, catégories du Time Base Monitor
++# Mission courante — lisibilité du Time Base Monitor, v0.7.8
++
++Requis 4102 : présentation plus lisible, symboles distincts et résumé du fichier
++entier. Aucun changement des calculs ou seuils. Voir docs/LISIBILITE_V078.md.
+ 
+ **v0.7.7 :** reprendre dans le graphique les catégories du moteur temporel :
+ jitter, trou probable et changement de fréquence probable. La tolérance du pas
+--- v077/README.md
++++ v078/README.md
+@@ -1,4 +1,18 @@
+-# VISU PTBG — import CSV et base de temps — v0.7.7
++# VISU PTBG — import CSV et base de temps — v0.7.8
++
++## Nouveauté : lisibilité du Time Base Monitor (requis 4102)
++
++Les points réguliers sont plus fins ; les anomalies utilisent des symboles
++distincts, avec une marge verticale pour voir les doublons à Δt=0. Le résumé
++affiche le raster saisi/estimé, sa tolérance et les nombres d'intervalles par
++catégorie sur le fichier entier (pas seulement la zone zoomée).
++Les calculs, seuils, données et croix restent identiques à la v0.7.7.
++Voir `docs/LISIBILITE_V078.md` et l'aperçu dans `exemples/Time_Base_Monitor_lisible_v078.png`.
++
++**Bibliothèques/packages :** registre dans [docs/DEPENDANCES.md](docs/DEPENDANCES.md).
++Les versions observées pendant cette livraison sont dans
++`docs/environnement_linux_v078.json` ; elles ne sont pas une liste d'installation
++validée pour Windows/SLES. Aucune dépendance ajoutée.
+ 
+ La v0.7.7 affiche dans le **Time Base Monitor** les catégories déjà calculées
+ par le moteur : jitter, trou probable et changement de fréquence probable.
+@@ -36,12 +50,12 @@
+ 
+ ## Premier essai sur le poste Windows
+ 
+-1. Extraire entièrement le ZIP dans un nouveau dossier, par exemple `VISU_V077`.
++1. Extraire entièrement le ZIP dans un nouveau dossier, par exemple `VISU_V078`.
+    Conserver l'ancien dossier et ses journaux.
+ 2. Dans Spyder, ouvrir `visu_ptbg/verifier_robustesse.py`, puis F5. Attendu :
+-   **118 tests rapides**, aucun test ignoré, réussite et sources inchangées à `True`.
++   **119 tests rapides**, aucun test ignoré, réussite et sources inchangées à `True`.
+ 3. Redémarrer le noyau Spyder pour décharger les anciens modules, puis ouvrir
+-   le **nouveau** `MAIN.py` et F5. Le titre doit indiquer **0.7.7**.
++   le **nouveau** `MAIN.py` et F5. Le titre doit indiquer **0.7.8**.
+ 4. Ajouter `donnees/simulation10_execution1.csv`. La première colonne `t_ms`
+    est affichée automatiquement. Renseigner `ms`, pas attendu `1`, tolérance
+    `0`, puis **Analyser ce fichier**.
+--- v077/docs/DEPENDANCES.md
++++ v078/docs/DEPENDANCES.md
+@@ -1,4 +1,18 @@
+-# Dépendances et compatibilité — v0.7.7
++# Dépendances et compatibilité — v0.7.8
++
++## Modification v0.7.8 (requis 3004)
++
++Aucune installation, mise à jour ou nouvelle dépendance externe. Le dessin
++réutilise Matplotlib (Figure, axes, symboles, légendes) et son intégration
++TkAgg existante. `collections.Counter` compte les catégories pour le résumé ;
++`textwrap.fill` adapte les textes à la largeur. Ces deux modules sont fournis
++avec Python, sans paquet pip à installer. Les calculs temporels sont inchangés.
++
++Le relevé `environnement_linux_v078.json` archive Python, OS, Tcl/Tk lorsqu'ils
++sont observables et les versions/métadonnées des packages installés :
++Matplotlib, NumPy, contourpy, cycler, fonttools, kiwisolver, packaging, Pillow,
++pyparsing, python-dateutil et six. Les exigences transitives sont incluses dans
++le relevé existant. La qualification Windows 11 x64 et SLES 15 SP7 reste ouverte.
+ 
+ La v0.7.7 réutilise les catégories du moteur temporel dans le graphique. Elle
+ n'ajoute aucune bibliothèque ni aucun comportement propre à Windows ou Linux.
+--- v077/docs/LISIBILITE_V078.md
++++ v078/docs/LISIBILITE_V078.md
+@@ -0,0 +1,35 @@
++# Lisibilité — v0.7.8
++
++Périmètre : REQ_COMMON_KH_4102, présentation du moniteur existant. Le nom
++Time Base Monitor, l'axe dédié et le zoom commun restent présents. Le requis
++reste ouvert pour les futurs modèles et conversions temporelles.
++
++## Changements fichier par fichier
++
++- src/trace_signal.py : symboles distincts (cercle pour doublon, triangle pour
++  trou probable, losange pour jitter), points normaux fins, guides discrets,
++  marge verticale et résumé des intervalles du fichier entier. Commentaires
++  directement dans les fonctions. Aucun calcul temporel ajouté.
++- tests/test_moniteur_quantitatif.py : vérifie les comptes du résumé, le zoom
++  partagé et l'absence de modification des objets de données par le dessin.
++- src/version_visu.py : version 0.7.8.
++- README, MISSION_CODEX et docs/REPRENDRE_LE_CODE : utilisation et maintenance.
++- docs/DEPENDANCES.md et environnement_linux_v078.json : registre et versions
++  observées des packages, distinctes d'une qualification Windows/SLES.
++
++## Essai utilisateur
++
++Ouvrir simulation10_execution2.csv, unité ms, pas 1, tolérance 0.5 ; afficher
++prod2. Attendu : deux cercles orange à Δt=0, un triangle à Δt=2, résumé avec
++2 doublons et 1 trou probable. Zoomer : les comptes restent ceux du fichier
++entier. Les trous probables ne prouvent pas une perte ; seules les cellules
++vides du signal autorisent les croix sur les mesures voisines.
++
++## Limites
++
++Rendu vérifié avec Matplotlib Agg, essai Tkinter Windows/SLES encore attendu.
++La fenêtre Tkinter globale n'est pas redessinée dans ce lot ; sa mise à
++l'échelle et les très petites fenêtres restent à qualifier. Les repères
++verticaux historiques restent limités ; la série Δt et son résumé utilisent
++tous les intervalles préparés. Une fréquence modifiée est comptée en
++intervalles concernés, pas en événements indépendants.
+--- v077/docs/REPRENDRE_LE_CODE.md
++++ v078/docs/REPRENDRE_LE_CODE.md
+@@ -1,6 +1,6 @@
+ # Reprendre VISU PTBG — guide pour Sébastien
+ 
+-Ce guide concerne la v0.7.7. Le projet utilise Python et la bibliothèque
++Ce guide concerne la v0.7.8. Le projet utilise Python et la bibliothèque
+ standard pour lire/analyser les CSV. Tkinter affiche la fenêtre et Matplotlib
+ dessine les graphiques. Les calculs peuvent être testés sans ouvrir la fenêtre.
+ 
+@@ -21,6 +21,11 @@
+ source ne donne implicitement son horloge à une autre.
+ 
+ ## Où modifier quoi
++
++La lisibilité v0.7.8 est dans `src/trace_signal.py` : `resumer_moniteur` met
++en mots les résultats ; `creer_figure` gère formes, tailles et transparences.
++Les commentaires expliquent directement les choix de dessin dans le code.
++Ne pas placer de nouvelle règle de calcul dans ces fonctions.
+ 
+ | Besoin | Fichier / point d'entrée | Test à consulter |
+ |---|---|---|
+--- v077/references_simulation/Redundancy10.py
++++ v078/references_simulation/Redundancy10.py
+@@ -1,352 +1,352 @@
+-import numpy as np
+-import csv
+-import random
+-import heapq
+-
+-from scipy.signal       import square
+-from graphical_report10 import draw
+-from generate_report10  import report
+-
+-# ============================================================
+-# PARAMETERS
+-# ============================================================
+-
+-SQW_F           = 1
+-SQW_MN          = 0
+-SQW_MX          = 1
+-SQW_CR          = 50
+-SOURCE_CYCLE    = 0.001
+-
+-DT              = 0.001
+-T_SIM           = 10
+-HB_TIMEOUT      = 0.050
+-STALL_LIMIT     = 2
+-TIME_FAULT      = 8
+-
+-PRODUCER_CYCLE        = 0.010
+-PRODUCER_WORK_DELAY   = 0.004
+-PRODUCER_JITTER_MAX   = 0.001
+-
+-CONSUMER_CYCLE        = 0.020
+-CONSUMER_WORK_DELAY   = 0.010
+-CONSUMER_JITTER_MAX   = 0.001
+-
+-PUBLISHER_CYCLE       = 0.010
+-PUBLISHER_WORK_DELAY  = 0.004    
+-PUBLISHER_JITTER_MAX  = 0.001
+-
+-# ============================================================
+-# SIGNAL
+-# ============================================================
+-
+-def square_signal(t):
+-    return ((SQW_MX - SQW_MN) / 2) * (square(2 * np.pi * SQW_F * t, duty=SQW_CR / 100) + 1)
+-
+-# ============================================================
+-# VOTER Logic
+-# ============================================================
+-
+-def voter(a, b, c):
+-    return (a + b + c) >= 2
+-
+-# ============================================================
+-# SCHEDULER (original + internal event queue)
+-# ============================================================
+-
+-class Task:
+-    def __init__(self, period, phase, callback):
+-        self.period = period
+-        self.next_run = phase
+-        self.callback = callback
+-
+-    def tick(self, sim_time):
+-        if sim_time >= self.next_run:
+-            self.callback(self.next_run)
+-            self.next_run += self.period
+-
+-# ---- Internal event queue (for intra-cycle delays) ----
+-
+-event_queue = []
+-event_counter = 0
+-
+-def schedule_event(time, callback):
+-    global event_counter
+-    event_counter += 1
+-    heapq.heappush(event_queue, (time, event_counter, callback))
+-
+-def run_events(sim_time):
+-    while event_queue and event_queue[0][0] <= sim_time:
+-        _, _, cb = heapq.heappop(event_queue)
+-        cb(sim_time)
+-
+-# ============================================================
+-# SHARED STATE
+-# ============================================================
+-
+-source_value     = 0
+-shared_prod      = {1: 0, 2: 0, 3: 0}
+-plc_image        = {1: {}, 2: {}}
+-failure_plc      = 0
+-consumer_state   = {1: "STOP", 2: "STOP"}
+-consumer_vote    = {1: 0, 2: 0}
+-consumer_hb      = {1: {"value": 0, "time": None},2: {"value": 0, "time": None}}
+-last_seen_hb     = {1: None, 2: None}
+-hb_stall_cnt     = {1: 0, 2: 0}
+-
+-seed_init        = 123
+-random.seed(seed_init)
+-INIT_TIME        = {1: random.uniform(0.6, 0.7),2: random.uniform(0.6, 0.7)}
+-
+-published_value  = 0
+-
+-overrun_prod     = {1: False, 2: False, 3: False}
+-overrun_cons     = {1: False, 2: False}
+-overrun_pub      = False
+-
+-start_flags      = {"prod1": False, "prod2": False, "prod3": False,"cons1": False, "cons2": False, "pub": False}
+-start_pulse      = {"prod1": 0, "prod2": 0, "prod3": 0,"cons1": 0, "cons2": 0, "pub": 0}
+-
+-publisher_output = []
+-log_all          = []
+-
+-prod_slot        = {1: 0, 2: 0, 3: 0}   # tampon producteur (valeur capturée dans le slot)
+-cons_slot_vote   = {1: 0, 2: 0}         # tampon consommateur (vote calculé dans le slot)
+-cons_slot_active = {1: False, 2: False} # tampon consommateur (état ACTIVE dans le slot)
+-pub_slot_value   = None                 # tampon publisher (snapshot à émettre en fin de slot)
+-
+-# ============================================================
+-# TASKS
+-# ============================================================
+-
+-def source_task(t):
+-    global source_value
+-    source_value = square_signal(t)
+-
+-# ------------------------------------------------------------
+-# PRODUCER (work in slot, publish at end of period)
+-# ------------------------------------------------------------
+-
+-def producer_task(pid):
+-    def task(t0):
+-        global start_flags, start_pulse, overrun_prod, prod_slot, shared_prod
+-
+-        key = f"prod{pid}"
+-        if not start_flags[key]:
+-            start_flags[key] = True
+-            start_pulse[key] = 1
+-
+-        def work_phase(t):
+-            prod_slot[pid] = source_value
+-
+-        def publish_phase(t):
+-            shared_prod[pid] = prod_slot[pid]
+-
+-        jitter = random.uniform(-PRODUCER_JITTER_MAX, PRODUCER_JITTER_MAX)
+-        schedule_event(t0 + PRODUCER_WORK_DELAY + jitter, work_phase)
+-        schedule_event(t0 + PRODUCER_CYCLE, publish_phase)
+-
+-    return task
+-
+-# ------------------------------------------------------------
+-# CONSUMER (work in slot, publish at end of period)
+-# ------------------------------------------------------------
+-
+-def consumer_task(cid):
+-    def task(t0):
+-        global start_flags, start_pulse
+-        global plc_image, consumer_hb, last_seen_hb, hb_stall_cnt
+-        global consumer_state, cons_slot_vote, cons_slot_active, published_value, failure_plc
+-
+-        key = f"cons{cid}"
+-        if not start_flags[key]:
+-            start_flags[key] = True
+-            start_pulse[key] = 1
+-        # ---------------------------------------------------------------------
+-        def work_phase(t):
+-
+-            if t >= TIME_FAULT:
+-                if cid == 1:
+-                    failure_plc = 1
+-                    cons_slot_active[cid] = False
+-                    return
+-
+-            plc_image[cid] = shared_prod.copy()
+-
+-            consumer_hb[cid]["value"] += 1
+-            consumer_hb[cid]["time"] = t
+-
+-            if t < INIT_TIME[cid]:
+-                consumer_state[cid] = "INIT"
+-                cons_slot_active[cid] = False
+-                return
+-
+-            other = 2 if cid == 1 else 1
+-            hb_other = consumer_hb[other]
+-            
+-            if hb_other["time"] is not None:
+-                if last_seen_hb[other] == hb_other["value"]:
+-                    hb_stall_cnt[other] += 1
+-                else:
+-                    hb_stall_cnt[other] = 0
+-                    last_seen_hb[other] = hb_other["value"]
+-                    
+-            # -----------------------------------------------------------------
+-            def unhealthy(c):
+-                hb = consumer_hb[c]
+-                if hb["time"] is None:
+-                    return True
+-                timeout = (t - hb["time"]) > HB_TIMEOUT
+-                stall = hb_stall_cnt[c] >= STALL_LIMIT
+-                return timeout and stall
+-            # -----------------------------------------------------------------
+-
+-            if t <= max(INIT_TIME.values()):
+-                consumer_state[1] = "INIT"
+-                consumer_state[2] = "INIT"
+-                cons_slot_active[cid] = False
+-                return
+-            else:
+-                if not unhealthy(1):
+-                    consumer_state[1] = "ACTIVE"
+-                    consumer_state[2] = "STANDBY"
+-                else:
+-                    consumer_state[1] = "FAILED"
+-                    consumer_state[2] = "ACTIVE"
+-
+-            v = voter(plc_image[cid][1], plc_image[cid][2], plc_image[cid][3])
+-            cons_slot_vote[cid] = int(v)
+-            consumer_vote[cid] = int(v)  
+-            cons_slot_active[cid] = (consumer_state[cid] == "ACTIVE")
+-        # ---------------------------------------------------------------------
+-        def publish_phase(t):
+-            global published_value
+-            if cons_slot_active[cid]:
+-                published_value = cons_slot_vote[cid]
+-        # ---------------------------------------------------------------------
+-        jitter = random.uniform(-CONSUMER_JITTER_MAX, CONSUMER_JITTER_MAX)
+-        schedule_event(t0 + CONSUMER_WORK_DELAY + jitter, work_phase)
+-        schedule_event(t0 + CONSUMER_CYCLE, publish_phase)
+-
+-    return task
+-
+-
+-# ------------------------------------------------------------
+-# PUBLISHER (work in slot, publish at end of period)
+-# ------------------------------------------------------------
+-
+-def publisher_task(t0):
+-    global start_flags, start_pulse
+-    global pub_slot_value, publisher_output, published_value
+-
+-    if not start_flags["pub"]:
+-        start_flags["pub"] = True
+-        start_pulse["pub"] = 1
+-
+-    def work_phase(t):
+-        global pub_slot_value, published_value
+-        pub_slot_value = published_value
+-
+-    def publish_phase(t):
+-        global publisher_output, pub_slot_value
+-        plc_value = pub_slot_value
+-        publisher_output.append((t, plc_value))
+-
+-    jitter = random.uniform(-PUBLISHER_JITTER_MAX, PUBLISHER_JITTER_MAX)
+-    schedule_event(t0 + PUBLISHER_WORK_DELAY + jitter, work_phase)
+-    schedule_event(t0 + PUBLISHER_CYCLE, publish_phase)
+-
+-
+-# ------------------------------------------------------------
+-# LOGGER
+-# ------------------------------------------------------------
+-
+-def logger_task(t):
+-    pub_val = publisher_output[-1][1] if publisher_output else None
+-    log_all.append((
+-        int(t*1000),
+-        source_value,
+-        shared_prod[1],
+-        shared_prod[2],
+-        shared_prod[3],
+-        consumer_state[1],
+-        consumer_state[2],
+-        consumer_vote[1],
+-        consumer_vote[2],
+-        published_value,
+-        failure_plc,
+-        pub_val,
+-        start_pulse["prod1"],
+-        start_pulse["prod2"],
+-        start_pulse["prod3"],
+-        start_pulse["cons1"],
+-        start_pulse["cons2"],
+-        start_pulse["pub"]
+-    ))
+-    for k in start_pulse:
+-        start_pulse[k] = 0
+-
+-
+-# ============================================================
+-# PHASES
+-# ============================================================
+-random.seed()
+-phase_prod = {i: random.uniform(0, 0.5) for i in [1, 2, 3]}
+-phase_cons = {i: random.uniform(0, 0.5) for i in [1, 2]}
+-phase_pub  = random.uniform(0, 0.5)
+-
+-# ============================================================
+-# BUILD TASK LIST
+-# ============================================================
+-
+-tasks = []
+-
+-tasks.append(Task(SOURCE_CYCLE, 0, source_task))
+-
+-for i in [1, 2, 3]:
+-    tasks.append(Task(PRODUCER_CYCLE, phase_prod[i], producer_task(i)))
+-
+-for i in [1, 2]:
+-    tasks.append(Task(CONSUMER_CYCLE, phase_cons[i], consumer_task(i)))
+-
+-tasks.append(Task(PRODUCER_CYCLE, phase_pub, publisher_task))
+-
+-tasks.append(Task(DT, 0, logger_task))
+-
+-# ============================================================
+-# RUN SIMULATION
+-# ============================================================
+-
+-sim_time = 0.0
+-while sim_time < T_SIM:
+-
+-    for task in tasks:
+-        task.tick(sim_time)
+-
+-    run_events(sim_time)
+-
+-    sim_time += DT
+-
+-# ============================================================
+-# WRITE CSV
+-# ============================================================
+-
+-with open("simulation10.csv", "w", newline="") as f:
+-    w = csv.writer(f)
+-    w.writerow([
+-        "t_ms",
+-        "source",
+-        "prod1","prod2","prod3",
+-        "cons1_state","cons2_state",
+-        "cons1_vote","cons2_vote",
+-        "published",
+-        "failure_plc",
+-        "pub_output",
+-        "start_p1","start_p2","start_p3",
+-        "start_c1","start_c2",
+-        "start_pub"
+-    ])
+-    w.writerows(log_all)
+-
+-print("Simulation complete. Single deterministic log generated.")
+-#report()
++import numpy as np
++import csv
++import random
++import heapq
++
++from scipy.signal       import square
++from graphical_report10 import draw
++from generate_report10  import report
++
++# ============================================================
++# PARAMETERS
++# ============================================================
++
++SQW_F           = 1
++SQW_MN          = 0
++SQW_MX          = 1
++SQW_CR          = 50
++SOURCE_CYCLE    = 0.001
++
++DT              = 0.001
++T_SIM           = 10
++HB_TIMEOUT      = 0.050
++STALL_LIMIT     = 2
++TIME_FAULT      = 8
++
++PRODUCER_CYCLE        = 0.010
++PRODUCER_WORK_DELAY   = 0.004
++PRODUCER_JITTER_MAX   = 0.001
++
++CONSUMER_CYCLE        = 0.020
++CONSUMER_WORK_DELAY   = 0.010
++CONSUMER_JITTER_MAX   = 0.001
++
++PUBLISHER_CYCLE       = 0.010
++PUBLISHER_WORK_DELAY  = 0.004    
++PUBLISHER_JITTER_MAX  = 0.001
++
++# ============================================================
++# SIGNAL
++# ============================================================
++
++def square_signal(t):
++    return ((SQW_MX - SQW_MN) / 2) * (square(2 * np.pi * SQW_F * t, duty=SQW_CR / 100) + 1)
++
++# ============================================================
++# VOTER Logic
++# ============================================================
++
++def voter(a, b, c):
++    return (a + b + c) >= 2
++
++# ============================================================
++# SCHEDULER (original + internal event queue)
++# ============================================================
++
++class Task:
++    def __init__(self, period, phase, callback):
++        self.period = period
++        self.next_run = phase
++        self.callback = callback
++
++    def tick(self, sim_time):
++        if sim_time >= self.next_run:
++            self.callback(self.next_run)
++            self.next_run += self.period
++
++# ---- Internal event queue (for intra-cycle delays) ----
++
++event_queue = []
++event_counter = 0
++
++def schedule_event(time, callback):
++    global event_counter
++    event_counter += 1
++    heapq.heappush(event_queue, (time, event_counter, callback))
++
++def run_events(sim_time):
++    while event_queue and event_queue[0][0] <= sim_time:
++        _, _, cb = heapq.heappop(event_queue)
++        cb(sim_time)
++
++# ============================================================
++# SHARED STATE
++# ============================================================
++
++source_value     = 0
++shared_prod      = {1: 0, 2: 0, 3: 0}
++plc_image        = {1: {}, 2: {}}
++failure_plc      = 0
++consumer_state   = {1: "STOP", 2: "STOP"}
++consumer_vote    = {1: 0, 2: 0}
++consumer_hb      = {1: {"value": 0, "time": None},2: {"value": 0, "time": None}}
++last_seen_hb     = {1: None, 2: None}
++hb_stall_cnt     = {1: 0, 2: 0}
++
++seed_init        = 123
++random.seed(seed_init)
++INIT_TIME        = {1: random.uniform(0.6, 0.7),2: random.uniform(0.6, 0.7)}
++
++published_value  = 0
++
++overrun_prod     = {1: False, 2: False, 3: False}
++overrun_cons     = {1: False, 2: False}
++overrun_pub      = False
++
++start_flags      = {"prod1": False, "prod2": False, "prod3": False,"cons1": False, "cons2": False, "pub": False}
++start_pulse      = {"prod1": 0, "prod2": 0, "prod3": 0,"cons1": 0, "cons2": 0, "pub": 0}
++
++publisher_output = []
++log_all          = []
++
++prod_slot        = {1: 0, 2: 0, 3: 0}   # tampon producteur (valeur capturée dans le slot)
++cons_slot_vote   = {1: 0, 2: 0}         # tampon consommateur (vote calculé dans le slot)
++cons_slot_active = {1: False, 2: False} # tampon consommateur (état ACTIVE dans le slot)
++pub_slot_value   = None                 # tampon publisher (snapshot à émettre en fin de slot)
++
++# ============================================================
++# TASKS
++# ============================================================
++
++def source_task(t):
++    global source_value
++    source_value = square_signal(t)
++
++# ------------------------------------------------------------
++# PRODUCER (work in slot, publish at end of period)
++# ------------------------------------------------------------
++
++def producer_task(pid):
++    def task(t0):
++        global start_flags, start_pulse, overrun_prod, prod_slot, shared_prod
++
++        key = f"prod{pid}"
++        if not start_flags[key]:
++            start_flags[key] = True
++            start_pulse[key] = 1
++
++        def work_phase(t):
++            prod_slot[pid] = source_value
++
++        def publish_phase(t):
++            shared_prod[pid] = prod_slot[pid]
++
++        jitter = random.uniform(-PRODUCER_JITTER_MAX, PRODUCER_JITTER_MAX)
++        schedule_event(t0 + PRODUCER_WORK_DELAY + jitter, work_phase)
++        schedule_event(t0 + PRODUCER_CYCLE, publish_phase)
++
++    return task
++
++# ------------------------------------------------------------
++# CONSUMER (work in slot, publish at end of period)
++# ------------------------------------------------------------
++
++def consumer_task(cid):
++    def task(t0):
++        global start_flags, start_pulse
++        global plc_image, consumer_hb, last_seen_hb, hb_stall_cnt
++        global consumer_state, cons_slot_vote, cons_slot_active, published_value, failure_plc
++
++        key = f"cons{cid}"
++        if not start_flags[key]:
++            start_flags[key] = True
++            start_pulse[key] = 1
++        # ---------------------------------------------------------------------
++        def work_phase(t):
++
++            if t >= TIME_FAULT:
++                if cid == 1:
++                    failure_plc = 1
++                    cons_slot_active[cid] = False
++                    return
++
++            plc_image[cid] = shared_prod.copy()
++
++            consumer_hb[cid]["value"] += 1
++            consumer_hb[cid]["time"] = t
++
++            if t < INIT_TIME[cid]:
++                consumer_state[cid] = "INIT"
++                cons_slot_active[cid] = False
++                return
++
++            other = 2 if cid == 1 else 1
++            hb_other = consumer_hb[other]
++            
++            if hb_other["time"] is not None:
++                if last_seen_hb[other] == hb_other["value"]:
++                    hb_stall_cnt[other] += 1
++                else:
++                    hb_stall_cnt[other] = 0
++                    last_seen_hb[other] = hb_other["value"]
++                    
++            # -----------------------------------------------------------------
++            def unhealthy(c):
++                hb = consumer_hb[c]
++                if hb["time"] is None:
++                    return True
++                timeout = (t - hb["time"]) > HB_TIMEOUT
++                stall = hb_stall_cnt[c] >= STALL_LIMIT
++                return timeout and stall
++            # -----------------------------------------------------------------
++
++            if t <= max(INIT_TIME.values()):
++                consumer_state[1] = "INIT"
++                consumer_state[2] = "INIT"
++                cons_slot_active[cid] = False
++                return
++            else:
++                if not unhealthy(1):
++                    consumer_state[1] = "ACTIVE"
++                    consumer_state[2] = "STANDBY"
++                else:
++                    consumer_state[1] = "FAILED"
++                    consumer_state[2] = "ACTIVE"
++
++            v = voter(plc_image[cid][1], plc_image[cid][2], plc_image[cid][3])
++            cons_slot_vote[cid] = int(v)
++            consumer_vote[cid] = int(v)  
++            cons_slot_active[cid] = (consumer_state[cid] == "ACTIVE")
++        # ---------------------------------------------------------------------
++        def publish_phase(t):
++            global published_value
++            if cons_slot_active[cid]:
++                published_value = cons_slot_vote[cid]
++        # ---------------------------------------------------------------------
++        jitter = random.uniform(-CONSUMER_JITTER_MAX, CONSUMER_JITTER_MAX)
++        schedule_event(t0 + CONSUMER_WORK_DELAY + jitter, work_phase)
++        schedule_event(t0 + CONSUMER_CYCLE, publish_phase)
++
++    return task
++
++
++# ------------------------------------------------------------
++# PUBLISHER (work in slot, publish at end of period)
++# ------------------------------------------------------------
++
++def publisher_task(t0):
++    global start_flags, start_pulse
++    global pub_slot_value, publisher_output, published_value
++
++    if not start_flags["pub"]:
++        start_flags["pub"] = True
++        start_pulse["pub"] = 1
++
++    def work_phase(t):
++        global pub_slot_value, published_value
++        pub_slot_value = published_value
++
++    def publish_phase(t):
++        global publisher_output, pub_slot_value
++        plc_value = pub_slot_value
++        publisher_output.append((t, plc_value))
++
++    jitter = random.uniform(-PUBLISHER_JITTER_MAX, PUBLISHER_JITTER_MAX)
++    schedule_event(t0 + PUBLISHER_WORK_DELAY + jitter, work_phase)
++    schedule_event(t0 + PUBLISHER_CYCLE, publish_phase)
++
++
++# ------------------------------------------------------------
++# LOGGER
++# ------------------------------------------------------------
++
++def logger_task(t):
++    pub_val = publisher_output[-1][1] if publisher_output else None
++    log_all.append((
++        int(t*1000),
++        source_value,
++        shared_prod[1],
++        shared_prod[2],
++        shared_prod[3],
++        consumer_state[1],
++        consumer_state[2],
++        consumer_vote[1],
++        consumer_vote[2],
++        published_value,
++        failure_plc,
++        pub_val,
++        start_pulse["prod1"],
++        start_pulse["prod2"],
++        start_pulse["prod3"],
++        start_pulse["cons1"],
++        start_pulse["cons2"],
++        start_pulse["pub"]
++    ))
++    for k in start_pulse:
++        start_pulse[k] = 0
++
++
++# ============================================================
++# PHASES
++# ============================================================
++random.seed()
++phase_prod = {i: random.uniform(0, 0.5) for i in [1, 2, 3]}
++phase_cons = {i: random.uniform(0, 0.5) for i in [1, 2]}
++phase_pub  = random.uniform(0, 0.5)
++
++# ============================================================
++# BUILD TASK LIST
++# ============================================================
++
++tasks = []
++
++tasks.append(Task(SOURCE_CYCLE, 0, source_task))
++
++for i in [1, 2, 3]:
++    tasks.append(Task(PRODUCER_CYCLE, phase_prod[i], producer_task(i)))
++
++for i in [1, 2]:
++    tasks.append(Task(CONSUMER_CYCLE, phase_cons[i], consumer_task(i)))
++
++tasks.append(Task(PRODUCER_CYCLE, phase_pub, publisher_task))
++
++tasks.append(Task(DT, 0, logger_task))
++
++# ============================================================
++# RUN SIMULATION
++# ============================================================
++
++sim_time = 0.0
++while sim_time < T_SIM:
++
++    for task in tasks:
++        task.tick(sim_time)
++
++    run_events(sim_time)
++
++    sim_time += DT
++
++# ============================================================
++# WRITE CSV
++# ============================================================
++
++with open("simulation10.csv", "w", newline="") as f:
++    w = csv.writer(f)
++    w.writerow([
++        "t_ms",
++        "source",
++        "prod1","prod2","prod3",
++        "cons1_state","cons2_state",
++        "cons1_vote","cons2_vote",
++        "published",
++        "failure_plc",
++        "pub_output",
++        "start_p1","start_p2","start_p3",
++        "start_c1","start_c2",
++        "start_pub"
++    ])
++    w.writerows(log_all)
++
++print("Simulation complete. Single deterministic log generated.")
++#report()
+ draw()--- v077/references_simulation/generate_report10.py
++++ v078/references_simulation/generate_report10.py
+@@ -1,239 +1,239 @@
+-# -*- coding: utf-8 -*-
+-# generate_report10.py — reads simulation9.csv / simulation10.csv
+-
+-import os
+-import numpy as np
+-import pandas as pd
+-
+-# ============================================================
+-# PARAMETERS (miroir de la simu pour fallback)
+-# ============================================================
+-HB_TIMEOUT_MS        = 50.0
+-STALL_LIMIT          = 2
+-CONSUMER_CYCLE_MS    = 20.0
+-# detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
+-
+-# ============================================================
+-# UTILITIES
+-# ============================================================
+-
+-def load_data():
+-    # auto-pick latest if both exist
+-    fn = "simulation10.csv" if os.path.exists("simulation10.csv") else "simulation9.csv"
+-    df = pd.read_csv(fn)
+-    df["t_ms"] = pd.to_numeric(df["t_ms"], errors="coerce")
+-    df.dropna(subset=["t_ms"], inplace=True)
+-    df.sort_values("t_ms", inplace=True)
+-    df.reset_index(drop=True, inplace=True)
+-    return df
+-
+-def rising_edges_bool(series, t):
+-    x = series.fillna(0).astype(int).to_numpy()
+-    tt = t.to_numpy(dtype=float)
+-    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
+-    return tt[idx]
+-
+-def rising_edges_threshold(series, t, thr=0.5):
+-    x = (series > thr).astype(int).to_numpy()
+-    tt = t.to_numpy(dtype=float)
+-    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
+-    return tt[idx]
+-
+-def mean_delay(src_edges, dst_edges):
+-    delays = []
+-    j = 0
+-    for e in src_edges:
+-        while j < len(dst_edges) and dst_edges[j] < e:
+-            j += 1
+-        if j < len(dst_edges):
+-            delays.append(dst_edges[j] - e)
+-    return np.mean(delays) if len(delays) > 0 else np.nan
+-
+-def first_time(df, col, value=1):
+-    rows = df[df[col] == value]
+-    return float(rows["t_ms"].iloc[0]) if not rows.empty else np.nan
+-
+-def state_at(df, state_col, time_ms):
+-    rows = df[df["t_ms"] >= time_ms]
+-    return rows[state_col].iloc[0] if not rows.empty else "UNKNOWN"
+-
+-# ============================================================
+-# MAIN REPORT
+-# ============================================================
+-
+-def report():
+-
+-    DF = load_data()
+-    T = DF["t_ms"]
+-
+-    # ========== SOURCE (pour stats seulement) ==========
+-    SRC_EDGES = rising_edges_threshold(DF["source"], T)
+-    SRC_EDGES = SRC_EDGES[SRC_EDGES >= 1000]
+-    if len(SRC_EDGES) > 1:
+-        periods = np.diff(SRC_EDGES)
+-        freq = 1000.0 / np.mean(periods)
+-        cycle_rate = np.mean(DF["source"]) * 100
+-    else:
+-        freq = np.nan
+-        cycle_rate = np.nan
+-
+-    # ========== PRODUCERS ==========
+-    producers = {}
+-    for pid in [1, 2, 3]:
+-        start = first_time(DF, f"start_p{pid}")
+-        edges = rising_edges_threshold(DF[f"prod{pid}"], T)
+-        delay = mean_delay(SRC_EDGES, edges)
+-        overruns = int(DF[f"ov_p{pid}"].sum())
+-        producers[pid] = {"start": start, "delay": delay, "overruns": overruns}
+-
+-    # ========== CONSUMERS ==========
+-    consumers = {}
+-    for cid in [1, 2]:
+-        start = first_time(DF, f"start_c{cid}")
+-        vote_edges = rising_edges_bool(DF[f"cons{cid}_vote"], T)
+-        delay = mean_delay(SRC_EDGES, vote_edges)
+-        overruns = int(DF[f"ov_c{cid}"].sum())
+-        status_1s = state_at(DF, f"cons{cid}_state", 1000)
+-        fail_rows = DF[DF[f"cons{cid}_state"] == "FAILED"]
+-        if not fail_rows.empty:
+-            fail_time = float(fail_rows["t_ms"].iloc[0])
+-            new_status = "FAILED"
+-        else:
+-            fail_time = np.nan
+-            new_status = "N/A"
+-        consumers[cid] = {
+-            "start": start,
+-            "delay": delay,
+-            "overruns": overruns,
+-            "status_1s": status_1s,
+-            "fail_time": fail_time,
+-            "new_status": new_status
+-        }
+-
+-    # ========== PUBLISHER ==========
+-    pub_start = first_time(DF, "start_pub")
+-    # fronts logiques (diagnostic): dépend de changements de valeur
+-    PUB_EDGES = rising_edges_bool(DF["pub_output"], T)
+-    # liste de TOUS les instants de publication (plus robuste)
+-    PUB_TIMES = DF.loc[DF["pub_output"].notna(), "t_ms"].to_numpy(dtype=float)
+-    pub_delay = mean_delay(SRC_EDGES, PUB_EDGES)
+-    pub_overruns = int(DF["ov_pub"].sum())
+-
+-    # ========== FAILURE / SWITCH / RECOVERY ==========
+-    # 1) fault_time direct si disponible
+-    fault_time_raw = first_time(DF, "failure_plc")  # peut être NaN
+-    # 2) switch_time = 1er instant où C2 devient ACTIVE
+-    c2_rows = DF[DF["cons2_state"] == "ACTIVE"]
+-    switch_time = float(c2_rows["t_ms"].iloc[0]) if not c2_rows.empty else np.nan
+-
+-    # 3) fallback si fault_time absent: estimer par la détection HB + stall
+-    detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
+-    fault_time = fault_time_raw if not np.isnan(fault_time_raw) else (
+-        switch_time - detect_delay if not np.isnan(switch_time) else np.nan
+-    )
+-
+-    # 4) délais
+-    switch_delay = (
+-        switch_time - fault_time
+-        if (not np.isnan(fault_time) and not np.isnan(switch_time))
+-        else np.nan
+-    )
+-
+-    # publication la plus proche APRES le switch (indépendant d'un front)
+-    first_pub_after_switch = np.nan
+-    if not np.isnan(switch_time) and len(PUB_TIMES) > 0:
+-        after = PUB_TIMES[PUB_TIMES >= switch_time]
+-        if len(after) > 0:
+-            first_pub_after_switch = after[0]
+-
+-    # recovery pure pipeline (switch -> publish)
+-    recovery_switch_to_pub = (
+-        first_pub_after_switch - switch_time
+-        if (not np.isnan(first_pub_after_switch) and not np.isnan(switch_time))
+-        else np.nan
+-    )
+-    # recovery end-to-end (fault -> publish)
+-    recovery_fault_to_pub = (
+-        first_pub_after_switch - fault_time
+-        if (not np.isnan(first_pub_after_switch) and not np.isnan(fault_time))
+-        else np.nan
+-    )
+-
+-    # (optionnel) edge-to-edge purement diagnostique
+-    complete_delay_edge2edge = np.nan
+-    if not np.isnan(fault_time) and not np.isnan(switch_time):
+-        src_edge = SRC_EDGES[SRC_EDGES <= fault_time]
+-        last_src = src_edge[-1] if len(src_edge) > 0 else np.nan
+-        pub_edge = PUB_EDGES[PUB_EDGES >= switch_time]
+-        first_pub_edge = pub_edge[0] if len(pub_edge) > 0 else np.nan
+-        if not np.isnan(last_src) and not np.isnan(first_pub_edge):
+-            complete_delay_edge2edge = first_pub_edge - last_src
+-
+-    # ========== MARKDOWN ==========
+-    with open("report.md", "w", encoding="utf-8") as f:
+-
+-        f.write("# REDUNDANCY8 REPORT\n\n")
+-
+-        f.write("## Source\n")
+-        f.write(f">Frequency calculated: {freq:.3f} Hz\n")
+-        f.write(f">Cycle rate calculated: {cycle_rate:.2f} %\n\n")
+-
+-        for pid in [1, 2, 3]:
+-            p = producers[pid]
+-            f.write(f"## Producer {pid}\n")
+-            f.write(f">start time: {p['start']:.3f} ms\n")
+-            f.write(f">mean delay edges / source: {p['delay']:.3f} ms\n")
+-            f.write(f">overruns: {p['overruns']}\n\n")
+-
+-        for cid in [1, 2]:
+-            c = consumers[cid]
+-            f.write(f"## Consumer {cid}\n")
+-            f.write(f">start time: {c['start']:.3f} ms\n")
+-            f.write(f">mean delay 2oo3 edges / source: {c['delay']:.3f} ms\n")
+-            f.write(f">overruns: {c['overruns']}\n")
+-            f.write(f">status @ 1s: {c['status_1s']}\n")
+-            f.write(f">Moment of failure: {c['fail_time']:.3f} ms\n")
+-            f.write(f">New status: {c['new_status']}\n\n")
+-
+-        f.write("## Publisher 1\n")
+-        f.write(f">start time: {pub_start:.3f} ms\n")
+-        f.write(f">mean delay edges / source (publisher output): {pub_delay:.3f} ms\n")
+-        f.write(f">overruns: {pub_overruns}\n\n")
+-
+-        f.write("## PLC Failure / Recovery\n")
+-        f.write(f">fault time (raw/fallback): {fault_time:.3f} ms\n")
+-        f.write(f">switch time (C2 ACTIVE): {switch_time:.3f} ms\n")
+-        f.write(f">switch delay (fault -> switch): {switch_delay:.3f} ms\n")
+-        f.write(f">recovery (switch -> first publish): {recovery_switch_to_pub:.3f} ms\n")
+-        f.write(f">recovery (fault -> first publish): {recovery_fault_to_pub:.3f} ms\n")
+-        f.write(f">diagnostic edge-to-edge (src edge -> pub edge): {complete_delay_edge2edge:.3f} ms\n")
+-
+-    # ========== SUMMARY CSV ==========
+-    summary = {
+-        "freq": freq,
+-        "cycle_rate": cycle_rate,
+-        "p1_start": producers[1]["start"],
+-        "p2_start": producers[2]["start"],
+-        "p3_start": producers[3]["start"],
+-        "c1_start": consumers[1]["start"],
+-        "c2_start": consumers[2]["start"],
+-        "p1_delay": producers[1]["delay"],
+-        "p2_delay": producers[2]["delay"],
+-        "p3_delay": producers[3]["delay"],
+-        "c1_delay": consumers[1]["delay"],
+-        "c2_delay": consumers[2]["delay"],
+-        "pub_delay": pub_delay,
+-        "fault_time": fault_time,
+-        "switch_time": switch_time,
+-        "switch_delay": switch_delay,
+-        "recovery_switch_to_pub": recovery_switch_to_pub,
+-        "recovery_fault_to_pub": recovery_fault_to_pub,
+-        "edge2edge_delay": complete_delay_edge2edge
+-    }
+-
+-    file = "reports.csv"
+-    df_res = pd.read_csv(file) if os.path.exists(file) else pd.DataFrame()
+-    df_res = pd.concat([df_res, pd.DataFrame([summary])], ignore_index=True)
+-    df_res.to_csv(file, index=False)
+-
++# -*- coding: utf-8 -*-
++# generate_report10.py — reads simulation9.csv / simulation10.csv
++
++import os
++import numpy as np
++import pandas as pd
++
++# ============================================================
++# PARAMETERS (miroir de la simu pour fallback)
++# ============================================================
++HB_TIMEOUT_MS        = 50.0
++STALL_LIMIT          = 2
++CONSUMER_CYCLE_MS    = 20.0
++# detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
++
++# ============================================================
++# UTILITIES
++# ============================================================
++
++def load_data():
++    # auto-pick latest if both exist
++    fn = "simulation10.csv" if os.path.exists("simulation10.csv") else "simulation9.csv"
++    df = pd.read_csv(fn)
++    df["t_ms"] = pd.to_numeric(df["t_ms"], errors="coerce")
++    df.dropna(subset=["t_ms"], inplace=True)
++    df.sort_values("t_ms", inplace=True)
++    df.reset_index(drop=True, inplace=True)
++    return df
++
++def rising_edges_bool(series, t):
++    x = series.fillna(0).astype(int).to_numpy()
++    tt = t.to_numpy(dtype=float)
++    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
++    return tt[idx]
++
++def rising_edges_threshold(series, t, thr=0.5):
++    x = (series > thr).astype(int).to_numpy()
++    tt = t.to_numpy(dtype=float)
++    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
++    return tt[idx]
++
++def mean_delay(src_edges, dst_edges):
++    delays = []
++    j = 0
++    for e in src_edges:
++        while j < len(dst_edges) and dst_edges[j] < e:
++            j += 1
++        if j < len(dst_edges):
++            delays.append(dst_edges[j] - e)
++    return np.mean(delays) if len(delays) > 0 else np.nan
++
++def first_time(df, col, value=1):
++    rows = df[df[col] == value]
++    return float(rows["t_ms"].iloc[0]) if not rows.empty else np.nan
++
++def state_at(df, state_col, time_ms):
++    rows = df[df["t_ms"] >= time_ms]
++    return rows[state_col].iloc[0] if not rows.empty else "UNKNOWN"
++
++# ============================================================
++# MAIN REPORT
++# ============================================================
++
++def report():
++
++    DF = load_data()
++    T = DF["t_ms"]
++
++    # ========== SOURCE (pour stats seulement) ==========
++    SRC_EDGES = rising_edges_threshold(DF["source"], T)
++    SRC_EDGES = SRC_EDGES[SRC_EDGES >= 1000]
++    if len(SRC_EDGES) > 1:
++        periods = np.diff(SRC_EDGES)
++        freq = 1000.0 / np.mean(periods)
++        cycle_rate = np.mean(DF["source"]) * 100
++    else:
++        freq = np.nan
++        cycle_rate = np.nan
++
++    # ========== PRODUCERS ==========
++    producers = {}
++    for pid in [1, 2, 3]:
++        start = first_time(DF, f"start_p{pid}")
++        edges = rising_edges_threshold(DF[f"prod{pid}"], T)
++        delay = mean_delay(SRC_EDGES, edges)
++        overruns = int(DF[f"ov_p{pid}"].sum())
++        producers[pid] = {"start": start, "delay": delay, "overruns": overruns}
++
++    # ========== CONSUMERS ==========
++    consumers = {}
++    for cid in [1, 2]:
++        start = first_time(DF, f"start_c{cid}")
++        vote_edges = rising_edges_bool(DF[f"cons{cid}_vote"], T)
++        delay = mean_delay(SRC_EDGES, vote_edges)
++        overruns = int(DF[f"ov_c{cid}"].sum())
++        status_1s = state_at(DF, f"cons{cid}_state", 1000)
++        fail_rows = DF[DF[f"cons{cid}_state"] == "FAILED"]
++        if not fail_rows.empty:
++            fail_time = float(fail_rows["t_ms"].iloc[0])
++            new_status = "FAILED"
++        else:
++            fail_time = np.nan
++            new_status = "N/A"
++        consumers[cid] = {
++            "start": start,
++            "delay": delay,
++            "overruns": overruns,
++            "status_1s": status_1s,
++            "fail_time": fail_time,
++            "new_status": new_status
++        }
++
++    # ========== PUBLISHER ==========
++    pub_start = first_time(DF, "start_pub")
++    # fronts logiques (diagnostic): dépend de changements de valeur
++    PUB_EDGES = rising_edges_bool(DF["pub_output"], T)
++    # liste de TOUS les instants de publication (plus robuste)
++    PUB_TIMES = DF.loc[DF["pub_output"].notna(), "t_ms"].to_numpy(dtype=float)
++    pub_delay = mean_delay(SRC_EDGES, PUB_EDGES)
++    pub_overruns = int(DF["ov_pub"].sum())
++
++    # ========== FAILURE / SWITCH / RECOVERY ==========
++    # 1) fault_time direct si disponible
++    fault_time_raw = first_time(DF, "failure_plc")  # peut être NaN
++    # 2) switch_time = 1er instant où C2 devient ACTIVE
++    c2_rows = DF[DF["cons2_state"] == "ACTIVE"]
++    switch_time = float(c2_rows["t_ms"].iloc[0]) if not c2_rows.empty else np.nan
++
++    # 3) fallback si fault_time absent: estimer par la détection HB + stall
++    detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
++    fault_time = fault_time_raw if not np.isnan(fault_time_raw) else (
++        switch_time - detect_delay if not np.isnan(switch_time) else np.nan
++    )
++
++    # 4) délais
++    switch_delay = (
++        switch_time - fault_time
++        if (not np.isnan(fault_time) and not np.isnan(switch_time))
++        else np.nan
++    )
++
++    # publication la plus proche APRES le switch (indépendant d'un front)
++    first_pub_after_switch = np.nan
++    if not np.isnan(switch_time) and len(PUB_TIMES) > 0:
++        after = PUB_TIMES[PUB_TIMES >= switch_time]
++        if len(after) > 0:
++            first_pub_after_switch = after[0]
++
++    # recovery pure pipeline (switch -> publish)
++    recovery_switch_to_pub = (
++        first_pub_after_switch - switch_time
++        if (not np.isnan(first_pub_after_switch) and not np.isnan(switch_time))
++        else np.nan
++    )
++    # recovery end-to-end (fault -> publish)
++    recovery_fault_to_pub = (
++        first_pub_after_switch - fault_time
++        if (not np.isnan(first_pub_after_switch) and not np.isnan(fault_time))
++        else np.nan
++    )
++
++    # (optionnel) edge-to-edge purement diagnostique
++    complete_delay_edge2edge = np.nan
++    if not np.isnan(fault_time) and not np.isnan(switch_time):
++        src_edge = SRC_EDGES[SRC_EDGES <= fault_time]
++        last_src = src_edge[-1] if len(src_edge) > 0 else np.nan
++        pub_edge = PUB_EDGES[PUB_EDGES >= switch_time]
++        first_pub_edge = pub_edge[0] if len(pub_edge) > 0 else np.nan
++        if not np.isnan(last_src) and not np.isnan(first_pub_edge):
++            complete_delay_edge2edge = first_pub_edge - last_src
++
++    # ========== MARKDOWN ==========
++    with open("report.md", "w", encoding="utf-8") as f:
++
++        f.write("# REDUNDANCY8 REPORT\n\n")
++
++        f.write("## Source\n")
++        f.write(f">Frequency calculated: {freq:.3f} Hz\n")
++        f.write(f">Cycle rate calculated: {cycle_rate:.2f} %\n\n")
++
++        for pid in [1, 2, 3]:
++            p = producers[pid]
++            f.write(f"## Producer {pid}\n")
++            f.write(f">start time: {p['start']:.3f} ms\n")
++            f.write(f">mean delay edges / source: {p['delay']:.3f} ms\n")
++            f.write(f">overruns: {p['overruns']}\n\n")
++
++        for cid in [1, 2]:
++            c = consumers[cid]
++            f.write(f"## Consumer {cid}\n")
++            f.write(f">start time: {c['start']:.3f} ms\n")
++            f.write(f">mean delay 2oo3 edges / source: {c['delay']:.3f} ms\n")
++            f.write(f">overruns: {c['overruns']}\n")
++            f.write(f">status @ 1s: {c['status_1s']}\n")
++            f.write(f">Moment of failure: {c['fail_time']:.3f} ms\n")
++            f.write(f">New status: {c['new_status']}\n\n")
++
++        f.write("## Publisher 1\n")
++        f.write(f">start time: {pub_start:.3f} ms\n")
++        f.write(f">mean delay edges / source (publisher output): {pub_delay:.3f} ms\n")
++        f.write(f">overruns: {pub_overruns}\n\n")
++
++        f.write("## PLC Failure / Recovery\n")
++        f.write(f">fault time (raw/fallback): {fault_time:.3f} ms\n")
++        f.write(f">switch time (C2 ACTIVE): {switch_time:.3f} ms\n")
++        f.write(f">switch delay (fault -> switch): {switch_delay:.3f} ms\n")
++        f.write(f">recovery (switch -> first publish): {recovery_switch_to_pub:.3f} ms\n")
++        f.write(f">recovery (fault -> first publish): {recovery_fault_to_pub:.3f} ms\n")
++        f.write(f">diagnostic edge-to-edge (src edge -> pub edge): {complete_delay_edge2edge:.3f} ms\n")
++
++    # ========== SUMMARY CSV ==========
++    summary = {
++        "freq": freq,
++        "cycle_rate": cycle_rate,
++        "p1_start": producers[1]["start"],
++        "p2_start": producers[2]["start"],
++        "p3_start": producers[3]["start"],
++        "c1_start": consumers[1]["start"],
++        "c2_start": consumers[2]["start"],
++        "p1_delay": producers[1]["delay"],
++        "p2_delay": producers[2]["delay"],
++        "p3_delay": producers[3]["delay"],
++        "c1_delay": consumers[1]["delay"],
++        "c2_delay": consumers[2]["delay"],
++        "pub_delay": pub_delay,
++        "fault_time": fault_time,
++        "switch_time": switch_time,
++        "switch_delay": switch_delay,
++        "recovery_switch_to_pub": recovery_switch_to_pub,
++        "recovery_fault_to_pub": recovery_fault_to_pub,
++        "edge2edge_delay": complete_delay_edge2edge
++    }
++
++    file = "reports.csv"
++    df_res = pd.read_csv(file) if os.path.exists(file) else pd.DataFrame()
++    df_res = pd.concat([df_res, pd.DataFrame([summary])], ignore_index=True)
++    df_res.to_csv(file, index=False)
++
+     print("REDUNDANCY10 report generated.")--- v077/references_simulation/graphical_report10.py
++++ v078/references_simulation/graphical_report10.py
+@@ -1,207 +1,207 @@
+-import pandas as pd
+-import matplotlib.pyplot as plt
+-from matplotlib.ticker import MultipleLocator, AutoMinorLocator
+-
+-def draw():
+-
+-    # ==========================================================
+-    # LOAD DATA
+-    # ==========================================================
+-
+-    df = pd.read_csv("simulation10.csv")
+-
+-    # ==========================================================
+-    # STATE MAPPING
+-    # ==========================================================
+-
+-    STATE_MAP = {"STOP":-1,"FAILED":0,"INIT": 1, "STANDBY": 2, "ACTIVE": 3}
+-    df["cons1_state_val"] = df["cons1_state"].map(STATE_MAP)
+-    df["cons2_state_val"] = df["cons2_state"].map(STATE_MAP)
+-
+-    # ==========================================================
+-    # START DETECTION
+-    # ==========================================================
+-
+-    def first_change(col):
+-        diff = df[col].diff().fillna(0)
+-        idx = diff.ne(0)
+-        if idx.any():
+-            return df.loc[idx, "t_ms"].iloc[0]
+-        return None
+-    
+-    def first_specific_change(col, from_state, to_state):
+-        prev = df[col].shift(1)
+-        curr = df[col]
+-        
+-        mask = (prev == from_state) & (curr == to_state)
+-        
+-        if mask.any():
+-            return df.loc[mask, "t_ms"].iloc[0]
+-        return None
+-    
+-    start_prod1 = first_change("prod1")
+-    start_prod2 = first_change("prod2")
+-    start_prod3 = first_change("prod3")
+-    start_cons1 = first_specific_change("cons1_state","STOP","INIT")
+-    start_cons2 = first_specific_change("cons2_state","STOP","INIT")
+-    start_pub   = first_change("published")
+-    start_fail  = first_change("failure_plc")
+-
+-    # ==========================================================
+-    # DELAY COMPUTATION
+-    # ==========================================================
+-
+-    def detect_edges(df, column):
+-        tmp = df.copy()
+-        tmp["prev"] = tmp[column].shift(1)
+-        return tmp[tmp[column] != tmp["prev"]][["t_ms", column]]
+-
+-    source_edges = detect_edges(df, "source")
+-    edges_c1 = detect_edges(df, "cons1_vote")
+-    edges_c2 = detect_edges(df, "cons2_vote")
+-
+-    def compute_delay(consumer_edges, source_edges, colname):
+-
+-        delays = []
+-
+-        for _, row in consumer_edges.iterrows():
+-
+-            t_cons = row["t_ms"]
+-            val = row[colname]
+-
+-            src_match = source_edges[
+-                (source_edges["source"] == val) &
+-                (source_edges["t_ms"] <= t_cons)
+-            ]
+-
+-            if not src_match.empty:
+-                t_src = src_match.iloc[-1]["t_ms"]
+-                delays.append((t_cons, t_cons - t_src))
+-
+-        return pd.DataFrame(delays, columns=["t_ms", "delay_ms"])
+-
+-    delay_c1 = compute_delay(edges_c1, source_edges, "cons1_vote")
+-    delay_c2 = compute_delay(edges_c2, source_edges, "cons2_vote")
+-
+-    # ==========================================================
+-    # HELPER: DRAW START ARROW
+-    # ==========================================================
+-
+-    def draw_start_arrow(ax, x, label):
+-        if x is None:
+-            return
+-        ymin, ymax = ax.get_ylim()
+-        ax.annotate(
+-            label,
+-            xy=(x, ymin),
+-            xycoords='data',
+-            xytext=(x, ymin - (ymax - ymin)*0.25),
+-            arrowprops=dict(arrowstyle="->"),
+-            ha="center",
+-            fontsize=8
+-        )
+-
+-    # ==========================================================
+-    # FIGURE (9 plots now)
+-    # ==========================================================
+-
+-    fig, axs = plt.subplots(
+-        8, 1,
+-        figsize=(12, 12),
+-        sharex=True,
+-        gridspec_kw={'height_ratios': [1,1,1,1,1,2,2,1]}
+-    )
+-
+-    # ----------------------------------------------------------
+-    # 1) SOURCE
+-    # ----------------------------------------------------------
+-
+-    axs[0].step(df["t_ms"], df["source"], where="post", linewidth=2, color="black")
+-    axs[0].set_title("Signal Source")
+-    axs[0].grid(True)
+-
+-    # ----------------------------------------------------------
+-    # 2–4) PRODUCERS
+-    # ----------------------------------------------------------
+-
+-    axs[1].step(df["t_ms"], df["prod1"], where="post", linewidth=2)
+-    axs[1].set_title("Producer 1")
+-    axs[1].grid(True)
+-
+-    axs[2].step(df["t_ms"], df["prod2"], where="post", linewidth=2)
+-    axs[2].set_title("Producer 2")
+-    axs[2].grid(True)
+-
+-    axs[3].step(df["t_ms"], df["prod3"], where="post", linewidth=2)
+-    axs[3].set_title("Producer 3")
+-    axs[3].grid(True)
+-
+-    # Draw producer start arrows
+-    draw_start_arrow(axs[1], start_prod1, "Start P1")
+-    draw_start_arrow(axs[2], start_prod2, "Start P2")
+-    draw_start_arrow(axs[3], start_prod3, "Start P3")
+-
+-    # ----------------------------------------------------------
+-    # 5) CONSUMER VOTES
+-    # ----------------------------------------------------------
+-
+-    axs[4].step(df["t_ms"], df["cons1_vote"],where="post", linewidth=2, label="Cons1")
+-    axs[4].step(df["t_ms"], df["cons2_vote"],where="post", linewidth=2, label="Cons2")
+-    axs[4].set_title("Vote 2oo3 from consumers")
+-    axs[4].legend()
+-    axs[4].grid(True)
+-
+-
+-
+-    # ----------------------------------------------------------
+-    # 6) DELAYS
+-    # ----------------------------------------------------------
+-
+-    if not delay_c1.empty:
+-        axs[5].step(delay_c1["t_ms"], delay_c1["delay_ms"],where="post", linewidth=2, label="Cons1")
+-
+-    if not delay_c2.empty:
+-        axs[5].step(delay_c2["t_ms"], delay_c2["delay_ms"],where="post", linewidth=2, label="Cons2")
+-
+-    axs[5].set_title("delay consumers vs source (ms)")
+-    axs[5].set_ylim(0, 60)
+-    axs[5].legend()
+-    axs[5].grid(True)
+-
+-    # ----------------------------------------------------------
+-    # 7) CONSUMER STATES
+-    # ----------------------------------------------------------
+-
+-    axs[6].step(df["t_ms"], df["cons1_state_val"],where="post", linewidth=2, label="Cons1")
+-    axs[6].step(df["t_ms"], df["cons2_state_val"],where="post", linewidth=2, label="Cons2")
+-    axs[6].set_yticks([-1,0,1,2,3])
+-    axs[6].set_yticklabels(["STOP","FAILED","INIT","STANDBY","ACTIVE"])
+-    axs[6].set_title("Consumers Status")
+-    axs[6].legend()
+-    axs[6].grid(True)
+-
+-    draw_start_arrow(axs[6], start_fail , "Failure PLC1")
+-    draw_start_arrow(axs[6], start_cons1, "Start C1")
+-    draw_start_arrow(axs[6], start_cons2, "Start C2")
+-
+-    # ----------------------------------------------------------
+-    # 8) PUBLISHER (dedicated)
+-    # ----------------------------------------------------------
+-
+-    axs[7].step(df["t_ms"], df["pub_output"],where="post", linewidth=2)
+-    axs[7].set_title("Publisher (brut)")
+-    axs[7].grid(True)
+-
+-    for ax in axs:
+-        ax.xaxis.set_major_locator(MultipleLocator(1000))
+-        ax.xaxis.set_minor_locator(MultipleLocator(250))
+-        ax.grid(which='major', color='#505050', linestyle='--', linewidth=0.8)
+-        ax.grid(which='minor', color='#505050', linestyle=':', linewidth=0.5)
+-
+-    # ----------------------------------------------------------
+-    # GLOBAL
+-    # ----------------------------------------------------------
+-
+-    axs[-1].set_xlim(left=0)
+-    plt.tight_layout()
+-    plt.show()
++import pandas as pd
++import matplotlib.pyplot as plt
++from matplotlib.ticker import MultipleLocator, AutoMinorLocator
++
++def draw():
++
++    # ==========================================================
++    # LOAD DATA
++    # ==========================================================
++
++    df = pd.read_csv("simulation10.csv")
++
++    # ==========================================================
++    # STATE MAPPING
++    # ==========================================================
++
++    STATE_MAP = {"STOP":-1,"FAILED":0,"INIT": 1, "STANDBY": 2, "ACTIVE": 3}
++    df["cons1_state_val"] = df["cons1_state"].map(STATE_MAP)
++    df["cons2_state_val"] = df["cons2_state"].map(STATE_MAP)
++
++    # ==========================================================
++    # START DETECTION
++    # ==========================================================
++
++    def first_change(col):
++        diff = df[col].diff().fillna(0)
++        idx = diff.ne(0)
++        if idx.any():
++            return df.loc[idx, "t_ms"].iloc[0]
++        return None
++    
++    def first_specific_change(col, from_state, to_state):
++        prev = df[col].shift(1)
++        curr = df[col]
++        
++        mask = (prev == from_state) & (curr == to_state)
++        
++        if mask.any():
++            return df.loc[mask, "t_ms"].iloc[0]
++        return None
++    
++    start_prod1 = first_change("prod1")
++    start_prod2 = first_change("prod2")
++    start_prod3 = first_change("prod3")
++    start_cons1 = first_specific_change("cons1_state","STOP","INIT")
++    start_cons2 = first_specific_change("cons2_state","STOP","INIT")
++    start_pub   = first_change("published")
++    start_fail  = first_change("failure_plc")
++
++    # ==========================================================
++    # DELAY COMPUTATION
++    # ==========================================================
++
++    def detect_edges(df, column):
++        tmp = df.copy()
++        tmp["prev"] = tmp[column].shift(1)
++        return tmp[tmp[column] != tmp["prev"]][["t_ms", column]]
++
++    source_edges = detect_edges(df, "source")
++    edges_c1 = detect_edges(df, "cons1_vote")
++    edges_c2 = detect_edges(df, "cons2_vote")
++
++    def compute_delay(consumer_edges, source_edges, colname):
++
++        delays = []
++
++        for _, row in consumer_edges.iterrows():
++
++            t_cons = row["t_ms"]
++            val = row[colname]
++
++            src_match = source_edges[
++                (source_edges["source"] == val) &
++                (source_edges["t_ms"] <= t_cons)
++            ]
++
++            if not src_match.empty:
++                t_src = src_match.iloc[-1]["t_ms"]
++                delays.append((t_cons, t_cons - t_src))
++
++        return pd.DataFrame(delays, columns=["t_ms", "delay_ms"])
++
++    delay_c1 = compute_delay(edges_c1, source_edges, "cons1_vote")
++    delay_c2 = compute_delay(edges_c2, source_edges, "cons2_vote")
++
++    # ==========================================================
++    # HELPER: DRAW START ARROW
++    # ==========================================================
++
++    def draw_start_arrow(ax, x, label):
++        if x is None:
++            return
++        ymin, ymax = ax.get_ylim()
++        ax.annotate(
++            label,
++            xy=(x, ymin),
++            xycoords='data',
++            xytext=(x, ymin - (ymax - ymin)*0.25),
++            arrowprops=dict(arrowstyle="->"),
++            ha="center",
++            fontsize=8
++        )
++
++    # ==========================================================
++    # FIGURE (9 plots now)
++    # ==========================================================
++
++    fig, axs = plt.subplots(
++        8, 1,
++        figsize=(12, 12),
++        sharex=True,
++        gridspec_kw={'height_ratios': [1,1,1,1,1,2,2,1]}
++    )
++
++    # ----------------------------------------------------------
++    # 1) SOURCE
++    # ----------------------------------------------------------
++
++    axs[0].step(df["t_ms"], df["source"], where="post", linewidth=2, color="black")
++    axs[0].set_title("Signal Source")
++    axs[0].grid(True)
++
++    # ----------------------------------------------------------
++    # 2–4) PRODUCERS
++    # ----------------------------------------------------------
++
++    axs[1].step(df["t_ms"], df["prod1"], where="post", linewidth=2)
++    axs[1].set_title("Producer 1")
++    axs[1].grid(True)
++
++    axs[2].step(df["t_ms"], df["prod2"], where="post", linewidth=2)
++    axs[2].set_title("Producer 2")
++    axs[2].grid(True)
++
++    axs[3].step(df["t_ms"], df["prod3"], where="post", linewidth=2)
++    axs[3].set_title("Producer 3")
++    axs[3].grid(True)
++
++    # Draw producer start arrows
++    draw_start_arrow(axs[1], start_prod1, "Start P1")
++    draw_start_arrow(axs[2], start_prod2, "Start P2")
++    draw_start_arrow(axs[3], start_prod3, "Start P3")
++
++    # ----------------------------------------------------------
++    # 5) CONSUMER VOTES
++    # ----------------------------------------------------------
++
++    axs[4].step(df["t_ms"], df["cons1_vote"],where="post", linewidth=2, label="Cons1")
++    axs[4].step(df["t_ms"], df["cons2_vote"],where="post", linewidth=2, label="Cons2")
++    axs[4].set_title("Vote 2oo3 from consumers")
++    axs[4].legend()
++    axs[4].grid(True)
++
++
++
++    # ----------------------------------------------------------
++    # 6) DELAYS
++    # ----------------------------------------------------------
++
++    if not delay_c1.empty:
++        axs[5].step(delay_c1["t_ms"], delay_c1["delay_ms"],where="post", linewidth=2, label="Cons1")
++
++    if not delay_c2.empty:
++        axs[5].step(delay_c2["t_ms"], delay_c2["delay_ms"],where="post", linewidth=2, label="Cons2")
++
++    axs[5].set_title("delay consumers vs source (ms)")
++    axs[5].set_ylim(0, 60)
++    axs[5].legend()
++    axs[5].grid(True)
++
++    # ----------------------------------------------------------
++    # 7) CONSUMER STATES
++    # ----------------------------------------------------------
++
++    axs[6].step(df["t_ms"], df["cons1_state_val"],where="post", linewidth=2, label="Cons1")
++    axs[6].step(df["t_ms"], df["cons2_state_val"],where="post", linewidth=2, label="Cons2")
++    axs[6].set_yticks([-1,0,1,2,3])
++    axs[6].set_yticklabels(["STOP","FAILED","INIT","STANDBY","ACTIVE"])
++    axs[6].set_title("Consumers Status")
++    axs[6].legend()
++    axs[6].grid(True)
++
++    draw_start_arrow(axs[6], start_fail , "Failure PLC1")
++    draw_start_arrow(axs[6], start_cons1, "Start C1")
++    draw_start_arrow(axs[6], start_cons2, "Start C2")
++
++    # ----------------------------------------------------------
++    # 8) PUBLISHER (dedicated)
++    # ----------------------------------------------------------
++
++    axs[7].step(df["t_ms"], df["pub_output"],where="post", linewidth=2)
++    axs[7].set_title("Publisher (brut)")
++    axs[7].grid(True)
++
++    for ax in axs:
++        ax.xaxis.set_major_locator(MultipleLocator(1000))
++        ax.xaxis.set_minor_locator(MultipleLocator(250))
++        ax.grid(which='major', color='#505050', linestyle='--', linewidth=0.8)
++        ax.grid(which='minor', color='#505050', linestyle=':', linewidth=0.5)
++
++    # ----------------------------------------------------------
++    # GLOBAL
++    # ----------------------------------------------------------
++
++    axs[-1].set_xlim(left=0)
++    plt.tight_layout()
++    plt.show()
+--- v077/src/trace_signal.py
++++ v078/src/trace_signal.py
+@@ -12,11 +12,37 @@
+ from __future__ import annotations
+ 
+ from pathlib import Path
++from collections import Counter
++from textwrap import fill
+ from typing import Any
+ 
+ from diagnostic_csv import _decimal
+ from signal_csv import SignalPrepare, _flottant
+ from _signal_draw import sample_chart
++
++
++def resumer_moniteur(signal: SignalPrepare) -> str:
++    """Mettre en mots les résultats préparés, sans reclasser les intervalles.
++
++    Les nombres portent sur les intervalles affichables du fichier entier,
++    même après un zoom. Une séquence de trois intervalles à fréquence modifiée
++    compte donc trois intervalles, pas trois changements indépendants.
++    """
++    unite = signal.unite_temps or "unité inconnue"
++    if signal.raster_temps is None:
++        profil = "Raster indisponible — intervalles observés"
++    else:
++        origine = "estimé" if signal.origine_raster == "estime" else "saisi"
++        profil = f"Raster {origine} : {signal.raster_temps:g} {unite}"
++        if signal.tolerance_temps is not None:
++            profil += f" | Tolérance : ±{signal.tolerance_temps:g} {unite}"
++    comptes = Counter(signal.natures_intervalles)
++    noms = {"temps_duplique": "doublon(s)", "retour_arriere": "retour(s) arrière",
++            "jitter": "jitter hors tolérance", "trou_probable": "trou(s) probable(s)",
++            "changement_frequence_probable": "à fréquence modifiée (probable)"}
++    anomalies = [f"{comptes[nature]} {nom}" for nature, nom in noms.items() if comptes[nature]]
++    bilan = " · ".join(anomalies) if anomalies else "Aucune anomalie parmi les intervalles affichés"
++    return profil + "\nIntervalles — fichier entier : " + bilan
+ 
+ 
+ # === 1. Afficher la courbe avec ses interruptions, sur les temps du CSV ===
+@@ -25,7 +51,7 @@
+     from matplotlib.figure import Figure
+ 
+     figure = Figure(figsize=(9.6, 5.4), dpi=100, facecolor="white")
+-    grille = figure.add_gridspec(2, 1, height_ratios=[3.5, 1], hspace=0.55)
++    grille = figure.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.85)
+     courbe = figure.add_subplot(grille[0])
+     temps = figure.add_subplot(grille[1], sharex=courbe)
+     sample_chart(courbe, signal.temps, signal.valeurs, "", signal.colonne,
+@@ -64,23 +90,32 @@
+         "changement_frequence_probable": "Changement de fréquence probable",
+         "temps_duplique": "Doublon", "retour_arriere": "Retour arrière",
+     }
++    # Formes distinctes : les catégories restent reconnaissables sans se fier
++    # uniquement à la couleur. Aucune croix ici : elles restent réservées aux
++    # cellules vides sur la courbe du signal.
++    symboles = {"observe": ".", "conforme": ".", "jitter": "D",
++                "trou_probable": "^", "changement_frequence_probable": "s",
++                "temps_duplique": "o", "retour_arriere": "v"}
+     for nature in ("observe", "conforme", "jitter", "trou_probable",
+                    "changement_frequence_probable", "temps_duplique", "retour_arriere"):
+         points = [(x, y) for x, y, type_intervalle in zip(
+             signal.temps_intervalles, signal.deltas_temps, signal.natures_intervalles
+         ) if type_intervalle == nature]
+         if points:
++            discret = nature in ("observe", "conforme")
+             temps.plot([p[0] for p in points], [p[1] for p in points],
+-                       linestyle="None", marker=".", markersize=4,
++                       linestyle="None", marker=symboles[nature],
++                       markersize=0.8 if discret else 7,
++                       alpha=0.3 if discret else 1, zorder=2 if discret else 5,
+                        color=couleurs_intervalles[nature], label=libelles_intervalles[nature])
+     if signal.raster_temps is not None:
+         libelle_raster = "Raster estimé" if signal.origine_raster == "estime" else "Raster saisi"
+         temps.axhline(signal.raster_temps, color="#2f6f4e", linestyle="--",
+-                      linewidth=1.2, label=libelle_raster)
++                      linewidth=0.9, label=libelle_raster)
+         if signal.tolerance_temps is not None:
+             bas = signal.raster_temps - signal.tolerance_temps
+             haut = signal.raster_temps + signal.tolerance_temps
+-            temps.axhspan(bas, haut, color="#2f8b65", alpha=0.12,
++            temps.axhspan(bas, haut, color="#2f8b65", alpha=0.07,
+                           label="Tolérance")
+     styles = {"temps_duplique": "#d88500", "retour_arriere": "#c00000",
+               "pas_hors_tolerance": "#7b2cbf"}
+@@ -92,7 +127,10 @@
+         teinte = styles[marqueur["type"]]
+         # La catégorie figure déjà dans la série quantitative. Le trait sert
+         # seulement à localiser précisément l'événement sur l'axe partagé.
+-        temps.axvline(x, color=teinte, linewidth=1.5, label="_nolegend_")
++        # Le guide vertical reste en arrière-plan : il ne doit pas masquer
++        # le symbole placé à la vraie valeur de Δt.
++        temps.axvline(x, color=teinte, linewidth=0.7, alpha=0.35,
++                      zorder=1, label="_nolegend_")
+         types_traces.add(marqueur["type"])
+         if marqueur["type"] == "pas_hors_tolerance":
+             avant = _flottant(_decimal(marqueur.get("temps_avant", ""), decimale))
+@@ -100,13 +138,16 @@
+                 courbe.axvspan(avant, x, color="#7b2cbf", alpha=0.14,
+                                label="_nolegend_")
+     if signal.deltas_temps or types_traces or signal.raster_temps is not None:
+-        temps.legend(loc="lower right", bbox_to_anchor=(1, 1.02), ncol=3,
+-                     fontsize=8, framealpha=0.9)
++        temps.legend(loc="lower right", bbox_to_anchor=(1, 1.25), ncol=3,
++                     fontsize=7, framealpha=0.9)
+     temps.set_xlabel(f"{signal.colonne_temps} [{signal.unite_temps or 'unité inconnue'}]")
+     temps.set_ylabel(f"Δt [{signal.unite_temps or 'unité inconnue'}]")
+     temps.ticklabel_format(axis="x", style="plain", useOffset=False)
+     temps.ticklabel_format(axis="y", style="plain", useOffset=False)
+     temps.grid(alpha=0.2)
++    # Laisser de l'air autour des symboles à Δt=0 et aux extrema ; pas de
++    # bornes métier ajoutées, seulement une marge de dessin Matplotlib.
++    temps.margins(y=0.2)
+     statut = figure.text(0.11, 0, moniteur["message"], color=couleur, fontsize=9, va="bottom")
+     note = (f"{len(signal.indices_vides)} cellule(s) vide(s) du signal | "
+             f"{len(signal.indices_invalides)} valeur(s) invalide(s) | {signal.lignes_rejetees} ligne(s) rejetée(s)")
+@@ -124,12 +165,19 @@
+         note += "\nMoniteur : Δt observés ; aucun raster fiable n'est imposé."
+     if not signal.relier_points:
+         note += "\nPas irréguliers ou lecture partielle sans profil : points seuls. Renseigner le pas et sa tolérance."
++    note = resumer_moniteur(signal) + "\n" + note
+     legende = figure.text(0.11, 0, note, fontsize=8, color="#4a5568", va="bottom")
+ 
+     def ajuster_marges(_evenement=None):
+         """Réserver la hauteur du texte lors du redimensionnement de la VISU."""
+         hauteur = figure.get_figheight() * figure.dpi
+-        hauteur_note = (note.count("\n") + 1) * 8 * 1.3 * figure.dpi / 72
++        # Retour à la ligne en fonction de la largeur disponible : les noms
++        # longs et les bilans d'anomalies ne doivent pas sortir de la figure.
++        largeur = figure.get_figwidth() * figure.dpi * 0.86
++        caracteres = max(25, int(largeur / (8 * 0.65 * figure.dpi / 72)))
++        texte = "\n".join(fill(ligne, width=caracteres) for ligne in note.splitlines())
++        legende.set_text(texte)
++        hauteur_note = (texte.count("\n") + 1) * 8 * 1.3 * figure.dpi / 72
+         legende.set_position((0.11, 8 / hauteur))
+         statut.set_position((0.11, (16 + hauteur_note) / hauteur))
+         # 60 pixels supplémentaires accueillent le statut et le libellé X.
+--- v077/src/version_visu.py
++++ v078/src/version_visu.py
+@@ -1,3 +1,3 @@
+ """Version unique affichée et enregistrée par VISU PTBG."""
+ 
+-VERSION_VISU = "0.7.7"
++VERSION_VISU = "0.7.8"
+--- v077/tests/test_moniteur_quantitatif.py
++++ v078/tests/test_moniteur_quantitatif.py
+@@ -138,6 +138,26 @@
+                     self.assertNotIn("Dans la tolérance", libelles)
+                     self.assertNotIn("Tolérance", libelles)
+ 
++    def test_resume_et_dessin_preservent_les_resultats_4102(self):
++        """REQ 4102 : les comptes décrivent tous les intervalles, sans mutation."""
++        from copy import deepcopy
++        from trace_signal import creer_figure, resumer_moniteur
++        source, resultat, signal = self.preparer(
++            "t_ms,v\n0,0\n10,1\n10,2\n30,3\n40,4\n", "10", "0.1")
++        original = deepcopy(signal)
++        diagnostic_original = deepcopy(resultat)
++        resume = resumer_moniteur(signal)
++        self.assertIn("1 doublon(s)", resume)
++        self.assertIn("1 trou(s) probable(s)", resume)
++        self.assertIn("±0.1 ms", resume)
++        figure, courbe, moniteur = creer_figure(signal, construire_moniteur(source, resultat))
++        # Un zoom doit conserver les coordonnées et le bilan du fichier entier.
++        moniteur.set_xlim(5, 15)
++        self.assertEqual(courbe.get_xlim(), moniteur.get_xlim())
++        self.assertEqual(signal, original)
++        self.assertEqual(resultat, diagnostic_original)
++        self.assertEqual(resumer_moniteur(signal), resume)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

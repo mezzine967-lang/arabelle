@@ -1,0 +1,13 @@
+# Environnement Linux vérifié : Python 3.12. Tkinter fourni par Python/l'OS.
+# Ces versions ne valent pas qualification Windows 11 ou SLES 15 SP7.
+matplotlib==3.10.8
+numpy==2.3.5
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.61.1
+kiwisolver==1.4.9
+packaging==26.3
+Pillow==12.3.0
+pyparsing==3.3.2
+python-dateutil==2.9.0.post0
+six==1.17.0

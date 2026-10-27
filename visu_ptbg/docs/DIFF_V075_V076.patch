@@ -1,0 +1,677 @@
+--- v075/MAIN.py
++++ v076/MAIN.py
+@@ -22,8 +22,9 @@
+ from moniteur_temps import construire_moniteur
+ from signal_csv import preparer_signal
+ from environnement_visu import enregistrer_environnement
+-
+-VERSION = "0.7.5"
++from version_visu import VERSION_VISU
++
++VERSION = VERSION_VISU
+ 
+ 
+ class FenetreVISU:
+@@ -67,7 +68,7 @@
+         informations.add_command(label="Version et sources", command=lambda: messagebox.showinfo(
+             "Informations", f"VISU PTBG {VERSION}\nSources : CSV sélectionnés par l'utilisateur.\n"
+             "Lecture : bibliothèque standard Python, module local diagnostic_csv.\n"
+-            "Historique : v0.7.4 première colonne imposée comme temps ; v0.7.5 diagnostic temporel Lot 2A.\n"
++            "Historique : v0.7.5 diagnostic temporel Lot 2A ; v0.7.6 moniteur Δt quantitatif.\n"
+             "Les versions installées sont relevées dans resultats/environnement_….json."))
+         informations.add_command(label="Aide", command=lambda: messagebox.showinfo(
+             "Aide", "Ajoute plusieurs CSV, puis choisis un fichier dans l'arbre. "
+--- v075/MISSION_CODEX.md
++++ v076/MISSION_CODEX.md
+@@ -1,4 +1,13 @@
+-# Mission courante — Lot 2A, moteur de base de temps
++# Mission courante — Lot 2B, Time Base Monitor quantitatif
++
++**v0.7.6 :** afficher les `Δt`, le raster et sa tolérance directement sous la
++courbe du signal. Ne jamais calculer à travers une ligne rejetée et ne jamais
++transformer un écart temporel en preuve automatique de perte de donnée. Les
++croix v0.7.3 restent exclusivement liées aux cellules vides du signal.
++
++Voir `docs/LOT2B_MONITEUR_QUANTITATIF_V076.md`.
++
++## Étape précédente — moteur de base de temps
+ 
+ **v0.7.5 :** distinguer les faits temporels et les interprétations probables,
+ sans interpolation ni synchronisation. Les règles sont centralisées dans
+--- v075/README.md
++++ v076/README.md
+@@ -1,4 +1,9 @@
+-# VISU PTBG — import CSV et base de temps — v0.7.5
++# VISU PTBG — import CSV et base de temps — v0.7.6
++
++La v0.7.6 transforme l'axe présent sous la courbe en **Time Base Monitor
++quantitatif** : chaque point montre un `Δt`, avec raster, tolérance et
++anomalies sur la même base X que le signal. Voir
++`docs/LOT2B_MONITEUR_QUANTITATIF_V076.md`.
+ 
+ La v0.7.5 ajoute le moteur du Lot 2A : raster configuré ou estimé, jitter,
+ doublons, retours arrière, trous probables, changements de fréquence probables,
+@@ -24,16 +29,19 @@
+ 
+ ## Premier essai sur le poste Windows
+ 
+-1. Extraire entièrement le ZIP dans un nouveau dossier, par exemple `VISU_V075`.
++1. Extraire entièrement le ZIP dans un nouveau dossier, par exemple `VISU_V076`.
+    Conserver l'ancien dossier et ses journaux.
+ 2. Dans Spyder, ouvrir `visu_ptbg/verifier_robustesse.py`, puis F5. Attendu :
+-   **113 tests rapides**, aucun test ignoré, réussite et sources inchangées à `True`.
++   **117 tests rapides**, aucun test ignoré, réussite et sources inchangées à `True`.
+ 3. Redémarrer le noyau Spyder pour décharger les anciens modules, puis ouvrir
+-   le **nouveau** `MAIN.py` et F5. Le titre doit indiquer **0.7.5**.
++   le **nouveau** `MAIN.py` et F5. Le titre doit indiquer **0.7.6**.
+ 4. Ajouter `donnees/simulation10_execution1.csv`. La première colonne `t_ms`
+    est affichée automatiquement. Renseigner `ms`, pas attendu `1`, tolérance
+    `0`, puis **Analyser ce fichier**.
+-5. **Courbe → pub_output → Afficher le signal** : les 16 cellules vides au
++5. **Courbe → source → Afficher le signal** : le moniteur sous la courbe
++   affiche le raster saisi à **1 ms**, les deux doublons à **Δt = 0** et le
++   pas de **2 ms** vers **4986 ms**. Le zoom est commun aux deux axes.
++   Choisir ensuite **pub_output → Afficher le signal** : les 16 cellules vides au
+    début ne sont pas tracées. Une seule croix orange se trouve sur le premier
+    point disponible, **(16 ms, 0)**. Zoomer autour de **0 à 35 ms**.
+    Il n'y a pas de point connu avant le manque, donc pas de deuxième croix.
+@@ -148,6 +156,7 @@
+ - `src/vue_temps.py` : tableau paginé et navigation.
+ - `src/trace_temps.py` : graphique des Δt dans l'ordre des lignes CSV.
+ - `src/signal_csv.py`, `src/trace_signal.py` : signal et croix.
++- `src/version_visu.py` : source unique du numéro de version.
+ - `tests/test_inspection_temps.py`, `tests/test_signal_csv.py` : cas temporels et rendu.
+ - `tests/test_coupures_signal.py` : bords réels, interruptions et absence de fausses croix.
+ - `docs/BASE_TEMPS_V070.md` : périmètre, essais et revue partielle des requis.
+@@ -158,8 +167,11 @@
+ - `docs/CROIX_V073.md`, `docs/DIFF_V072_V073.patch` : changements de cette étape.
+ - `docs/PREMIERE_COLONNE_V074.md` : application ciblée du requis 2304.
+ - `docs/LOT2A_BASE_TEMPS_V075.md` : règles et limites du moteur temporel.
++- `docs/LOT2B_MONITEUR_QUANTITATIF_V076.md` : axe Δt, raster et limites du Lot 2B.
+ - `docs/CIBLE_WINDOWS_11.md` : cible Python 3.11 64 bits et qualification des paquets.
+-- `docs/preuve_tests_linux_v075.json` : bilan structuré et intégrité de cette version.
++- `docs/preuve_tests_linux_v076.json` : bilan structuré et intégrité de cette version.
++- `docs/DIFF_V075_V076.patch` : différences du code et de la documentation.
++- `docs/preuve_tests_linux_v075.json` : preuve historique du moteur Lot 2A.
+ - `docs/preuve_tests_linux_v074.json` : preuve historique de la première colonne temporelle.
+ - `docs/preuve_tests_linux_v073.json` : preuve historique des croix de perte de données.
+ - `docs/preuve_tests_linux_v072.json` : preuve historique de la stabilisation.
+--- v075/docs/CIBLE_WINDOWS_11.md
++++ v076/docs/CIBLE_WINDOWS_11.md
+@@ -19,8 +19,9 @@
+ | Matplotlib | graphiques du signal et de la base de temps | version installée à relever puis à qualifier |
+ | Spyder | environnement de développement, non requis par le moteur | version du poste Arabelle à relever |
+ 
+-Le Lot 2A n'ajoute aucune dépendance externe. Ses imports (`decimal`,
+-`statistics`, `collections`, `dataclasses`, `typing`) appartiennent à Python 3.11.
++Les Lots 2A et 2B n'ajoutent aucune dépendance externe. Les modules du Lot 2A
++(`decimal`, `statistics`, `collections`, `dataclasses`, `typing`) appartiennent
++à Python 3.11 ; le Lot 2B réutilise Matplotlib.
+ 
+ ## Dépendances transitives à tracer
+ 
+@@ -32,7 +33,7 @@
+ 
+ ## Procédure de qualification Windows
+ 
+-1. Lancer la v0.7.5 avec le Python 3.11 64 bits réellement fourni avec Spyder.
++1. Lancer la v0.7.6 avec le Python 3.11 64 bits réellement fourni avec Spyder.
+ 2. Conserver le fichier `resultats/environnement_*.json` produit au lancement.
+ 3. Exécuter `verifier_robustesse.py` et conserver son journal JSON.
+ 4. Vérifier qu'aucun test n'est en échec ou ignoré et que les sources restent inchangées.
+--- v075/docs/DEPENDANCES.md
++++ v076/docs/DEPENDANCES.md
+@@ -1,4 +1,7 @@
+-# Dépendances et compatibilité — v0.7.5
++# Dépendances et compatibilité — v0.7.6
++
++La v0.7.6 réutilise Matplotlib pour le moniteur quantitatif et n'ajoute aucune
++dépendance. La version du programme est centralisée dans `src/version_visu.py`.
+ 
+ La v0.7.5 ajoute le moteur du Lot 2A avec seulement des modules de la
+ bibliothèque standard Python 3.11. Aucun paquet externe supplémentaire n'est
+@@ -50,7 +53,7 @@
+ 3. Tester chemins avec accents/espaces, accès refusé, affichage/DPI et gros fichiers sur le poste cible.
+ 4. Lorsque les environnements seront disponibles, préparer et tester les livrables
+    propres à chaque cible, hors Spyder, et documenter les modules embarqués.
+-   La construction des exécutables n'est pas le périmètre du Lot 1 actuel.
++   La construction des exécutables n'est pas le périmètre du Lot 2B actuel.
+ 5. Pour toute montée de Python ou d'un module : analyser l'impact sur l'ensemble et rejouer les essais concernés avant acceptation.
+ 
+ L'exécutable n'est pas encore réalisé. L'exécution dans Spyder et les métadonnées des paquets ne prouvent pas sa compatibilité. Les détails des vérifications et des écarts sont dans la matrice des requis.
+--- v075/docs/LOT2B_MONITEUR_QUANTITATIF_V076.md
++++ v076/docs/LOT2B_MONITEUR_QUANTITATIF_V076.md
+@@ -0,0 +1,81 @@
++# Lot 2B — Time Base Monitor quantitatif — v0.7.6
++
++## But
++
++Le petit axe placé sous chaque signal ne montre plus seulement une barre
++d'état. Il affiche les intervalles `Δt = temps courant − temps précédent`,
++dans l'unité native déclarée pour le CSV.
++
++Lorsque le moteur du Lot 2A dispose d'un raster :
++
++- le raster est dessiné en pointillés et identifié comme saisi ou estimé ;
++- sa tolérance est représentée autour de lui ;
++- l'écart vertical entre un point `Δt` et le raster matérialise l'écart
++  temporel ;
++- doublons, retours arrière et intervalles hors tolérance gardent des couleurs
++  distinctes.
++
++Le signal et le moniteur partagent le même axe temporel : zoomer ou déplacer
++l'un conserve leur correspondance.
++
++## Limites et règles de prudence
++
++- Aucun intervalle n'est calculé à travers une ligne CSV rejetée.
++- Aucun point n'est ajouté au CSV et aucun timestamp n'est corrigé.
++- Un intervalle hors tolérance reste un constat temporel ; il ne prouve pas à
++  lui seul une perte de donnée.
++- Les croix orange de la courbe restent réservées aux cellules réellement
++  vides du signal choisi.
++- Les états textuels libres ne sont pas convertis en nombres : aucun codage
++  `ACTIVE/STANDBY/FAILED` n'est imposé par cette version.
++- Sans raster disponible, les points portent le libellé « Δt observés » :
++  aucune conformité à une tolérance n'est annoncée.
++- Des Δt ou bornes de tolérance exacts distincts que les flottants confondraient
++  font refuser ce tracé. Le diagnostic et le tableau exact restent disponibles.
++
++## Fichiers à lire
++
++- `src/signal_csv.py` prépare les Δt à partir des nombres exacts `Decimal` ;
++- `src/trace_signal.py` réalise uniquement le dessin ;
++- `tests/test_moniteur_quantitatif.py` vérifie les valeurs, les ruptures et le
++  rendu Matplotlib sans ouvrir Tkinter ;
++- `exemples/Time_Base_Monitor_quantitatif_v076.png` montre le résultat attendu.
++
++Cette évolution couvre partiellement les requis 4100, 4101, 4102 et 4106.
++Elle ne développe ni synchronisation multi-PLC, ni interpolation, ni rapport.
++
++## Changements fichier par fichier
++
++Le diff complet se trouve dans `DIFF_V075_V076.patch`.
++
++| Fichier | Changement |
++|---|---|
++| `src/signal_csv.py` | Prépare les Δt à partir des lignes adjacentes, contrôle la précision et conserve l'origine du raster. |
++| `src/trace_signal.py` | Dessine Δt, raster et tolérance ; conserve les croix et le zoom partagé. |
++| `tests/test_moniteur_quantitatif.py` | Ajoute les cas du nouveau moniteur, y compris raster absent/estimé, rejets et précision. |
++| `tests/test_signal_csv.py` | Vérifie les repères verticaux sans supposer leur position dans la liste des artistes graphiques. |
++| `src/version_visu.py` | Centralise le numéro 0.7.6. |
++| `MAIN.py`, `src/diagnostic_csv.py`, `verifier_robustesse.py` | Lisent cette version commune et actualisent le court historique. |
++| `README.md`, `MISSION_CODEX.md` | Décrivent cette étape et le parcours d'essai Windows. |
++| `docs/REPRENDRE_LE_CODE.md` | Indique où reprendre le moniteur et le numéro de version. |
++| `docs/DEPENDANCES.md`, `docs/CIBLE_WINDOWS_11.md` | Documentent la réutilisation des bibliothèques existantes. |
++
++## Vérification et limites
++
++117 tests rapides et 1 test d'intégration réussis, aucun échec et aucun test
++ignoré sous Python 3.12/Linux. Les calculs et les rendus Matplotlib Agg sont
++testés ; la syntaxe est contrôlée pour Python 3.11. Les CSV et scripts de
++référence sont inchangés. La preuve couvre aussi les fichiers Python racine
++avant/après les essais, en complément du contrôle du lanceur existant.
++
++L'essai interactif Windows 11 et SLES 15 SP7 reste attendu. Une seule courbe
++est affichée à la fois ; le tracé refuse encore un temps invalide, dont le
++diagnostic reste consultable. Le moniteur détaillé utilise le raster du Lot 2A ;
++le petit résumé de l'onglet Diagnostic conserve ses règles historiques.
++Les traits verticaux et bandes d'exemples restent limités, mais la série Δt
++affiche tous les intervalles calculables jusqu'à la limite du prototype.
++
++Risques de régression ciblés : précision des Δt lors du passage au graphique,
++continuité à travers un rejet, conservation des croix et lisibilité à petite
++résolution. Les trois premiers sont couverts par les tests ; la mise à
++l'échelle native Windows/SLES doit encore être essayée par l'utilisateur.
+--- v075/docs/REPRENDRE_LE_CODE.md
++++ v076/docs/REPRENDRE_LE_CODE.md
+@@ -1,6 +1,6 @@
+ # Reprendre VISU PTBG — guide pour Sébastien
+ 
+-Ce guide concerne la v0.7.5. Le projet utilise Python et la bibliothèque
++Ce guide concerne la v0.7.6. Le projet utilise Python et la bibliothèque
+ standard pour lire/analyser les CSV. Tkinter affiche la fenêtre et Matplotlib
+ dessine les graphiques. Les calculs peuvent être testés sans ouvrir la fenêtre.
+ 
+@@ -33,7 +33,9 @@
+ | Calculer le détail des intervalles | `src/inspection_temps.py`, `preparer_inspection` | `tests/test_inspection_temps.py` |
+ | Préparer points et valeurs absentes | `src/signal_csv.py`, `preparer_signal` | `tests/test_signal_csv.py` |
+ | Placer les bords des manques et couper les traits | `src/signal_csv.py`, `_bords_des_manques` et `_coupures_temporelles` | `tests/test_coupures_signal.py` |
++| Préparer et tracer les Δt sous la courbe | `src/signal_csv.py`, `_serie_temporelle`, puis `src/trace_signal.py` | `tests/test_moniteur_quantitatif.py` |
+ | Modifier couleurs, croix ou axes | `src/trace_signal.py`, `src/trace_temps.py` | Tests de figures dans les deux fichiers de tests précédents |
++| Changer le numéro de version | `src/version_visu.py` uniquement | Lancer `verifier_robustesse.py` |
+ | Modifier le tableau des intervalles | `src/vue_temps.py`, `VueTemps` | Essai manuel Tkinter, puis tests des calculs |
+ | Ajouter une commande à la fenêtre | `MAIN.py`, `FenetreVISU` | Essai manuel Windows / SLES |
+ 
+@@ -80,6 +82,9 @@
+ - `_signal_draw.sample_chart` ajoute des séparateurs NaN uniquement dans les
+   coordonnées de dessin. Les listes de mesures de `SignalPrepare` sont intactes.
+   Sans profil ni pas régulier observé, le rendu garde des points seuls.
++- `_serie_temporelle` calcule les Δt en `Decimal`, puis les convertit seulement
++  pour Matplotlib. Deux lignes retenues non contiguës ne sont jamais reliées par
++  un intervalle inventé.
+ - Le requis 2304 impose la position du temps : `read_csv` utilise toujours
+   `columns[0]`. Le nom de cette colonne ne sert pas à la reconnaître. Le champ
+   `time_candidates` est conservé dans les anciens journaux/API, mais contient
+--- v075/src/diagnostic_csv.py
++++ v076/src/diagnostic_csv.py
+@@ -1,4 +1,4 @@
+-"""VISU PTBG — lecture et diagnostic CSV sans interface, version 0.7.5.
++"""VISU PTBG — lecture et diagnostic CSV sans interface.
+ 
+ Rôle : lire les enregistrements, signaler les anomalies et permettre une
+ comparaison scénario/report lorsque leurs temps correspondent ligne à ligne.
+@@ -37,7 +37,9 @@
+ from pathlib import Path
+ from typing import Any
+ 
+-VERSION = "0.7.5"
++from version_visu import VERSION_VISU
++
++VERSION = VERSION_VISU
+ MAX_FILE_BYTES = 50 * 1024 * 1024
+ NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\Z")
+ NONFINITE = {"nan", "+nan", "-nan", "inf", "+inf", "-inf", "infinity", "+infinity", "-infinity"}
+--- v075/src/signal_csv.py
++++ v076/src/signal_csv.py
+@@ -44,6 +44,12 @@
+     indices_coupures: list[int] = field(default_factory=list)
+     indices_croix: list[int] = field(default_factory=list)
+     relier_points: bool = False
++    temps_intervalles: list[float] = field(default_factory=list)
++    deltas_temps: list[float] = field(default_factory=list)
++    natures_intervalles: list[str] = field(default_factory=list)
++    raster_temps: float | None = None
++    tolerance_temps: float | None = None
++    origine_raster: str = "indisponible"
+ 
+ 
+ def _flottant(nombre: Decimal | None) -> float | None:
+@@ -102,6 +108,57 @@
+             if delta <= 0 or (pas is not None and abs(delta - pas) > tolerance):
+                 coupures.append(i)
+     return coupures
++
++
++def _serie_temporelle(lignes, temps, temps_exacts, raster, tolerance):
++    """Préparer les Δt destinés au moniteur, sans franchir une ligne rejetée.
++
++    La série utilise les calculs Decimal déjà réalisés pour le signal. Les
++    flottants retournés servent uniquement au dessin. Un intervalle absent de
++    la série signifie que deux lignes retenues n'étaient pas voisines dans le
++    CSV : aucun Δt n'est alors inventé entre elles.
++    """
++    positions, deltas, natures = [], [], []
++    correspondance: dict[float, Decimal] = {}
++
++    def pour_graphique(nombre):
++        """Refuser notamment deux Δt distincts devenant un faux pas constant."""
++        valeur = _flottant(nombre)
++        if valeur is None or (valeur in correspondance and correspondance[valeur] != nombre):
++            raise CsvDiagnosticError(
++                "precision_delta_graphique",
++                "La précision des intervalles dépasse ce tracé ; consulter le tableau exact de la base de temps.",
++            )
++        correspondance[valeur] = nombre
++        return valeur
++
++    with localcontext() as contexte:
++        contexte.prec = 4100
++        if raster is not None:
++            for nombre in (raster, tolerance, raster - tolerance, raster + tolerance):
++                pour_graphique(nombre)
++        for i in range(1, len(lignes)):
++            if lignes[i].line_start != lignes[i - 1].line_end + 1:
++                continue
++            delta_exact = temps_exacts[i] - temps_exacts[i - 1]
++            delta = pour_graphique(delta_exact)
++            if delta_exact == 0:
++                nature = "temps_duplique"
++            elif delta_exact < 0:
++                nature = "retour_arriere"
++            elif raster is None:
++                nature = "observe"
++            elif abs(delta_exact - raster) > tolerance:
++                nature = "hors_tolerance"
++            else:
++                nature = "conforme"
++            positions.append(temps[i])
++            deltas.append(delta)
++            natures.append(nature)
++    if correspondance and not math.isfinite(max(correspondance) - min(correspondance)):
++        raise CsvDiagnosticError("precision_delta_graphique",
++                                 "L'étendue des intervalles dépasse ce tracé ; consulter le tableau exact.")
++    return positions, deltas, natures
+ 
+ 
+ # === 2. Relire le même fichier et contrôler sa concordance avec le diagnostic ===
+@@ -170,9 +227,25 @@
+     coupures = _coupures_temporelles(lecture.rows, temps_exacts, pas, tolerance)
+     croix = _bords_des_manques(valeurs, indices_vides)
+     relier = pas is not None or diagnostic.time.regular_step is not None
++    analyse = resultat["analyse_temporelle"]
++    raster_brut = analyse.get("raster") or {}
++    # analyser_base_temps sérialise toujours ses Decimal avec un point, même
++    # quand le CSV d'origine emploie une virgule décimale.
++    raster = _decimal(raster_brut.get("valeur") or "", ".")
++    tolerance_raster = _decimal(raster_brut.get("tolerance") or "", ".")
++    if raster is None:
++        tolerance_raster = None
++    positions_delta, deltas, natures = _serie_temporelle(
++        lecture.rows, temps, temps_exacts, raster, tolerance_raster or Decimal(0),
++    )
+     return SignalPrepare(str(Path(source.fichier)), colonne, diagnostic.time.column,
+                          source.unite, temps, valeurs, [r.line_start for r in lecture.rows],
+                          absentes, len(diagnostic.rejected_rows), diagnostic.analysis_complete,
+                          diagnostic.sha256, indices_vides, indices_invalides,
+                          indices_coupures=coupures, indices_croix=croix,
+-                         relier_points=relier)
++                         relier_points=relier,
++                         temps_intervalles=positions_delta, deltas_temps=deltas,
++                         natures_intervalles=natures,
++                         raster_temps=_flottant(raster),
++                         tolerance_temps=_flottant(tolerance_raster),
++                         origine_raster=raster_brut.get("origine", "indisponible"))
+--- v075/src/trace_signal.py
++++ v076/src/trace_signal.py
+@@ -45,36 +45,65 @@
+                     markeredgewidth=2, zorder=4, label="Bords des données manquantes")
+         courbe.legend(loc="upper right", fontsize=8)
+ 
+-    # === 2. Repères à leurs timestamps exacts : aucun décalage graphique horizontal ===
++    # === 2. Δt quantitatifs sur la même base X que le signal ===
++    # Le point placé au temps t représente t - temps précédent. Les couleurs
++    # qualifient seulement l'intervalle observé ; elles n'affirment jamais une
++    # perte de donnée. Les lignes rejetées ne sont pas franchies.
+     temps.set_title("Time Base Monitor", loc="left", fontsize=10)
+     couleur = {"ok": "#17823b", "avertissement": "#b05a00", "erreur": "#b42318"}[moniteur["niveau"]]
+-    temps.axhline(0, color=couleur, linewidth=2)
+-    styles = {"temps_duplique": ("#d88500", "Doublon"),
+-              "retour_arriere": ("#c00000", "Retour arrière"),
+-              "pas_hors_tolerance": ("#7b2cbf", "Pas hors tolérance")}
++    couleurs_intervalles = {
++        "observe": "#37759b",
++        "conforme": "#23745a", "hors_tolerance": "#7b2cbf",
++        "temps_duplique": "#d88500", "retour_arriere": "#c00000",
++    }
++    libelles_intervalles = {
++        "observe": "Δt observés",
++        "conforme": "Dans la tolérance", "hors_tolerance": "Hors tolérance",
++        "temps_duplique": "Doublon", "retour_arriere": "Retour arrière",
++    }
++    for nature in ("observe", "conforme", "hors_tolerance", "temps_duplique", "retour_arriere"):
++        points = [(x, y) for x, y, type_intervalle in zip(
++            signal.temps_intervalles, signal.deltas_temps, signal.natures_intervalles
++        ) if type_intervalle == nature]
++        if points:
++            temps.plot([p[0] for p in points], [p[1] for p in points],
++                       linestyle="None", marker=".", markersize=4,
++                       color=couleurs_intervalles[nature], label=libelles_intervalles[nature])
++    if signal.raster_temps is not None:
++        libelle_raster = "Raster estimé" if signal.origine_raster == "estime" else "Raster saisi"
++        temps.axhline(signal.raster_temps, color="#2f6f4e", linestyle="--",
++                      linewidth=1.2, label=libelle_raster)
++        if signal.tolerance_temps is not None:
++            bas = signal.raster_temps - signal.tolerance_temps
++            haut = signal.raster_temps + signal.tolerance_temps
++            temps.axhspan(bas, haut, color="#2f8b65", alpha=0.12,
++                          label="Tolérance")
++    styles = {"temps_duplique": "#d88500", "retour_arriere": "#c00000",
++              "pas_hors_tolerance": "#7b2cbf"}
+     types_traces: set[str] = set()
+     for marqueur in moniteur["marqueurs"]:
+         x = _flottant(_decimal(marqueur["temps"], decimale))
+         if x is None:
+             continue
+-        teinte, label = styles[marqueur["type"]]
+-        temps.axvline(x, color=teinte, linewidth=1.5,
+-                      label=label if marqueur["type"] not in types_traces else "_nolegend_")
++        teinte = styles[marqueur["type"]]
++        # La catégorie figure déjà dans la série quantitative. Le trait sert
++        # seulement à localiser précisément l'événement sur l'axe partagé.
++        temps.axvline(x, color=teinte, linewidth=1.5, label="_nolegend_")
+         types_traces.add(marqueur["type"])
+         if marqueur["type"] == "pas_hors_tolerance":
+             avant = _flottant(_decimal(marqueur.get("temps_avant", ""), decimale))
+             if avant is not None and avant < x:
+                 courbe.axvspan(avant, x, color="#7b2cbf", alpha=0.14,
+                                label="_nolegend_")
+-    if types_traces:
++    if signal.deltas_temps or types_traces or signal.raster_temps is not None:
+         temps.legend(loc="lower right", bbox_to_anchor=(1, 1.02), ncol=3,
+                      fontsize=8, framealpha=0.9)
+-    temps.set_yticks([])
+-    temps.set_ylim(-1, 1)
+     temps.set_xlabel(f"{signal.colonne_temps} [{signal.unite_temps or 'unité inconnue'}]")
++    temps.set_ylabel(f"Δt [{signal.unite_temps or 'unité inconnue'}]")
+     temps.ticklabel_format(axis="x", style="plain", useOffset=False)
+-    temps.grid(axis="x", alpha=0.2)
+-    figure.text(0.11, 0.125, moniteur["message"], color=couleur, fontsize=9)
++    temps.ticklabel_format(axis="y", style="plain", useOffset=False)
++    temps.grid(alpha=0.2)
++    statut = figure.text(0.11, 0, moniteur["message"], color=couleur, fontsize=9, va="bottom")
+     note = (f"{len(signal.indices_vides)} cellule(s) vide(s) du signal | "
+             f"{len(signal.indices_invalides)} valeur(s) invalide(s) | {signal.lignes_rejetees} ligne(s) rejetée(s)")
+     if not signal.lecture_complete:
+@@ -85,7 +114,23 @@
+         note += "\nBande violette : intervalle hors tolérance ; perte de données non prouvée."
+     else:
+         note += "\nCroix : mesures réelles de part et d’autre d’un manque dans le CSV."
++    if signal.raster_temps is not None:
++        note += "\nMoniteur : chaque point est un Δt ; son écart vertical au raster est l'écart temporel."
++    else:
++        note += "\nMoniteur : Δt observés ; aucun raster fiable n'est imposé."
+     if not signal.relier_points:
+         note += "\nPas irréguliers ou lecture partielle sans profil : points seuls. Renseigner le pas et sa tolérance."
+-    figure.text(0.11, 0.09, note, fontsize=8, color="#4a5568", va="top")
++    legende = figure.text(0.11, 0, note, fontsize=8, color="#4a5568", va="bottom")
++
++    def ajuster_marges(_evenement=None):
++        """Réserver la hauteur du texte lors du redimensionnement de la VISU."""
++        hauteur = figure.get_figheight() * figure.dpi
++        hauteur_note = (note.count("\n") + 1) * 8 * 1.3 * figure.dpi / 72
++        legende.set_position((0.11, 8 / hauteur))
++        statut.set_position((0.11, (16 + hauteur_note) / hauteur))
++        # 60 pixels supplémentaires accueillent le statut et le libellé X.
++        figure.subplots_adjust(bottom=min(0.55, (76 + hauteur_note) / hauteur))
++
++    figure.canvas.mpl_connect("resize_event", ajuster_marges)
++    ajuster_marges()
+     return figure, courbe, temps
+--- v075/src/version_visu.py
++++ v076/src/version_visu.py
+@@ -0,0 +1,3 @@
++"""Version unique affichée et enregistrée par VISU PTBG."""
++
++VERSION_VISU = "0.7.6"
+--- v075/tests/test_moniteur_quantitatif.py
++++ v076/tests/test_moniteur_quantitatif.py
+@@ -0,0 +1,127 @@
++"""Lot 2B : le Time Base Monitor montre les Δt sans inventer d'intervalle."""
++import importlib.util
++import sys
++import tempfile
++import unittest
++from pathlib import Path
++
++
++PROJET = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(PROJET / "src"))
++
++from base_temps import SourceTemps, examiner_source
++from diagnostic_csv import CsvDiagnosticError
++from moniteur_temps import construire_moniteur
++from signal_csv import preparer_signal
++
++
++@unittest.skipUnless(importlib.util.find_spec("matplotlib"), "Matplotlib absent : rendu non vérifié")
++class MoniteurQuantitatifTests(unittest.TestCase):
++    def setUp(self):
++        self.temporaire = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temporaire.cleanup)
++        self.fichier = Path(self.temporaire.name) / "signal.csv"
++
++    def preparer(self, contenu, pas="10", tolerance="1"):
++        self.fichier.write_text(contenu, encoding="utf-8")
++        source = SourceTemps(
++            self.fichier, unite="ms", pas_attendu=pas, tolerance=tolerance,
++        )
++        resultat = examiner_source(source)
++        return source, resultat, preparer_signal(source, resultat, "v")
++
++    def test_serie_contient_les_delta_et_leur_qualification(self):
++        _, _, signal = self.preparer(
++            "t_ms,v\n0,0\n10,1\n20,2\n35,3\n45,4\n"
++        )
++        self.assertEqual(signal.temps_intervalles, [10.0, 20.0, 35.0, 45.0])
++        self.assertEqual(signal.deltas_temps, [10.0, 10.0, 15.0, 10.0])
++        self.assertEqual(
++            signal.natures_intervalles,
++            ["conforme", "conforme", "hors_tolerance", "conforme"],
++        )
++        self.assertEqual(signal.raster_temps, 10.0)
++        self.assertEqual(signal.tolerance_temps, 1.0)
++        self.assertEqual(signal.origine_raster, "configure")
++        with self.subTest(cas="raster indéterminé"):
++            _, _, observe = self.preparer("t_ms,v\n0,0\n10,1\n30,2\n", None, None)
++            self.assertIsNone(observe.raster_temps)
++            self.assertEqual(observe.natures_intervalles, ["observe", "observe"])
++        with self.subTest(cas="raster estimé"):
++            _, _, estime = self.preparer("t_ms,v\n0,0\n10,1\n20,2\n", None, None)
++            self.assertEqual(estime.raster_temps, 10.0)
++            self.assertEqual(estime.origine_raster, "estime")
++        with self.subTest(cas="deux Δt exacts confondus en flottants"):
++            # Les abscisses restent distinctes ; ce sont les Δt 10^16 et
++            # 10^16 + 1 qui ne doivent pas devenir un faux pas constant.
++            with self.assertRaises(CsvDiagnosticError) as erreur:
++                self.preparer("t_ms,v\n-10000000000000000,0\n0,1\n10000000000000001,2\n",
++                              "10000000000000000", "0")
++            self.assertEqual(erreur.exception.code, "precision_delta_graphique")
++
++    def test_ligne_rejetee_ne_cree_pas_de_delta_a_travers_le_trou(self):
++        _, _, signal = self.preparer(
++            "t_ms,v\n0,0\n10,1\n20\n30,3\n40,4\n"
++        )
++        self.assertEqual(signal.temps_intervalles, [10.0, 40.0])
++        self.assertEqual(signal.deltas_temps, [10.0, 10.0])
++
++    def test_doublon_et_retour_restent_des_faits_distincts(self):
++        _, _, signal = self.preparer(
++            "t_ms,v\n0,0\n10,1\n10,2\n5,3\n15,4\n"
++        )
++        self.assertEqual(
++            signal.natures_intervalles,
++            ["conforme", "temps_duplique", "retour_arriere", "conforme"],
++        )
++
++    def test_figure_trace_delta_raster_et_tolerance(self):
++        from matplotlib.backends.backend_agg import FigureCanvasAgg
++        from matplotlib.backend_bases import ResizeEvent
++        from trace_signal import creer_figure
++
++        def verifier_vue_compacte(figure):
++            canvas = FigureCanvasAgg(figure)
++            figure.set_size_inches(8.1, 3.7)
++            canvas.callbacks.process("resize_event", ResizeEvent("resize_event", canvas))
++            canvas.draw()
++            rendu = canvas.get_renderer()
++            for texte in figure.texts:
++                cadre = texte.get_window_extent(rendu)
++                self.assertGreaterEqual(cadre.y0, 0, texte.get_text())
++                self.assertLessEqual(cadre.x1, figure.bbox.x1, texte.get_text())
++            libelle_x = figure.axes[1].xaxis.label.get_window_extent(rendu)
++            haut_notes = max(texte.get_window_extent(rendu).y1 for texte in figure.texts)
++            self.assertGreater(libelle_x.y0, haut_notes)
++
++        source, resultat, signal = self.preparer(
++            "t_ms,v\n0,0\n10,1\n20,2\n35,3\n45,4\n"
++        )
++        figure, _, axe_temps = creer_figure(
++            signal, construire_moniteur(source, resultat),
++        )
++        verifier_vue_compacte(figure)
++        libelles = axe_temps.get_legend_handles_labels()[1]
++        self.assertIn("Dans la tolérance", libelles)
++        self.assertIn("Hors tolérance", libelles)
++        self.assertIn("Raster saisi", libelles)
++        self.assertIn("Tolérance", libelles)
++        self.assertEqual(axe_temps.get_ylabel(), "Δt [ms]")
++        self.assertEqual(axe_temps.get_title(loc="left"), "Time Base Monitor")
++        self.assertTrue(any("écart vertical au raster" in texte.get_text() for texte in figure.texts))
++        self.assertEqual(len(libelles), len(set(libelles)))
++        for contenu, etiquette in (("t_ms,v\n0,0\n10,1\n30,2\n", "Δt observés"),
++                                   ("t_ms,v\n0,0\n10,1\n20,2\n", "Raster estimé")):
++            with self.subTest(etiquette=etiquette):
++                source, resultat, signal = self.preparer(contenu, None, None)
++                figure, _, axe_temps = creer_figure(signal, construire_moniteur(source, resultat))
++                verifier_vue_compacte(figure)
++                libelles = axe_temps.get_legend_handles_labels()[1]
++                self.assertIn(etiquette, libelles)
++                if signal.raster_temps is None:
++                    self.assertNotIn("Dans la tolérance", libelles)
++                    self.assertNotIn("Tolérance", libelles)
++
++
++if __name__ == "__main__":
++    unittest.main()
+--- v075/tests/test_signal_csv.py
++++ v076/tests/test_signal_csv.py
+@@ -103,7 +103,15 @@
+         FigureCanvasAgg(figure).draw()
+         self.assertEqual([x for x in courbe.lines[0].get_xdata() if math.isfinite(x)], signal.temps)
+         self.assertEqual(courbe.lines[0].get_linestyle(), "-")
+-        self.assertEqual([l.get_xdata()[0] for l in temps.lines[1:]], [1006, 9815, 4986])
++        # Les points Δt sont désormais tracés sur cet axe. Repérer les traits
++        # verticaux par leur géométrie au lieu de dépendre de l'ordre interne
++        # des artistes Matplotlib.
++        reperes = []
++        for ligne in temps.lines:
++            x = list(ligne.get_xdata())
++            if len(x) == 2 and x[0] == x[1]:
++                reperes.append(x[0])
++        self.assertEqual(reperes, [1006, 9815, 4986])
+         courbe.set_xlim(990, 1040)
+         self.assertEqual(temps.get_xlim(), (990, 1040))
+         self.assertEqual(temps.get_xlabel(), "t_ms [ms]")
+--- v075/verifier_robustesse.py
++++ v076/verifier_robustesse.py
+@@ -1,4 +1,4 @@
+-"""VISU PTBG — lanceur de la suite de tests, version 0.7.5.
++"""VISU PTBG — lanceur de la suite de tests.
+ 
+ Usage : dans Spyder, ouvrir ce fichier puis Exécuter (F5).
+ Entrées : tests/, donnees/, sources et scripts de référence du projet.
+@@ -25,6 +25,9 @@
+ from pathlib import Path
+ 
+ PROJET = Path(__file__).resolve().parent
++if str(PROJET / "src") not in sys.path:
++    sys.path.insert(0, str(PROJET / "src"))
++from version_visu import VERSION_VISU
+ 
+ 
+ def empreintes_sources() -> dict[str, str]:
+@@ -50,11 +53,11 @@
+     affiché séparément. Une réussite ne certifie pas la conformité de tout VISU.
+     """
+     # === 3. Tracer l'environnement réel et la version testée ===
+-    print("VISU PTBG — vérification de robustesse v0.7.5")
++    print(f"VISU PTBG — vérification de robustesse v{VERSION_VISU}")
+     print(f"Python {platform.python_version()} | {platform.system()} | {struct.calcsize('P') * 8} bits")
+     print("Tests dans un processus neuf, avec cet interpréteur. Aucune installation nécessaire.")
+     bilan = {
+-        "version_projet": "0.7.5", "date_locale": datetime.now().astimezone().isoformat(),
++        "version_projet": VERSION_VISU, "date_locale": datetime.now().astimezone().isoformat(),
+         "python": platform.python_version(), "systeme": platform.system(),
+         "version_systeme": platform.version(), "bits_interpreteur": struct.calcsize("P") * 8,
+         "interpreteur": sys.executable, "validation_complete_requis": False,
+@@ -96,7 +99,8 @@
+     try:
+         dossier = PROJET / "resultats"
+         dossier.mkdir(exist_ok=True)
+-        chemin = dossier / f"tests_v075_{datetime.now():%Y%m%d_%H%M%S_%f}.json"
++        etiquette_version = VERSION_VISU.replace(".", "")
++        chemin = dossier / f"tests_v{etiquette_version}_{datetime.now():%Y%m%d_%H%M%S_%f}.json"
+         with chemin.open("x", encoding="utf-8") as fichier:
+             json.dump(bilan, fichier, indent=2, ensure_ascii=False, allow_nan=False)
+         print(f"Journal enregistré : {chemin}")

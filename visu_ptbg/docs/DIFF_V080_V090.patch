@@ -1,0 +1,3375 @@
+--- v080/MAIN.py
++++ v090/MAIN.py
+@@ -23,6 +23,8 @@
+ from signal_csv import preparer_signal
+ from environnement_visu import enregistrer_environnement
+ from version_visu import VERSION_VISU
++from taches import TacheFond, importer_copie
++from dataclasses import replace
+ 
+ VERSION = VERSION_VISU
+ 
+@@ -33,6 +35,9 @@
+     def __init__(self, fenetre: tk.Tk) -> None:
+         self.fenetre = fenetre
+         self.paquet = PaquetCSV()
++        self.tache = None
++        self.journal_activite = []
++        self.type_signal = tk.StringVar(value="Auto")
+         self.indice_actif: int | None = None
+         self.signal_choisi = tk.StringVar()
+         self.vue_signal = None
+@@ -54,6 +59,10 @@
+         self.fenetre.geometry("1080x660")
+         self._construire_menu()
+         self._construire_contenu()
++        from vue_rapports import Rapports
++        self.rapports = Rapports(self.fenetre, self.arrangements, self._noter, self._lancer)
++        self.activite.trace_add("write", self._journaliser)
++        self.fenetre.protocol("WM_DELETE_WINDOW", self._fermer)
+         for variable in (self.unite, self.pas, self.tolerance):
+             variable.trace_add("write", self._indiquer_profil)
+ 
+@@ -65,7 +74,7 @@
+         fichiers.add_command(label="Ajouter un dossier CSV…", command=self._ajouter_dossier)
+         fichiers.add_command(label="Enregistrer le diagnostic…", command=self._enregistrer)
+         fichiers.add_separator()
+-        fichiers.add_command(label="Quitter", command=self.fenetre.destroy)
++        fichiers.add_command(label="Quitter", command=self._fermer)
+         barre.add_cascade(label="Fichier", menu=fichiers)
+         informations = tk.Menu(barre, tearoff=False)
+         informations.add_command(label="Version et sources", command=lambda: messagebox.showinfo(
+@@ -83,6 +92,17 @@
+             "Le graphique des écarts suit les numéros de ligne ; son axe X n'est pas un temps. "
+             "Les points restent aux temps du fichier ; aucune synchronisation entre fichiers."))
+         barre.add_cascade(label="Informations", menu=informations)
++        informations.add_separator()
++        informations.add_command(label="Fichier d'aide (README)", command=lambda: self._document(PROJET / "README.md"))
++        informations.add_command(label="Historique et requis", command=lambda: self._document(PROJET / "docs/AVANCEMENT_V090.md"))
++        informations.add_command(label="Bibliothèques et packages", command=lambda: self._document(PROJET / "docs/DEPENDANCES.md"))
++        informations.add_command(label="Journal d'activité", command=self._voir_activite)
++        rapports = tk.Menu(barre, tearoff=False)
++        rapports.add_command(label="Exporter l'onglet actif en PDF…", command=lambda: self.rapports.exporter())
++        rapports.add_command(label="Ajouter l'onglet actif au rapport manuel", command=lambda: self.rapports.ajouter())
++        rapports.add_command(label="Exporter le rapport manuel…", command=lambda: self.rapports.exporter(manuel=True))
++        rapports.add_command(label="Vider la composition manuelle", command=lambda: self.rapports.vider())
++        barre.add_cascade(label="Rapport", menu=rapports)
+         self.fenetre.config(menu=barre)
+ 
+     def _construire_contenu(self) -> None:
+@@ -98,7 +118,8 @@
+         self.volet_arbre = ttk.Frame(self.zone)
+         self.volet_arbre.grid(row=1, column=0, sticky="nsew", pady=8)
+         ttk.Label(self.volet_arbre, text="Paquet / fichiers / colonnes").pack(anchor="w")
+-        self.arbre = ttk.Treeview(self.volet_arbre, show="tree", selectmode="browse")
++        self.arbre = ttk.Treeview(self.volet_arbre, show="tree", selectmode="browse", height=12)
++        self.arbre.column("#0", width=210, minwidth=110)
+         self.arbre.pack(fill="both", expand=True)
+         self.arbre.insert("", "end", iid="paquet", text="Paquet CSV", open=True)
+         self.arbre.bind("<<TreeviewSelect>>", self._selectionner)
+@@ -159,11 +180,16 @@
+                                          state="readonly", width=28)
+         self.liste_signaux.pack(side="left", padx=6)
+         ttk.Button(choix_signal, text="Afficher le signal", command=self._afficher_courbe).pack(side="left")
++        ttk.Button(choix_signal, text="Superposer", command=lambda: self._afficher_courbe(True)).pack(side="left")
++        ttk.Label(choix_signal, text=" Type :").pack(side="left")
++        ttk.Combobox(choix_signal, textvariable=self.type_signal, values=("Auto", "Float", "Bool"),
++                     width=7, state="readonly").pack(side="left")
++        ttk.Button(self.onglet_courbe, text="Créer un nuage X/Y du CSV sélectionné…", command=self._afficher_xy).pack(anchor="w")
+         self.conteneur_courbe = ttk.Frame(self.onglet_courbe)
+         self.conteneur_courbe.pack(fill="both", expand=True)
+-        self.indication_courbe = ttk.Label(self.conteneur_courbe,
+-            text="Choisir un fichier et un signal, puis cliquer sur Afficher le signal.")
+-        self.indication_courbe.pack(pady=20)
++        from vue_arrangements import Arrangements
++        self.arrangements = Arrangements(self.conteneur_courbe)
++        self.arrangements.pack(fill="both", expand=True)
+ 
+         # === 2a. Axe toujours créé ; masquage permis uniquement si son état est OK ===
+         moniteur = ttk.Frame(diagnostic, padding=(0, 8, 0, 0))
+@@ -180,6 +206,13 @@
+         self._afficher("Ajoute des CSV pour afficher un diagnostic temporel par fichier.\n"
+                        "Les horloges ne sont ni triées ni synchronisées.")
+         ttk.Label(self.fenetre, textvariable=self.activite, anchor="w").pack(fill="x", padx=10)
++        travail = ttk.Frame(self.fenetre)
++        travail.pack(fill="x", padx=10)
++        self.progression = ttk.Progressbar(travail, mode="indeterminate")
++        self.progression.pack(side="left", fill="x", expand=True)
++        self.bouton_annuler = ttk.Button(travail, text="Annuler le calcul", command=self._annuler, state="disabled")
++        self.bouton_annuler.pack(side="left")
++        ttk.Button(travail, text="Journal d'activité", command=self._voir_activite).pack(side="left")
+         ttk.Label(self.fenetre, text=f"Utilisateur : {getpass.getuser()}  |  "
+                   f"Date : {datetime.now():%d/%m/%Y}  |  VISU {VERSION}").pack(anchor="w", padx=10, pady=(0, 8))
+ 
+@@ -189,24 +222,24 @@
+                                              filetypes=[("Fichiers CSV", "*.csv"), ("Tous les fichiers", "*.*")])
+         if not chemins:
+             return
+-        nombre = self.paquet.ajouter(list(chemins))
+-        self._actualiser_arbre()
+-        self.activite.set(f"{nombre} fichier(s) ajouté(s), {len(self.paquet.sources)} dans le paquet.")
+-        if nombre:
+-            self.arbre.selection_set(f"f{len(self.paquet.sources) - 1}")
+-            self._selectionner()
++        self._lancer(lambda annulation, publier: importer_copie(self.paquet, list(chemins), annulation, publier),
++                     self._import_termine)
+ 
+     def _ajouter_dossier(self) -> None:
+         dossier = filedialog.askdirectory(parent=self.fenetre, title="Choisir un dossier de CSV")
+         if not dossier:
+             return
+-        try:
+-            nombre = self.paquet.ajouter_dossier(dossier)
+-        except OSError as exc:
+-            messagebox.showerror("Dossier CSV", str(exc))
+-            return
++        def calcul(annulation, publier):
++            from decouverte_csv import decouvrir_csv
++            publier(("progression", "Découverte des CSV dans les sous-dossiers…"))
++            return importer_copie(self.paquet, decouvrir_csv(dossier), annulation, publier)
++        self._lancer(calcul, self._import_termine)
++
++    def _import_termine(self, paquet):
++        nombre = len(paquet.sources) - len(self.paquet.sources)
++        self.paquet = paquet
+         self._actualiser_arbre()
+-        self.activite.set(f"{nombre} fichier(s) ajouté(s) du dossier ; {len(self.paquet.sources)} au total.")
++        self.activite.set(f"{nombre} fichier(s) ajouté(s) ; {len(self.paquet.sources)} au total.")
+         if nombre:
+             self.arbre.selection_set(f"f{len(self.paquet.sources) - 1}")
+             self._selectionner()
+@@ -228,6 +261,7 @@
+                 if temps and colonne == temps["column"]:
+                     continue
+                 typage = diagnostic["inferred_types"].get(colonne, "inconnu")
++                typage = {"booléen": "Bool", "numérique": "Float"}.get(typage, typage)
+                 noeud = self.arbre.insert(identifiant, "end", text=f"{colonne} ({typage} indicatif)")
+                 self.noeuds_signaux[noeud] = colonne
+ 
+@@ -240,7 +274,6 @@
+             noeud = self.arbre.parent(noeud)
+         indice = int(noeud[1:])
+         if indice != self.indice_actif:
+-            self._effacer_courbe()
+             self._effacer_inspection()
+         self.indice_actif = indice
+         source, resultat = self.paquet.sources[indice], self.paquet.resultats[indice]
+@@ -266,15 +299,20 @@
+             messagebox.showinfo("Fichier", "Choisis d'abord un fichier dans l'arbre.")
+             return
+         indice = self.indice_actif
+-        self._effacer_courbe()
+-        self._effacer_inspection()
+-        bilan = self.paquet.configurer(indice, self.unite.get().strip(), self.pas.get().strip(),
+-                                      self.tolerance.get().strip())
+-        self._actualiser_arbre()
+-        self.arbre.selection_set(f"f{indice}")
+-        self._selectionner()
+-        self.activite.set("Diagnostic mis à jour pour un fichier." if "erreur" not in bilan
+-                         else "Profil ou lecture à corriger ; les autres fichiers restent disponibles.")
++        source = replace(self.paquet.sources[indice], unite=self.unite.get().strip() or None,
++                         pas_attendu=self.pas.get().strip() or None,
++                         tolerance=self.tolerance.get().strip() or None)
++        def calcul(_annulation, _publier):
++            from base_temps import examiner_paquet
++            return examiner_paquet([source])["sources"][0]
++        def appliquer(bilan):
++            self.paquet.sources[indice], self.paquet.resultats[indice] = source, bilan
++            self._effacer_inspection()
++            self._actualiser_arbre()
++            self.arbre.selection_set(f"f{indice}")
++            self._selectionner()
++            self._noter("Diagnostic mis à jour. Les vues déjà ouvertes gardent leur profil de capture.")
++        self._lancer(calcul, appliquer)
+ 
+     def _profil_applique(self) -> bool:
+         if self.indice_actif is None:
+@@ -305,19 +343,19 @@
+         if not self._profil_applique():
+             messagebox.showinfo("Profil", "Clique sur Analyser ce fichier pour appliquer les champs modifiés.")
+             return
+-        self._effacer_inspection()
+-        try:
++        source, resultat = self.paquet.sources[self.indice_actif], self.paquet.resultats[self.indice_actif]
++        def calcul(_annulation, _publier):
+             from inspection_temps import preparer_inspection
++            return preparer_inspection(source, resultat)
++        def appliquer(inspection):
+             from vue_temps import VueTemps
+-            inspection = preparer_inspection(self.paquet.sources[self.indice_actif],
+-                                             self.paquet.resultats[self.indice_actif])
++            self._effacer_inspection()
+             self.vue_temps = VueTemps(self.conteneur_temps, inspection)
+             self.indication_temps.pack_forget()
+             self.vue_temps.pack(fill="both", expand=True)
+             self.onglets.select(self.onglet_temps)
+             self.activite.set(f"Intervalles examinés : {Path(inspection.fichier).name}. Temps bruts conservés.")
+-        except (OSError, ValueError, RuntimeError, tk.TclError) as exc:
+-            messagebox.showerror("Inspection non affichée", str(exc))
++        self._lancer(calcul, appliquer)
+ 
+     def _basculer_arbre(self) -> None:
+         if self.volet_arbre.winfo_ismapped():
+@@ -398,14 +436,7 @@
+             self._tracer_moniteur()
+ 
+     # === 5. Tracé à la demande, sans changer les données ni le backend de Spyder ===
+-    def _effacer_courbe(self) -> None:
+-        """Retirer un ancien signal pour qu'il ne soit pas attribué à un autre CSV."""
+-        if self.vue_signal is not None:
+-            self.vue_signal.destroy()
+-            self.vue_signal = None
+-        self.indication_courbe.pack(pady=20)
+-
+-    def _afficher_courbe(self) -> None:
++    def _afficher_courbe(self, superposer=False) -> None:
+         """Préparer les points puis construire le widget graphique ; signaler un refus."""
+         if self.indice_actif is None or not self.signal_choisi.get():
+             messagebox.showinfo("Signal", "Choisis d'abord un fichier et un signal.")
+@@ -416,22 +447,122 @@
+         if profil_affiche != profil_applique:
+             messagebox.showinfo("Profil", "Clique sur Analyser ce fichier pour appliquer les champs modifiés.")
+             return
+-        self._effacer_courbe()
+-        try:
+-            from vue_signal import VueSignal
+-            resultat = self.paquet.resultats[self.indice_actif]
+-            signal = preparer_signal(source, resultat, self.signal_choisi.get())
++        resultat = self.paquet.resultats[self.indice_actif]
++        colonne, typage = self.signal_choisi.get(), self.type_signal.get()
++        def calcul(_annulation, _publier):
++            signal = preparer_signal(source, resultat, colonne, typage)
+             modele = construire_moniteur(source, resultat)
+-            self.vue_signal = VueSignal(self.conteneur_courbe, signal, modele, source.decimale)
+-            self.indication_courbe.pack_forget()
+-            self.vue_signal.pack(fill="both", expand=True)
++            return signal, modele
++        def appliquer(contenu):
++            signal, modele = contenu
++            self.vue_signal = (self.arrangements.superposer(signal) if superposer else
++                               self.arrangements.ajouter(signal, modele, source.decimale))
+             self.onglets.select(self.onglet_courbe)
+             self.activite.set(f"Signal affiché : {signal.colonne} — {Path(source.fichier).name}")
+-        except ImportError as exc:
+-            messagebox.showerror("Bibliothèque graphique", "Matplotlib ou une de ses dépendances n'est pas disponible dans cet interpréteur.\n"
+-                                 "Le diagnostic reste utilisable. Transmettre ce message avant toute installation.\n\n" + str(exc))
+-        except (OSError, ValueError, RuntimeError, tk.TclError) as exc:
+-            messagebox.showerror("Signal non affiché", str(exc))
++        self._lancer(calcul, appliquer)
++
++    # Le fil de travail ne lit aucune StringVar et ne touche aucun widget.
++    # Seul ce contrôleur applique les résultats complets depuis after().
++    def _lancer(self, calcul, appliquer):
++        if self.tache is not None:
++            messagebox.showinfo("Calcul en cours", "Attendre la fin du calcul ou demander son annulation.")
++            return False
++        self.tache = TacheFond(calcul)
++        self.progression.start(15)
++        self.bouton_annuler.configure(state="normal")
++        self._noter("Calcul en cours…")
++        def surveiller():
++            for nature, contenu in self.tache.lire():
++                if nature == "progression":
++                    self._noter(contenu)
++                    continue
++                # Une annulation peut arriver après publication mais avant la
++                # relève Tk : vérifier aussi le drapeau à cet instant.
++                annule = self.tache.annulation.is_set() or nature == "annule"
++                self.tache = None
++                self.progression.stop()
++                self.bouton_annuler.configure(state="disabled")
++                if annule:
++                    self._noter("Calcul annulé ; résultat écarté, état précédent conservé.")
++                elif nature == "erreur":
++                    self._noter("Calcul non terminé : " + contenu)
++                    messagebox.showerror("Analyse", contenu)
++                else:
++                    try:
++                        appliquer(contenu)
++                    except (ImportError, OSError, ValueError, RuntimeError, tk.TclError) as exc:
++                        self._noter("Affichage non terminé : " + str(exc))
++                        messagebox.showerror("Affichage", str(exc))
++                return
++            self.fenetre.after(80, surveiller)
++        self.fenetre.after(80, surveiller)
++        return True
++
++    def _annuler(self):
++        if self.tache is not None:
++            self.tache.annuler()
++            self.bouton_annuler.configure(state="disabled")
++            self._noter("Annulation demandée ; la lecture en cours doit se terminer proprement.")
++
++    def _afficher_xy(self):
++        if self.indice_actif is None or not self._profil_applique():
++            messagebox.showinfo("X/Y", "Choisir un CSV et appliquer son profil temporel.")
++            return
++        source, resultat = self.paquet.sources[self.indice_actif], self.paquet.resultats[self.indice_actif]
++        colonnes = self.liste_signaux.cget("values")
++        if len(colonnes) < 2:
++            messagebox.showinfo("X/Y", "Deux colonnes de signal sont nécessaires.")
++            return
++        dialogue = tk.Toplevel(self.fenetre)
++        dialogue.title("Nuage X/Y — même CSV, aucune interpolation")
++        choix = []
++        for i, axe in enumerate(("X", "Y")):
++            ttk.Label(dialogue, text=axe).grid(row=i, column=0, padx=8, pady=8)
++            variable = tk.StringVar(value=colonnes[i])
++            ttk.Combobox(dialogue, textvariable=variable, values=colonnes, state="readonly").grid(row=i, column=1)
++            choix.append(variable)
++        def afficher():
++            x, y = (variable.get() for variable in choix)
++            def calcul(_annulation, _publier):
++                return (preparer_signal(source, resultat, x, "Float"),
++                        preparer_signal(source, resultat, y, "Float"), construire_moniteur(source, resultat))
++            def appliquer(contenu):
++                self.arrangements.ajouter_xy(*contenu)
++                self.onglets.select(self.onglet_courbe)
++                self._noter(f"Nuage X/Y affiché : {x}, {y}. Appariement par ligne du même CSV.")
++            if self._lancer(calcul, appliquer):
++                dialogue.destroy()
++        ttk.Button(dialogue, text="Afficher", command=afficher).grid(row=2, column=1, pady=8)
++
++    def _fermer(self):
++        if self.tache is not None:
++            self.tache.annuler()
++        self.fenetre.destroy()
++
++    def _noter(self, message):
++        self.activite.set(message)
++
++    def _journaliser(self, *_args):
++        self.journal_activite.append(f"{datetime.now().astimezone().isoformat(timespec='seconds')} | {self.activite.get()}")
++
++    def _texte_fenetre(self, titre, texte):
++        fenetre = tk.Toplevel(self.fenetre)
++        fenetre.title(titre)
++        fenetre.geometry("800x550")
++        from tkinter.scrolledtext import ScrolledText
++        zone = ScrolledText(fenetre, wrap="word")
++        zone.pack(fill="both", expand=True)
++        zone.insert("1.0", texte)
++        zone.configure(state="disabled")
++
++    def _document(self, chemin):
++        try:
++            self._texte_fenetre(chemin.name, chemin.read_text(encoding="utf-8"))
++        except OSError as exc:
++            messagebox.showerror("Documentation", str(exc))
++
++    def _voir_activite(self):
++        self._texte_fenetre("Journal de la session", "\n".join(self.journal_activite) or "Aucune action enregistrée.")
+ 
+     # === 6. Journal sauvegardé seulement à la demande, CSV jamais écrits ===
+     def _enregistrer(self) -> None:
+--- v080/MISSION_CODEX.md
++++ v090/MISSION_CODEX.md
+@@ -1,4 +1,14 @@
+-# Mission courante — poursuite des requis réalisables, v0.8.0
++# Mission courante — poursuite des requis réalisables, v0.9.0
++
++La demande explicite de Mourad (« fait tout ce que tu peux réaliser ») autorise
++les onglets, types, curseurs et rapports demandés par les requis. Les anciennes
++interdictions de lots plus bas sont historiques. Aucune synchronisation,
++interpolation ni exécutable ajouté. Voir docs/AVANCEMENT_V090.md et
++docs/QUESTIONS_SEBASTIEN_V090.md pour le périmètre réel et les points ouverts.
++
++La v0.9.0 ajoute travail de fond pour les lectures, arrangements persistants,
++superposition du même CSV, curseurs, X/Y du même CSV, PDF et résultats de tests
++structurés. Les calculs temporels existants sont conservés. Essai Tk natif requis.
+ 
+ Autorisation utilisateur : poursuivre les requis réalisables et identifier les
+ blocages précis. Cette étape ajoute HH:MM:SS.fraction (2306) et le dossier
+--- v080/README.md
++++ v090/README.md
+@@ -1,4 +1,67 @@
+-# VISU PTBG — import CSV et base de temps — v0.8.0
++# VISU PTBG — v0.9.0
++
++## Nouveaux parcours
++
++Cette version développe les requis suffisamment définis, sans recalage des PLC.
++Les explications historiques ci-dessous restent datées de leur version.
++L'état courant des 64 lignes de requis est dans **docs/AVANCEMENT_V090.md**.
++Les questions à Sébastien sont dans **docs/QUESTIONS_SEBASTIEN_V090.md**.
++
++1. Extraire entièrement le ZIP dans un nouveau dossier. Dans Spyder, redémarrer
++   le noyau, ouvrir ce nouveau `MAIN.py`, puis F5. Le titre affiche **0.9.0**.
++2. Ajouter des CSV : lecture, profil et préparation des signaux se font en
++   arrière-plan. La barre d'activité indique le fichier traité. Annuler écarte
++   le résultat ; la lecture en cours finit proprement avant une nouvelle tâche.
++3. Dans Courbe, choisir un modèle (un panneau, deux côte à côte ou superposés),
++   puis Nouvel onglet. Afficher ajoute un panneau ; un modèle plein ouvre un
++   nouvel onglet. Les vues restent présentes quand la sélection de fichier change.
++   Les ascenseurs permettent d'atteindre les graphiques sur un petit écran.
++4. Superposer ajoute un autre signal du **même CSV** au dernier panneau actif.
++   Même type Bool/Float et même profil requis. Chaque panneau conserve ses
++   données et son profil au moment de sa création. Une nouvelle analyse du CSV
++   ne réécrit pas les vues ouvertes : fermer/recréer une vue pour l'actualiser.
++5. Auto reconnaît `true/false` comme Bool ; les nombres restent Float. Pour un
++   signal binaire codé 0/1, choisir explicitement Bool. Les autres valeurs sont
++   invalides. Aucun codage de ACTIVE/STANDBY/FAILED n'est supposé. Le Bool montre
++   les états mesurés par des points ; aucun maintien entre mesures n'est inventé.
++6. Choisir Vertical, Double vertical (boutons C1/C2) ou Horizontal pour un Float,
++   puis cliquer dans le graphique. Désactiver le zoom/pan Matplotlib auparavant.
++   La lecture donne le point enregistré le plus proche, sa ligne et son texte brut.
++   Un champ vide reste ABSENT. Les doublons sont tous listés (20 montrés au plus).
++   Lectures ouvre le panneau à droite. Aucun curseur ne crée de croix de perte.
++7. Curseur global relie les panneaux temporels de l'onglet s'ils ont le même CSV,
++   le même hash et la même unité. Il ne synchronise pas les horloges de PLC distincts.
++   Changer le mode de curseur d'un panneau retire sa fonction d'émission globale.
++8. Créer un nuage X/Y : sélectionner deux signaux Float du même CSV. Seuls les
++   couples valides présents sur la même ligne sont dessinés. Cliquer sur un point
++   donne les lignes concernées. Le moniteur conserve un axe temporel indépendant.
++9. Menu Rapport : exporter l'onglet actif, ou ajouter successivement plusieurs
++   vues/zooms au rapport manuel puis l'exporter. Chaque ajout fige la vue. Fournir
++   émetteur, projet et unité d'installation ; référence facultative, SHA-256 des
++   sources toujours présent. Les PDF existants ne sont jamais écrasés.
++   Le moniteur apparaît toujours dans le PDF, même s'il était masqué à l'écran.
++10. Informations ouvre l'aide, les packages et l'état des requis. Le bouton du
++    bas ouvre le journal horodaté de la session (conservé en mémoire uniquement).
++
++**Voir un résultat sans lancer la VISU :** ouvrir
++`exemples/Rapport_demonstration_v090.pdf` (trois pages : croix, vue+zoom, X/Y).
++Ce rapport utilise des données de simulation, pas une qualification de la perturbo.
++
++**Tests :** `python verifier_robustesse.py` puis séparément
++`python -m unittest discover -s tests_integration -v`.
++Le premier lanceur utilise un résultat structuré, surveille aussi les fichiers
++Python racine et calcule les SHA-256 par blocs. Un test ignoré donne un résultat
++partiel et un code de sortie non nul. Le délai de 60 s concerne les tests rapides.
++
++**Limites :** pas d'essai Tkinter natif dans l'environnement de développement
++sans écran ; qualification Windows 11 x64 et SLES 15 SP7 encore nécessaire.
++Le rendu des figures et du PDF utilise toujours le fil graphique : une très
++grosse vue ou beaucoup de pages peut ralentir la fenêtre. Les limites mémoire
++des CSV et du nombre de points restent celles du prototype (50 MiB / 500 000).
++Les vues, captures de rapport et journal de session restent en mémoire : fermer
++les vues inutiles / vider la composition après export. Aucun exécutable construit.
++
++## Historique v0.8.0
+ 
+ ## Heures avec fractions — requis 2306
+ 
+--- v080/docs/AVANCEMENT_V090.md
++++ v090/docs/AVANCEMENT_V090.md
+@@ -0,0 +1,475 @@
++# État des requis — VISU PTBG v0.9.0
++
++Les 64 lignes du document source sont reprises ; le double identifiant 2201 est conservé. **Implémenté** signifie présent dans le logiciel, pas réceptionné par Sébastien. Les essais natifs Windows/SLES et la revue humaine restent ouverts. Les énoncés originaux sont repris de la matrice source ; ses anciennes couleurs/statuts ne sont pas utilisés.
++
++Validation locale : tests rapides et intégration consignés dans resultats/ ; rapport de démonstration contrôlé visuellement. Aucune fenêtre Tk native n’a été essayée ici (absence de serveur d’affichage).
++
++| Requis | État actuel | Réalisation / limite |
++|---|---|---|
++| 2100 | Implémenté, essai natif requis | Pas propre à chaque source ; tests base_temps. Volumes cibles non qualifiés. |
++| 2101 | Implémenté, essai natif requis | Plusieurs CSV et plusieurs panneaux indépendants, sans recalage. |
++| 2102 | Partiel | Horloges indépendantes préservées. Comparaison temporelle entre PLC encore ouverte. |
++| 2103 | Implémenté, essai natif requis | Timestamps, profils et hash propres à chaque source ; vues figées explicitement. |
++| 2104 | Partiel | Anomalies locales diagnostiquées. Déphasage inter-PLC non établi. |
++| 2105 | Implémenté, essai natif requis | Ajout de CSV ou dossier récursif, désormais en arrière-plan. |
++| 2200 | Implémenté, essai natif requis | Bool true/false ou choix explicite Bool pour 0/1 ; points mesurés, aucun état inventé. |
++| 2201 (Float) | Implémenté, essai natif requis | Float affiché et superposable ; groupes binaires : encodage et sémantique à préciser. |
++| 2201 (groupe binaire) | À clarifier / non réalisé | Float affiché et superposable ; groupes binaires : encodage et sémantique à préciser. |
++| 2300 | Implémenté, essai natif requis | Lecteur CSV testé. |
++| 2301 | Implémenté, essai natif requis | Virgule prise en charge. |
++| 2302 | Implémenté, essai natif requis | UTF-8 avec ou sans BOM. |
++| 2303 | Implémenté, essai natif requis | Aucune métadonnée ajoutée aux CSV ; originaux en lecture seule. |
++| 2304 | Implémenté, essai natif requis | La première colonne est toujours le temps. |
++| 2305 | À clarifier / non réalisé | Titre « Time stamp configuration » : portée autonome à confirmer. |
++| 2306 | Implémenté, essai natif requis | HH:MM:SS et fractions jusqu’à 9 chiffres ; aucune date ou journée suivante inventée. |
++| 2307 | Implémenté, essai natif requis | Compteur numérique exact, unité explicite ; pas de règle inventée de rebouclage. |
++| 2308 | Implémenté, essai natif requis | En-tête lu, anomalies de structure diagnostiquées. |
++| 2309 | Partiel | Noms affichés ; espaces externes normalisés par le lecteur existant. |
++| 2310 | À clarifier / non réalisé | xxxMo non renseigné. Borne de prototype 50 MiB et 500 000 points graphiques. |
++| 3000 | Partiel | Architecture commune, essais Windows 11 x64 / SLES 15 SP7 x86-64 encore nécessaires. |
++| 3001 | Partiel | Cible Python 3.11 ; syntaxe contrôlée, exécution ici sous Python 3.12. Pas de support Python 3.6 annoncé. |
++| 3002 | Implémenté, essai natif requis | MAIN assemble l’interface ; algorithmes, captures, curseurs et dessins dans src. |
++| 3003 | Implémenté, essai natif requis | Fonctions métier et vues réparties en modules dédiés, documentés. |
++| 3004 | Partiel | Registre et versions observées v090 joints ; ensemble des versions cibles à qualifier. |
++| 3005 | Implémenté, essai natif requis | Chemins portables, sorties utilisateur, absence de commande système spécifique ; mécanismes documentés. |
++| 3006 | Implémenté, essai natif requis | Commentaires dans les modules ajoutés, guide de reprise et README actualisés. |
++| 3007 | Partiel | Nettoyage local effectué ; audit exhaustif des fonctions historiques non réalisé. |
++| 4100 | Partiel | Raster, stabilité, incréments, jitter et anomalies testés ; seuils métier et volumes encore à qualifier. |
++| 4101 | Partiel | Croix aux champs vides, anomalies temporelles ; déphasage inter-PLC non couvert. |
++| 4102 | Implémenté, essai natif requis | Moniteur quantitatif automatique pour chaque panneau et pour X/Y, sur l’axe temps du CSV. |
++| 4103 | Implémenté, essai natif requis | Masquage autorisé seulement selon le diagnostic sans avertissement/erreur. |
++| 4104 | Implémenté, essai natif requis | Moniteur systématiquement inclus dans chaque capture PDF, même masqué à l’écran. |
++| 4105 | Partiel | Lectures/diagnostics en arrière-plan, annulation sans application du résultat. Rendu/PDF encore synchrone. |
++| 4106 | Implémenté, essai natif requis | Raster et tolérance saisis par fichier, diagnostic associé. |
++| 4107 | À clarifier / non réalisé | Origine absolue, fuseau et sens de « Clock Jitter ignored » à définir avec Sébastien. |
++| 5100 | Implémenté, essai natif requis | Menu principal en haut. |
++| 5101 | Implémenté, essai natif requis | Version, aide README, historique/requis et registre des packages ouverts depuis Informations. |
++| 5102 | Implémenté, essai natif requis | Utilisateur/date/version/activité en bas, journal horodaté accessible ; journal de session en mémoire. |
++| 5103 | Implémenté, essai natif requis | Arbre à gauche. |
++| 5104 | Partiel | Graphiques à droite et zones défilantes ; DPI et petite résolution à essayer sur cible. |
++| 5105 | Implémenté, essai natif requis | Arbre masquable. |
++| 5106 | Implémenté, essai natif requis | Plusieurs onglets graphiques persistants avec zoom et contenu propres. |
++| 5200 | Implémenté, essai natif requis | Racine du paquet. |
++| 5201 | Implémenté, essai natif requis | Sources enfants du paquet. |
++| 5202 | Partiel | Bool/Float indicatifs dans l’arbre ; 0/1 ambigu sans convention métier, choix explicite au tracé. |
++| 5203 | Implémenté, essai natif requis | Première colonne temporelle et profil propres au fichier affichés. |
++| 5300 | Implémenté, essai natif requis | Trois modèles : un panneau, deux côte à côte, deux superposés. |
++| 5400 | Implémenté, essai natif requis | Curseur vertical activable par panneau. |
++| 5401 | Implémenté, essai natif requis | Lecture de l’échantillon enregistré le plus proche ; timestamp brut, valeur brute, ligne, absence et doublons explicites. |
++| 5402 | Partiel | Fenêtre à droite avec toutes les courbes superposées. Lecture au clic, pas encore de suivi continu à la souris. |
++| 5403 | Implémenté, essai natif requis | Double curseur C1/C2 avec timestamp affiché automatiquement. |
++| 5404 | Partiel | Texte identique à 5403 : comportement implémenté, distinction documentaire à confirmer. |
++| 5405 | Partiel | Curseur global des panneaux du même CSV ; global entre PLC distincts non réalisé. |
++| 5406 | Implémenté, essai natif requis | Curseur horizontal réservé à Float, refusé sur Bool. |
++| 5407 | À clarifier / non réalisé | Opération conditionnelle et règle si Bool absent à définir. |
++| 5408 | Implémenté, essai natif requis | Nuage et point de lecture X/Y du même CSV ; couples présents sur la même ligne uniquement. |
++| 5500 | À clarifier / non réalisé | Énoncé vide. |
++| 6000 | Implémenté, essai natif requis | Export PDF utilisant Matplotlib PdfPages. |
++| 6001 | Implémenté, essai natif requis | En-tête et zone graphique par page. |
++| 6002 | Implémenté, essai natif requis | Export direct de l’onglet actif et composition manuelle de captures. |
++| 6003 | Implémenté, essai natif requis | Export automatique de l’onglet graphique actif, avec moniteurs. |
++| 6004 | Implémenté, essai natif requis | Captures successives de vues, zooms, curseurs et X/Y dans l’ordre d’ajout. |
++| 6005 | Implémenté, essai natif requis | Version, émetteur, date, sources, projet, unité, référence optionnelle et SHA-256 des sources. Aucun fichier projet n’existe encore. |
++
++## Énoncés du document source
++
++### REQ_COMMON_KH_2100 — occurrence 1
++
++The PLC can run at different frequencies. Preferred are 10 & 20ms, but the present tool can’t be disturbed by this aspect
++
++État : **Implémenté, essai natif requis**. Pas propre à chaque source ; tests base_temps. Volumes cibles non qualifiés.
++
++### REQ_COMMON_KH_2101 — occurrence 1
++
++The PLC can consist of a system composed by several PLC
++
++État : **Implémenté, essai natif requis**. Plusieurs CSV et plusieurs panneaux indépendants, sans recalage.
++
++### REQ_COMMON_KH_2102 — occurrence 1
++
++The PLC can be synchronized or not
++
++État : **Partiel**. Horloges indépendantes préservées. Comparaison temporelle entre PLC encore ouverte.
++
++### REQ_COMMON_KH_2103 — occurrence 1
++
++Each PLC will produce its own package of data with its own timestamp.
++
++État : **Implémenté, essai natif requis**. Timestamps, profils et hash propres à chaque source ; vues figées explicitement.
++
++### REQ_COMMON_KH_2104 — occurrence 1
++
++The collection of data from several sources can generate variation of frequencies, dephasing, or loss of data flow
++
++État : **Partiel**. Anomalies locales diagnostiquées. Déphasage inter-PLC non établi.
++
++### REQ_COMMON_KH_2105 — occurrence 1
++
++Single or multiple files
++
++État : **Implémenté, essai natif requis**. Ajout de CSV ou dossier récursif, désormais en arrière-plan.
++
++### REQ_COMMON_KH_2200 — occurrence 1
++
++Binary signal
++
++État : **Implémenté, essai natif requis**. Bool true/false ou choix explicite Bool pour 0/1 ; points mesurés, aucun état inventé.
++
++### REQ_COMMON_KH_2201 — occurrence 1
++
++Analog signal type : float
++
++État : **Implémenté, essai natif requis**. Float affiché et superposable ; groupes binaires : encodage et sémantique à préciser.
++
++### REQ_COMMON_KH_2201 — occurrence 2
++
++Binary group signal
++
++État : **À clarifier / non réalisé**. Float affiché et superposable ; groupes binaires : encodage et sémantique à préciser.
++
++### REQ_COMMON_KH_2300 — occurrence 1
++
++The preferred format shall be ‘csv’
++
++État : **Implémenté, essai natif requis**. Lecteur CSV testé.
++
++### REQ_COMMON_KH_2301 — occurrence 1
++
++Separator shall be a comma ‘,’
++
++État : **Implémenté, essai natif requis**. Virgule prise en charge.
++
++### REQ_COMMON_KH_2302 — occurrence 1
++
++Text format UTF8
++
++État : **Implémenté, essai natif requis**. UTF-8 avec ou sans BOM.
++
++### REQ_COMMON_KH_2303 — occurrence 1
++
++No additional meta data
++
++État : **Implémenté, essai natif requis**. Aucune métadonnée ajoutée aux CSV ; originaux en lecture seule.
++
++### REQ_COMMON_KH_2304 — occurrence 1
++
++First column devoted to time base
++
++État : **Implémenté, essai natif requis**. La première colonne est toujours le temps.
++
++### REQ_COMMON_KH_2305 — occurrence 1
++
++Time stamp configuration:
++
++État : **À clarifier / non réalisé**. Titre « Time stamp configuration » : portée autonome à confirmer.
++
++### REQ_COMMON_KH_2306 — occurrence 1
++
++Hh:mn:s… micro, nanos…
++
++État : **Implémenté, essai natif requis**. HH:MM:SS et fractions jusqu’à 9 chiffres ; aucune date ou journée suivante inventée.
++
++### REQ_COMMON_KH_2307 — occurrence 1
++
++Time counter
++
++État : **Implémenté, essai natif requis**. Compteur numérique exact, unité explicite ; pas de règle inventée de rebouclage.
++
++### REQ_COMMON_KH_2308 — occurrence 1
++
++First row devoted to column’s header
++
++État : **Implémenté, essai natif requis**. En-tête lu, anomalies de structure diagnostiquées.
++
++### REQ_COMMON_KH_2309 — occurrence 1
++
++Composed by PLC’s variables names
++
++État : **Partiel**. Noms affichés ; espaces externes normalisés par le lecteur existant.
++
++### REQ_COMMON_KH_2310 — occurrence 1
++
++Maximal size xxxMo
++
++État : **À clarifier / non réalisé**. xxxMo non renseigné. Borne de prototype 50 MiB et 500 000 points graphiques.
++
++### REQ_COMMON_KH_3000 — occurrence 1
++
++Final tool shall be compatible with SLES - SUSE 15 SP7: ‘SUSE Linux Enterprise Server 15SP7’ at least
++
++État : **Partiel**. Architecture commune, essais Windows 11 x64 / SLES 15 SP7 x86-64 encore nécessaires.
++
++### REQ_COMMON_KH_3001 — occurrence 1
++
++Final tool shall be compatible with Python 3.6 at least
++
++État : **Partiel**. Cible Python 3.11 ; syntaxe contrôlée, exécution ici sous Python 3.12. Pas de support Python 3.6 annoncé.
++
++### REQ_COMMON_KH_3002 — occurrence 1
++
++MAIN.py script shall be devoted only to generate the GUI interface.
++
++État : **Implémenté, essai natif requis**. MAIN assemble l’interface ; algorithmes, captures, curseurs et dessins dans src.
++
++### REQ_COMMON_KH_3003 — occurrence 1
++
++All action realized by the tool shall be best as possible externalized into a dedicated sub script or class.
++
++État : **Implémenté, essai natif requis**. Fonctions métier et vues réparties en modules dédiés, documentés.
++
++### REQ_COMMON_KH_3004 — occurrence 1
++
++All additional packages or library implemented shall be documented and strictly aligned with the kernel version.
++
++État : **Partiel**. Registre et versions observées v090 joints ; ensemble des versions cibles à qualifier.
++
++### REQ_COMMON_KH_3005 — occurrence 1
++
++Compatibility mechanism between different OS Shall be documented.
++
++État : **Implémenté, essai natif requis**. Chemins portables, sorties utilisateur, absence de commande système spécifique ; mécanismes documentés.
++
++### REQ_COMMON_KH_3006 — occurrence 1
++
++Code source shall be commented
++
++État : **Implémenté, essai natif requis**. Commentaires dans les modules ajoutés, guide de reprise et README actualisés.
++
++### REQ_COMMON_KH_3007 — occurrence 1
++
++No useless function hold into the scripts
++
++État : **Partiel**. Nettoyage local effectué ; audit exhaustif des fonctions historiques non réalisé.
++
++### REQ_COMMON_KH_4100 — occurrence 1
++
++The present tool shall define the time raster from the source and control check:
++•	Period value
++•	Period stability
++•	Period continuous increase
++
++État : **Partiel**. Raster, stabilité, incréments, jitter et anomalies testés ; seuils métier et volumes encore à qualifier.
++
++### REQ_COMMON_KH_4101 — occurrence 1
++
++The present tool shall be capable to find and highlight the inconsistent time base like missing data or wrong phasing
++
++État : **Partiel**. Croix aux champs vides, anomalies temporelles ; déphasage inter-PLC non couvert.
++
++### REQ_COMMON_KH_4102 — occurrence 1
++
++A dedicated graphical axle shall be devoted to detail the time base conversion and status. It shall be automatically present on each graphical template and call: Time Base Monitor.
++
++État : **Implémenté, essai natif requis**. Moniteur quantitatif automatique pour chaque panneau et pour X/Y, sur l’axe temps du CSV.
++
++### REQ_COMMON_KH_4103 — occurrence 1
++
++The time base monitor can be hidden by the issuer only if no warning or error.
++
++État : **Implémenté, essai natif requis**. Masquage autorisé seulement selon le diagnostic sans avertissement/erreur.
++
++### REQ_COMMON_KH_4104 — occurrence 1
++
++The Time Base Monitor shall be automatically present into all reports. If removed for arrangement and indication shall appear to confirm the good construction or Time Base.
++
++État : **Implémenté, essai natif requis**. Moniteur systématiquement inclus dans chaque capture PDF, même masqué à l’écran.
++
++### REQ_COMMON_KH_4105 — occurrence 1
++
++In case of disturbance in the time base analysis, the treatment can’t be locked or unstable.
++
++État : **Partiel**. Lectures/diagnostics en arrière-plan, annulation sans application du résultat. Rendu/PDF encore synchrone.
++
++### REQ_COMMON_KH_4106 — occurrence 1
++
++In case of disturbance in the time base analysis, the user can specify the normal raster with an associated diagnosis
++
++État : **Implémenté, essai natif requis**. Raster et tolérance saisis par fichier, diagnostic associé.
++
++### REQ_COMMON_KH_4107 — occurrence 1
++
++Constitute Absolute timestamp. Clock Jitter ignored
++
++État : **À clarifier / non réalisé**. Origine absolue, fuseau et sens de « Clock Jitter ignored » à définir avec Sébastien.
++
++### REQ_COMMON_KH_5100 — occurrence 1
++
++Top bar with main menu path
++
++État : **Implémenté, essai natif requis**. Menu principal en haut.
++
++### REQ_COMMON_KH_5101 — occurrence 1
++
++Specific ‘Information’ section including:
++Tool version
++History of changes
++Sources
++Help file
++
++État : **Implémenté, essai natif requis**. Version, aide README, historique/requis et registre des packages ouverts depuis Informations.
++
++### REQ_COMMON_KH_5102 — occurrence 1
++
++Bottom bar summarizing:
++User
++Date
++Activity log
++Tool version
++
++État : **Implémenté, essai natif requis**. Utilisateur/date/version/activité en bas, journal horodaté accessible ; journal de session en mémoire.
++
++### REQ_COMMON_KH_5103 — occurrence 1
++
++Left area will contain the data tree viewer
++
++État : **Implémenté, essai natif requis**. Arbre à gauche.
++
++### REQ_COMMON_KH_5104 — occurrence 1
++
++Right area will be the main and wider section devoted to graphical analysis.
++
++État : **Partiel**. Graphiques à droite et zones défilantes ; DPI et petite résolution à essayer sur cible.
++
++### REQ_COMMON_KH_5105 — occurrence 1
++
++Tree area can be hidden
++
++État : **Implémenté, essai natif requis**. Arbre masquable.
++
++### REQ_COMMON_KH_5106 — occurrence 1
++
++Graphical area can manage several tab to hold different arrangements
++
++État : **Implémenté, essai natif requis**. Plusieurs onglets graphiques persistants avec zoom et contenu propres.
++
++### REQ_COMMON_KH_5200 — occurrence 1
++
++Top Tree level correspond to the data package
++
++État : **Implémenté, essai natif requis**. Racine du paquet.
++
++### REQ_COMMON_KH_5201 — occurrence 1
++
++First Child level will be devoted to the csv file… from one source or several.
++
++État : **Implémenté, essai natif requis**. Sources enfants du paquet.
++
++### REQ_COMMON_KH_5202 — occurrence 1
++
++Into each csv file, the tree shall detail all the variables contained with associated type Bool or Float.
++
++État : **Partiel**. Bool/Float indicatifs dans l’arbre ; 0/1 ambigu sans convention métier, choix explicite au tracé.
++
++### REQ_COMMON_KH_5203 — occurrence 1
++
++Into each csv file, the tree shall detail the dedicated time base
++
++État : **Implémenté, essai natif requis**. Première colonne temporelle et profil propres au fichier affichés.
++
++### REQ_COMMON_KH_5300 — occurrence 1
++
++Several templates shall be proposed including different arrangement of Axle
++
++État : **Implémenté, essai natif requis**. Trois modèles : un panneau, deux côte à côte, deux superposés.
++
++### REQ_COMMON_KH_5400 — occurrence 1
++
++Vertical single Cursor: can be activated by axle
++
++État : **Implémenté, essai natif requis**. Curseur vertical activable par panneau.
++
++### REQ_COMMON_KH_5401 — occurrence 1
++
++Vertical single Cursor: hold time stamp value and cross value of selected curve
++
++État : **Implémenté, essai natif requis**. Lecture de l’échantillon enregistré le plus proche ; timestamp brut, valeur brute, ligne, absence et doublons explicites.
++
++### REQ_COMMON_KH_5402 — occurrence 1
++
++Vertical single Cursor: tracking reading mode adding the list of crossed value from all the axle’s curves into a right popup
++
++État : **Partiel**. Fenêtre à droite avec toutes les courbes superposées. Lecture au clic, pas encore de suivi continu à la souris.
++
++### REQ_COMMON_KH_5403 — occurrence 1
++
++Double Vertical Cursor: Time stamp is mandatory and automated for each cursor
++
++État : **Implémenté, essai natif requis**. Double curseur C1/C2 avec timestamp affiché automatiquement.
++
++### REQ_COMMON_KH_5404 — occurrence 1
++
++Double Vertical Cursor: Time stamp is mandatory and automated for each cursor
++
++État : **Partiel**. Texte identique à 5403 : comportement implémenté, distinction documentaire à confirmer.
++
++### REQ_COMMON_KH_5405 — occurrence 1
++
++Global cursor = global synchronization of axles. Cursor appear over all axles and moving in same time
++
++État : **Partiel**. Curseur global des panneaux du même CSV ; global entre PLC distincts non réalisé.
++
++### REQ_COMMON_KH_5406 — occurrence 1
++
++Horizontal cursor: only applicable to analog signals
++
++État : **Implémenté, essai natif requis**. Curseur horizontal réservé à Float, refusé sur Bool.
++
++### REQ_COMMON_KH_5407 — occurrence 1
++
++Horizontal cursor: can be conditioned by additional bool signal to realize conditional processing.
++
++État : **À clarifier / non réalisé**. Opération conditionnelle et règle si Bool absent à définir.
++
++### REQ_COMMON_KH_5408 — occurrence 1
++
++Cursor X/Y: used for correlation control check - Two cursors are activated or the cross point only can be highlighted
++
++État : **Implémenté, essai natif requis**. Nuage et point de lecture X/Y du même CSV ; couples présents sur la même ligne uniquement.
++
++### REQ_COMMON_KH_5500 — occurrence 1
++
++
++
++État : **À clarifier / non réalisé**. Énoncé vide.
++
++### REQ_COMMON_KH_6000 — occurrence 1
++
++The present tool shall be capable to generate a pdf report.
++
++État : **Implémenté, essai natif requis**. Export PDF utilisant Matplotlib PdfPages.
++
++### REQ_COMMON_KH_6001 — occurrence 1
++
++Report consist into a template containing Header and graphical area
++
++État : **Implémenté, essai natif requis**. En-tête et zone graphique par page.
++
++### REQ_COMMON_KH_6002 — occurrence 1
++
++Report, can be generated automatically or step by step.
++
++État : **Implémenté, essai natif requis**. Export direct de l’onglet actif et composition manuelle de captures.
++
++### REQ_COMMON_KH_6003 — occurrence 1
++
++Automatic Report consist into a single edition of active graphical area to pdf file
++
++État : **Implémenté, essai natif requis**. Export automatique de l’onglet graphique actif, avec moniteurs.
++
++### REQ_COMMON_KH_6004 — occurrence 1
++
++Manual step by step report generation consist into a sequential generation on order depending of graphical active tab. Permitting to push global view, and customize analysis, cursor, X/Y cloud…
++
++État : **Implémenté, essai natif requis**. Captures successives de vues, zooms, curseurs et X/Y dans l’ordre d’ajout.
++
++### REQ_COMMON_KH_6005 — occurrence 1
++
++Header shall contain following details:
++Tool Version
++Issuer
++Date
++Source File(s)
++Project Name & Unit
++Project file reference or Hash
++
++État : **Implémenté, essai natif requis**. Version, émetteur, date, sources, projet, unité, référence optionnelle et SHA-256 des sources. Aucun fichier projet n’existe encore.
+--- v080/docs/DEPENDANCES.md
++++ v090/docs/DEPENDANCES.md
+@@ -1,4 +1,43 @@
+-# Dépendances et compatibilité — v0.8.0
++# Dépendances et compatibilité — v0.9.0
++
++## Ajouts v0.9.0
++
++Aucun package externe ajouté, aucune installation automatique.
++
++| Composant | Utilisation nouvelle | Provenance |
++|---|---|---|
++| tkinter / ttk | Onglets, panneaux, scrollbars, dialogues, after pour les résultats | Python et runtime Tcl/Tk du poste |
++| threading, queue | Travail de fond, annulation, publication dans le fil graphique | Bibliothèque standard Python |
++| bisect, math | Consultation des timestamps réels, valeurs finies | Bibliothèque standard Python |
++| io, dataclasses, datetime, pathlib, textwrap | Captures, métadonnées, chemins, texte | Bibliothèque standard Python |
++| unittest, tempfile, hashlib | Résultats de tests structurés, fichiers temporaires, empreintes par blocs | Bibliothèque standard Python |
++| Matplotlib | Curseurs, nuage X/Y, PNG en mémoire, PdfPages pour les rapports | Package existant, 3.10.8 observé ici |
++| Pillow / NumPy | Lecture/rendu d'images utilisé par Matplotlib | Dépendances déjà présentes de Matplotlib |
++
++Les versions exactes et contraintes transitives observées sont archivées dans
++`environnement_linux_v090.json`. Le runtime de test est Python 3.12/Linux ;
++syntaxe contrôlée pour Python 3.11, sans prétendre avoir testé ce runtime ici.
++La cible reste Windows 11 x64 et SLES 15 SP7 x86-64. « Python 3.6 at least »
++ne signifie pas à lui seul que toutes les versions depuis 3.6 doivent être
++supportées : la version réellement autorisée sur SLES doit être confirmée.
++Le code actuel requiert Python 3.11 comme cible de projet, pas Python 3.6.
++
++PDF : Matplotlib PdfPages (backend intégré), captures à 180 dpi. Les en-têtes
++sont du texte sélectionnable ; les graphiques sont des images figées.
++Les pages sont A4 paysage (une vue), 16,5 × 8,3 pouces (deux vues côte à côte)
++ou A3 portrait (deux superposées). Aucun reportlab/pypdf requis à l'exécution.
++`pypdf` et Poppler sont utilisés uniquement pour la vérification de livraison.
++
++Documentation officielle consultée :
++https://matplotlib.org/stable/api/backend_pdf_api.html
++https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.savefig.html
++
++Le travail de fond ne touche jamais Tkinter ni Matplotlib. Les callbacks Tk
++appliquent les résultats, le tracé et le PDF restent dans le fil graphique.
++L'annulation est coopérative entre fichiers et invalide le résultat à réception.
++Les chemins d'aide sont relatifs à `MAIN.py`, sans commande Windows/Linux.
++
++## Historique des versions précédentes
+ 
+ Version 0.8.0 : aucun package ajouté ou mis à jour. Le parseur d'heures utilise
+ `re.fullmatch` (validation stricte du format) et `decimal.Decimal` (secondes
+--- v080/docs/MATRICE_REQUIS_V090.json
++++ v090/docs/MATRICE_REQUIS_V090.json
+@@ -0,0 +1,714 @@
++{
++  "version_projet": "0.9.0",
++  "source": "NCS00ICOMMON----ES010.docx",
++  "sha256_source": "16b9df5b1f443f4dfb1a601c99619d9acf7469a2e47eaddad9b993c387a1c182",
++  "nombre_lignes": 64,
++  "nombre_identifiants_distincts": 63,
++  "validation_complete": false,
++  "requis": [
++    {
++      "id": "REQ_COMMON_KH_2100",
++      "statement": "The PLC can run at different frequencies. Preferred are 10 & 20ms, but the present tool can’t be disturbed by this aspect",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Pas propre à chaque source ; tests base_temps. Volumes cibles non qualifiés.",
++      "verification_et_resultat_attendu": "Lire trois CSV à pas 10, 20 et 7,5 : restituer chaque pas sans imposer 10 ou 20.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2101",
++      "statement": "The PLC can consist of a system composed by several PLC",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Plusieurs CSV et plusieurs panneaux indépendants, sans recalage.",
++      "verification_et_resultat_attendu": "Charger au moins trois sources PLC : chaque fichier doit garder son identité et son bilan.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2102",
++      "statement": "The PLC can be synchronized or not",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Horloges indépendantes préservées. Comparaison temporelle entre PLC encore ouverte.",
++      "verification_et_resultat_attendu": "Charger deux sources à pas identique, décalées de 3 : aucun recalage implicite, décalage conservé.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2103",
++      "statement": "Each PLC will produce its own package of data with its own timestamp.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Timestamps, profils et hash propres à chaque source ; vues figées explicitement.",
++      "verification_et_resultat_attendu": "Donner des timestamps distincts à deux CSV : retrouver chacun dans son diagnostic et sa courbe.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2104",
++      "statement": "The collection of data from several sources can generate variation of frequencies, dephasing, or loss of data flow",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Anomalies locales diagnostiquées. Déphasage inter-PLC non établi.",
++      "verification_et_resultat_attendu": "Injecter trou, changement de pas et déphasage : signaler les écarts sans réécrire les données.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2105",
++      "statement": "Single or multiple files",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Ajout de CSV ou dossier récursif, désormais en arrière-plan.",
++      "verification_et_resultat_attendu": "Ouvrir un CSV, puis plusieurs : tous apparaissent ; un fichier invalide n'empêche pas les autres diagnostics.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2200",
++      "statement": "Binary signal",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Bool true/false ou choix explicite Bool pour 0/1 ; points mesurés, aucun état inventé.",
++      "verification_et_resultat_attendu": "Tracer un signal 0/1 avec une cellule vide : conserver 0, 1 et l'absence.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2201",
++      "statement": "Analog signal type : float",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Float affiché et superposable ; groupes binaires : encodage et sémantique à préciser.",
++      "verification_et_resultat_attendu": "Tracer des valeurs -2,5 / 0 / 4,75 : vérifier signes, amplitudes et timestamps.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2201",
++      "statement": "Binary group signal",
++      "occurrence": 2,
++      "statut": "À clarifier / non réalisé",
++      "realisation_et_preuves_partielles": "Float affiché et superposable ; groupes binaires : encodage et sémantique à préciser.",
++      "verification_et_resultat_attendu": "Fournir un groupe de bits connu et vérifier chaque état et l'ordre des bits affichés.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2300",
++      "statement": "The preferred format shall be ‘csv’",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Lecteur CSV testé.",
++      "verification_et_resultat_attendu": "Lire les CSV LIM et PID : 501 et 1001 lignes respectivement, noms et valeurs conservés.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2301",
++      "statement": "Separator shall be a comma ‘,’",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Virgule prise en charge.",
++      "verification_et_resultat_attendu": "Lire un CSV séparé par virgules contenant une virgule entre guillemets : ne pas créer de colonne supplémentaire.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2302",
++      "statement": "Text format UTF8",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "UTF-8 avec ou sans BOM.",
++      "verification_et_resultat_attendu": "Lire en UTF-8 des noms accentués avec/sans BOM : noms identiques sans caractère BOM ajouté.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2303",
++      "statement": "No additional meta data",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Aucune métadonnée ajoutée aux CSV ; originaux en lecture seule.",
++      "verification_et_resultat_attendu": "Comparer les SHA-256 avant/après analyse, tracé et enregistrement : CSV strictement inchangés.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2304",
++      "statement": "First column devoted to time base",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "La première colonne est toujours le temps.",
++      "verification_et_resultat_attendu": "Lire une première colonne temporelle au nom inhabituel : la sélectionner explicitement et vérifier son utilisation.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2305",
++      "statement": "Time stamp configuration:",
++      "occurrence": 1,
++      "statut": "À clarifier / non réalisé",
++      "realisation_et_preuves_partielles": "Titre « Time stamp configuration » : portée autonome à confirmer.",
++      "verification_et_resultat_attendu": "Faire définir les réglages attendus et leurs valeurs autorisées avec Sébastien.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2306",
++      "statement": "Hh:mn:s… micro, nanos…",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "HH:MM:SS et fractions jusqu’à 9 chiffres ; aucune date ou journée suivante inventée.",
++      "verification_et_resultat_attendu": "Tester HH:MM:SS avec fractions micro/nanosecondes et franchissement de minuit : préserver ordre et précision.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2307",
++      "statement": "Time counter",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Compteur numérique exact, unité explicite ; pas de règle inventée de rebouclage.",
++      "verification_et_resultat_attendu": "Lire un compteur régulier puis un retour à zéro : préserver les valeurs et signaler le retour.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2308",
++      "statement": "First row devoted to column’s header",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "En-tête lu, anomalies de structure diagnostiquées.",
++      "verification_et_resultat_attendu": "Lire un CSV valide puis sans en-tête : noms de la première ligne reconnus ou refus explicite.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2309",
++      "statement": "Composed by PLC’s variables names",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Noms affichés ; espaces externes normalisés par le lecteur existant.",
++      "verification_et_resultat_attendu": "Comparer les noms du CSV et de l'arbre, accents/espaces internes inclus : aucune substitution métier.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_2310",
++      "statement": "Maximal size xxxMo",
++      "occurrence": 1,
++      "statut": "À clarifier / non réalisé",
++      "realisation_et_preuves_partielles": "xxxMo non renseigné. Borne de prototype 50 MiB et 500 000 points graphiques.",
++      "verification_et_resultat_attendu": "Après fixation de xxx Mo, tester sous, à et au-dessus de la limite avec mesure mémoire/durée.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3000",
++      "statement": "Final tool shall be compatible with SLES - SUSE 15 SP7: ‘SUSE Linux Enterprise Server 15SP7’ at least",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Architecture commune, essais Windows 11 x64 / SLES 15 SP7 x86-64 encore nécessaires.",
++      "verification_et_resultat_attendu": "Sur SLES 15 SP7 convenu, installer/lancer/ouvrir/tracer/exporter puis archiver l'environnement et les résultats.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3001",
++      "statement": "Final tool shall be compatible with Python 3.6 at least",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Cible Python 3.11 ; syntaxe contrôlée, exécution ici sous Python 3.12. Pas de support Python 3.6 annoncé.",
++      "verification_et_resultat_attendu": "Confirmer la plage Python prise en charge, puis exécuter la suite et l'IHM sur chaque version retenue.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3002",
++      "statement": "MAIN.py script shall be devoted only to generate the GUI interface.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "MAIN assemble l’interface ; algorithmes, captures, curseurs et dessins dans src.",
++      "verification_et_resultat_attendu": "Relire MAIN.py : aucun parseur CSV ni calcul temporel métier ; actions déléguées aux modules.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3003",
++      "statement": "All action realized by the tool shall be best as possible externalized into a dedicated sub script or class.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Fonctions métier et vues réparties en modules dédiés, documentés.",
++      "verification_et_resultat_attendu": "Appeler lecture, diagnostic et construction de figure sans démarrer MAIN : fonctionnement indépendant.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3004",
++      "statement": "All additional packages or library implemented shall be documented and strictly aligned with the kernel version.",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Registre et versions observées v090 joints ; ensemble des versions cibles à qualifier.",
++      "verification_et_resultat_attendu": "Archiver Python/OS/bits/Tcl/Tk et chaque version réellement chargée ; rejouer la suite et le tracé sur cible.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3005",
++      "statement": "Compatibility mechanism between different OS Shall be documented.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Chemins portables, sorties utilisateur, absence de commande système spécifique ; mécanismes documentés.",
++      "verification_et_resultat_attendu": "Tester chemins avec espaces/accents, accès refusé et démarrage sur chaque OS retenu.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3006",
++      "statement": "Code source shall be commented",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Commentaires dans les modules ajoutés, guide de reprise et README actualisés.",
++      "verification_et_resultat_attendu": "Relire chaque module avec un tiers : rôle, entrées/sorties, unités, erreurs et limites retrouvables.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_3007",
++      "statement": "No useless function hold into the scripts",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Nettoyage local effectué ; audit exhaustif des fonctions historiques non réalisé.",
++      "verification_et_resultat_attendu": "Revoir chaque fonction de production : appel réel ou API justifiée ; éliminer code mort et imports inutiles.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4100",
++      "statement": "The present tool shall define the time raster from the source and control check:\n•\tPeriod value\n•\tPeriod stability\n•\tPeriod continuous increase",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Raster, stabilité, incréments, jitter et anomalies testés ; seuils métier et volumes encore à qualifier.",
++      "verification_et_resultat_attendu": "Tester temps régulier, variable, doublon, retour, vide et point unique : pas/progression corrects ou non évaluables.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4101",
++      "statement": "The present tool shall be capable to find and highlight the inconsistent time base like missing data or wrong phasing",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Croix aux champs vides, anomalies temporelles ; déphasage inter-PLC non couvert.",
++      "verification_et_resultat_attendu": "Simulation archivée : repères aux temps 1006 et 9815 (doublons), 4986 (pas 2 ms) avec pas attendu 1 ms.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4102",
++      "statement": "A dedicated graphical axle shall be devoted to detail the time base conversion and status. It shall be automatically present on each graphical template and call: Time Base Monitor.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Moniteur quantitatif automatique pour chaque panneau et pour X/Y, sur l’axe temps du CSV.",
++      "verification_et_resultat_attendu": "Afficher la courbe puis zoomer : axe Time Base Monitor présent, repères aux temps source, zoom commun.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4103",
++      "statement": "The time base monitor can be hidden by the issuer only if no warning or error.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Masquage autorisé seulement selon le diagnostic sans avertissement/erreur.",
++      "verification_et_resultat_attendu": "CSV régulier : masquage du diagnostic possible ; doublon ou valeur absente : masquage refusé.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4104",
++      "statement": "The Time Base Monitor shall be automatically present into all reports. If removed for arrangement and indication shall appear to confirm the good construction or Time Base.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Moniteur systématiquement inclus dans chaque capture PDF, même masqué à l’écran.",
++      "verification_et_resultat_attendu": "Exporter chaque rapport avec anomalies : moniteur présent ; retrait autorisé seulement avec confirmation prévue.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4105",
++      "statement": "In case of disturbance in the time base analysis, the treatment can’t be locked or unstable.",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Lectures/diagnostics en arrière-plan, annulation sans application du résultat. Rendu/PDF encore synchrone.",
++      "verification_et_resultat_attendu": "Ouvrir un CSV perturbé puis un valide : diagnostic contrôlé, source inchangée, interface encore utilisable.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4106",
++      "statement": "In case of disturbance in the time base analysis, the user can specify the normal raster with an associated diagnosis",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Raster et tolérance saisis par fichier, diagnostic associé.",
++      "verification_et_resultat_attendu": "Saisir pas attendu 1 et tolérance 0 sur simulation : pas 2 signalé ; reconfigurer et recalculer le bilan.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_4107",
++      "statement": "Constitute Absolute timestamp. Clock Jitter ignored",
++      "occurrence": 1,
++      "statut": "À clarifier / non réalisé",
++      "realisation_et_preuves_partielles": "Origine absolue, fuseau et sens de « Clock Jitter ignored » à définir avec Sébastien.",
++      "verification_et_resultat_attendu": "Définir origine commune et jitter admissible puis comparer une référence calculée à des données déphasées.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5100",
++      "statement": "Top bar with main menu path",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Menu principal en haut.",
++      "verification_et_resultat_attendu": "Ouvrir la fenêtre : menu en haut, Ajouter et Enregistrer opérationnels.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5101",
++      "statement": "Specific ‘Information’ section including:\nTool version\nHistory of changes\nSources\nHelp file",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Version, aide README, historique/requis et registre des packages ouverts depuis Informations.",
++      "verification_et_resultat_attendu": "Ouvrir Informations et Aide : version, historique, sources et aide accessibles et cohérents.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5102",
++      "statement": "Bottom bar summarizing:\nUser\nDate\nActivity log\nTool version",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Utilisateur/date/version/activité en bas, journal horodaté accessible ; journal de session en mémoire.",
++      "verification_et_resultat_attendu": "Lancer, ajouter un fichier, analyser : identité/date/version correctes et activité actualisée.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5103",
++      "statement": "Left area will contain the data tree viewer",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Arbre à gauche.",
++      "verification_et_resultat_attendu": "Ouvrir plusieurs CSV : arbre à gauche et sélection fonctionnelle.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5104",
++      "statement": "Right area will be the main and wider section devoted to graphical analysis.",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Graphiques à droite et zones défilantes ; DPI et petite résolution à essayer sur cible.",
++      "verification_et_resultat_attendu": "Afficher puis redimensionner : graphique à droite plus large que l'arbre, libellés lisibles.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5105",
++      "statement": "Tree area can be hidden",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Arbre masquable.",
++      "verification_et_resultat_attendu": "Masquer puis réafficher l'arbre : sélection et données conservées, zone droite redimensionnée.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5106",
++      "statement": "Graphical area can manage several tab to hold different arrangements",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Plusieurs onglets graphiques persistants avec zoom et contenu propres.",
++      "verification_et_resultat_attendu": "Créer deux arrangements graphiques, changer d'onglet : contenu et réglages distincts conservés.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5200",
++      "statement": "Top Tree level correspond to the data package",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Racine du paquet.",
++      "verification_et_resultat_attendu": "Ajouter deux fichiers : une racine Paquet CSV les rassemble.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5201",
++      "statement": "First Child level will be devoted to the csv file… from one source or several.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Sources enfants du paquet.",
++      "verification_et_resultat_attendu": "Sous la racine, retrouver chaque CSV et son chemin sans confusion de noms.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5202",
++      "statement": "Into each csv file, the tree shall detail all the variables contained with associated type Bool or Float.",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Bool/Float indicatifs dans l’arbre ; 0/1 ambigu sans convention métier, choix explicite au tracé.",
++      "verification_et_resultat_attendu": "Déplier un CSV à booléens et flottants : chaque variable doit avoir le type métier validé.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5203",
++      "statement": "Into each csv file, the tree shall detail the dedicated time base",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Première colonne temporelle et profil propres au fichier affichés.",
++      "verification_et_resultat_attendu": "Déplier chaque fichier : retrouver sa base de temps ; changer le profil et vérifier l'actualisation.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5300",
++      "statement": "Several templates shall be proposed including different arrangement of Axle",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Trois modèles : un panneau, deux côte à côte, deux superposés.",
++      "verification_et_resultat_attendu": "Choisir plusieurs templates : axes et moniteurs corrects, données préservées lors du changement.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5400",
++      "statement": "Vertical single Cursor: can be activated by axle",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Curseur vertical activable par panneau.",
++      "verification_et_resultat_attendu": "Activer un curseur sur un axe choisi : un seul axe concerné, désactivation possible.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5401",
++      "statement": "Vertical single Cursor: hold time stamp value and cross value of selected curve",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Lecture de l’échantillon enregistré le plus proche ; timestamp brut, valeur brute, ligne, absence et doublons explicites.",
++      "verification_et_resultat_attendu": "Placer le curseur sur un échantillon connu : timestamp et valeur de la courbe sélectionnée exacts.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5402",
++      "statement": "Vertical single Cursor: tracking reading mode adding the list of crossed value from all the axle’s curves into a right popup",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Fenêtre à droite avec toutes les courbes superposées. Lecture au clic, pas encore de suivi continu à la souris.",
++      "verification_et_resultat_attendu": "Sur axe multitraces, déplacer le curseur : liste à droite avec chaque valeur et absence explicite.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5403",
++      "statement": "Double Vertical Cursor: Time stamp is mandatory and automated for each cursor",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Double curseur C1/C2 avec timestamp affiché automatiquement.",
++      "verification_et_resultat_attendu": "Activer deux curseurs : chacun affiche automatiquement son timestamp et se déplace indépendamment.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5404",
++      "statement": "Double Vertical Cursor: Time stamp is mandatory and automated for each cursor",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Texte identique à 5403 : comportement implémenté, distinction documentaire à confirmer.",
++      "verification_et_resultat_attendu": "Faire confirmer la distinction, puis appliquer un essai séparé ou un lien explicite vers 5403.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5405",
++      "statement": "Global cursor = global synchronization of axles. Cursor appear over all axles and moving in same time",
++      "occurrence": 1,
++      "statut": "Partiel",
++      "realisation_et_preuves_partielles": "Curseur global des panneaux du même CSV ; global entre PLC distincts non réalisé.",
++      "verification_et_resultat_attendu": "Déplacer le curseur global sur plusieurs axes : tous restent au même instant selon le référentiel défini.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5406",
++      "statement": "Horizontal cursor: only applicable to analog signals",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Curseur horizontal réservé à Float, refusé sur Bool.",
++      "verification_et_resultat_attendu": "Activer sur Float puis Bool : autorisé seulement pour Float.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5407",
++      "statement": "Horizontal cursor: can be conditioned by additional bool signal to realize conditional processing.",
++      "occurrence": 1,
++      "statut": "À clarifier / non réalisé",
++      "realisation_et_preuves_partielles": "Opération conditionnelle et règle si Bool absent à définir.",
++      "verification_et_resultat_attendu": "Appliquer un masque Bool connu : seules les périodes autorisées participent au traitement horizontal.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5408",
++      "statement": "Cursor X/Y: used for correlation control check - Two cursors are activated or the cross point only can be highlighted",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Nuage et point de lecture X/Y du même CSV ; couples présents sur la même ligne uniquement.",
++      "verification_et_resultat_attendu": "Utiliser deux séries de référence : vérifier les couples XY et le point ou les deux curseurs.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_5500",
++      "statement": "",
++      "occurrence": 1,
++      "statut": "À clarifier / non réalisé",
++      "realisation_et_preuves_partielles": "Énoncé vide.",
++      "verification_et_resultat_attendu": "Faire compléter ou retirer formellement la ligne avant de définir un essai.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_6000",
++      "statement": "The present tool shall be capable to generate a pdf report.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Export PDF utilisant Matplotlib PdfPages.",
++      "verification_et_resultat_attendu": "Générer un PDF, l'ouvrir dans un lecteur indépendant et vérifier texte/graphiques.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_6001",
++      "statement": "Report consist into a template containing Header and graphical area",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "En-tête et zone graphique par page.",
++      "verification_et_resultat_attendu": "Ouvrir un PDF produit : en-tête et zone graphique présents, sans coupure.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_6002",
++      "statement": "Report, can be generated automatically or step by step.",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Export direct de l’onglet actif et composition manuelle de captures.",
++      "verification_et_resultat_attendu": "Exécuter automatique puis pas-à-pas sur mêmes données : chaque mode produit le contenu demandé.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_6003",
++      "statement": "Automatic Report consist into a single edition of active graphical area to pdf file",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Export automatique de l’onglet graphique actif, avec moniteurs.",
++      "verification_et_resultat_attendu": "Sur vue active choisie, générer PDF : seule cette vue, axes et moniteur inclus.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_6004",
++      "statement": "Manual step by step report generation consist into a sequential generation on order depending of graphical active tab. Permitting to push global view, and customize analysis, cursor, X/Y cloud…",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Captures successives de vues, zooms, curseurs et X/Y dans l’ordre d’ajout.",
++      "verification_et_resultat_attendu": "Ajouter vue globale puis zoom avec curseur puis XY : vérifier ordre et réglages de chaque page.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    },
++    {
++      "id": "REQ_COMMON_KH_6005",
++      "statement": "Header shall contain following details:\nTool Version\nIssuer\nDate\nSource File(s)\nProject Name & Unit\nProject file reference or Hash",
++      "occurrence": 1,
++      "statut": "Implémenté, essai natif requis",
++      "realisation_et_preuves_partielles": "Version, émetteur, date, sources, projet, unité, référence optionnelle et SHA-256 des sources. Aucun fichier projet n’existe encore.",
++      "verification_et_resultat_attendu": "Lire chaque en-tête PDF : version, émetteur, date, sources, projet/unité et référence ou hash présents et exacts.",
++      "reste_a_faire": "Qualification Windows/SLES et revue Sébastien ; voir note et QUESTIONS_SEBASTIEN_V090.md.",
++      "verdict_revue": "Non prononcé",
++      "preuve_de_revue_a_renseigner": "Date, version, environnement, résultat, fichier de preuve, visa."
++    }
++  ]
++}--- v080/docs/QUESTIONS_SEBASTIEN_V090.md
++++ v090/docs/QUESTIONS_SEBASTIEN_V090.md
+@@ -0,0 +1,35 @@
++# Questions à Sébastien — points qui demandent une décision
++
++Les fonctions non qualifiées sous Windows/SLES ne sont pas déclarées validées.
++Les questions ci-dessous sont préparées pour la revue, pas envoyées.
++
++1. **Temps absolu / 4107, 2102, 2104 :** quelle origine/date/fuseau et quelle
++   unité pour chaque PLC ? Existe-t-il un événement commun de référence ? Que
++   signifie précisément « Clock Jitter ignored » : affichage, exclusion de
++   diagnostic ou reconstruction d'une horloge ? Quel comportement aux retours
++   de compteur et au passage à minuit ? Aucun recalage n'est effectué actuellement.
++2. **Groupes binaires / deuxième 2201 :** plusieurs colonnes Bool regroupées,
++   mot numérique contenant des bits, ou autre encodage ? Nombre/ordre des bits,
++   noms, base de codage et valeurs invalides ? Fournir un exemple représentatif.
++3. **Typage / 5202 :** les CSV ont-ils une convention qui distingue un Float
++   limité à 0/1 d'un Bool ? Auto garde les nombres comme Float ; l'utilisateur
++   peut choisir Bool. Des états textuels autres que true/false sont-ils attendus ?
++4. **Traitement conditionnel / 5407 et 5500 vide :** quelle opération doit être
++   conditionnée par le Bool : affichage d'un seuil, sélection de périodes,
++   calcul de dépassements, autre ? Que faire quand le Bool est absent ?
++5. **Taille / 2310 « xxxMo » :** maximum par CSV, nombre de sources/signaux,
++   durée d'import et mémoire admissibles ? Les bornes actuelles sont provisoires.
++6. **2305 et 5404 :** 2305 est-il seulement le titre des formats 2306/2307 ?
++   5404 reprend exactement 5403 : même critère ou exigence différente ? Le
++   double curseur existe ; l'identifiant dupliqué est conservé dans la matrice.
++7. **Qualification / 3000-3004 :** versions autorisées de Python, Tcl/Tk,
++   Matplotlib et dépendances sur SLES 15 SP7 ? Poste/VM disponible pour les
++   essais natifs et les futurs builds ? Python 3.11 est la cible de développement.
++
++Essais à organiser, sans nouvelle définition métier : réception visuelle Windows,
++mise à l'échelle/DPI, parcours d'annulation, curseurs/superposition, export PDF,
++essai équivalent SLES, puis performance sur les volumes réels.
++
++Reste technique connu : rendu graphique/PDF encore synchrone, tableaux et points
++conservés en mémoire, pas de packaging, types numériques indicatifs dans l'arbre.
++Ce sont des travaux restant à qualifier/améliorer, pas tous des blocages métier.
+--- v080/docs/REPRENDRE_LE_CODE.md
++++ v090/docs/REPRENDRE_LE_CODE.md
+@@ -133,3 +133,28 @@
+ en chiffre arbitraire. Le lanceur de tests reste à moderniser (voir la revue).
+ Les numéros de version d'exécution restent dans MAIN, diagnostic_csv et
+ verifier_robustesse ; les mentions historiques dans docs ne sont pas à réécrire.
++# Ajouts v0.9.0 : où modifier chaque comportement
++
++- `taches.py` : tâche de fond, file de messages, annulation ; aucun widget.
++  `MAIN._lancer` reçoit ces messages avec after() puis met l'IHM à jour.
++- `signal_csv.py` : lecture Bool/Float et conservation du texte brut pour les
++  curseurs. Auto ne décide jamais qu'un signal numérique 0/1 est Bool.
++- `curseurs.py` : index de consultation et artistes de curseur ; aucun calcul
++  de raster. `LecteurEchantillons` reste utilisable sans Matplotlib ni Tk.
++- `vue_signal.py` : panneau de courbes, fenêtre de lectures, superposition.
++- `vue_arrangements.py` : onglets et dispositions ; défilement pour les écrans
++  étroits. Chaque vue possède son propre signal et son propre moniteur.
++- `vue_xy.py` : couples X/Y d'une même ligne du même CSV ; axe temporel indépendant.
++- `rapport_pdf.py` : capture immuable, page, en-tête et export exclusif PDF.
++  `vue_rapports.py` relie le menu aux dialogues, sans relire les CSV.
++- `executer_tests.py` : sous-processus unittest, résultats structurés par test.
++  `verifier_robustesse.py` contrôle aussi les lanceurs et hache par blocs.
++- `tests/test_requis_v090.py` : régressions liées aux identifiants des requis.
++
++Point de vigilance : Tkinter et Matplotlib restent utilisés dans le fil principal.
++Ne pas déplacer le rendu PDF dans le thread de lecture : Matplotlib n'est pas
++thread-safe. Si la réactivité du rendu doit être améliorée, prévoir un processus
++isolé recevant une capture indépendante, et le tester sur les deux OS.
++
++Les anciennes sections ci-dessous décrivent l'évolution historique.
++
+--- v080/docs/VALIDATION_V090.md
++++ v090/docs/VALIDATION_V090.md
+@@ -0,0 +1,47 @@
++# Vérification de livraison v0.9.0
++
++- 145 tests rapides exécutés, 145 réussis, 0 échec, 0 erreur, 0 ignoré.
++- 1 test d’intégration exécuté séparément, réussi, aucun ignoré.
++- Total : 146 tests réussis. Tests en Python 3.12/Linux, rendu Matplotlib Agg.
++- Empreintes avant/après tests identiques : sources Python, lanceurs racine,
++  tests, exemples, CSV et scripts de référence surveillés.
++- Tous les CSV et scripts de référence de v0.8.0 sont inchangés.
++- Syntaxe des modules et de MAIN analysée pour Python 3.11 ; runtime 3.11 non exécuté ici.
++- PDF de démonstration de trois pages : rendu avec Poppler, lecture des en-têtes
++  avec pypdf, contrôle visuel des trois pages. Croisement de légende/curseurs
++  repéré puis corrigé avant livraison. Exemple X/Y relu et notes rectifiées.
++- Le premier lancement du nouveau sous-processus de tests a révélé un import
++  racine manquant. Il a été corrigé ; la suite complète a été réexécutée avec succès.
++
++## Ce qui n’est pas validé
++
++Aucun écran/serveur d’affichage disponible ici : pas d’essai natif Tkinter.
++Windows 11 x64 et SLES 15 SP7 x86-64 restent à qualifier. Les tests de calcul,
++Agg et PDF ne prouvent pas à eux seuls les dialogues, les onglets, les DPI ni la
++réactivité de tous les widgets sur ces cibles. Le README fournit le parcours.
++Le rendu Matplotlib et PDF reste synchrone ; annulation de lecture coopérative.
++Aucun exécutable fabriqué, aucune synchronisation inter-PLC.
++
++## Fichiers et raisons des changements
++
++| Fichier | Modification et but |
++|---|---|
++| MAIN.py | Raccordement des tâches, onglets, types, rapports, aide et journal de session |
++| src/taches.py | Lecture hors du fil Tk, messages et annulation sans appliquer de résultat abandonné |
++| src/signal_csv.py | Bool explicite et textes bruts pour lecture fidèle des curseurs |
++| src/trace_signal.py | Présentation Bool et notes adaptées au X/Y ; calculs temporels inchangés |
++| src/curseurs.py | Lecture des points réels, doublons/absences, curseurs simples/doubles/horizontaux |
++| src/vue_signal.py | Commandes de curseurs, lectures à droite, superposition même CSV |
++| src/vue_arrangements.py | Onglets persistants, trois dispositions, défilement et liaison des curseurs même CSV |
++| src/vue_xy.py | Couples valides de la même ligne, axe temps indépendant, lecture des points |
++| src/rapport_pdf.py | Captures figées, moniteur obligatoire, en-tête traçable et écriture sans écrasement |
++| src/vue_rapports.py | Export actif ou composition ordonnée de captures |
++| src/executer_tests.py | Résultats unittest structurés, sans analyse du texte console |
++| verifier_robustesse.py | Hachage par blocs, surveillance racine, statuts complet/partiel/échec |
++| src/version_visu.py | Source unique de version : 0.9.0 |
++| tests/test_requis_v090.py | 16 nouveaux tests de régression avec références aux requis |
++| exemples/demonstration_v090.py | Démonstration PDF reproductible à partir des simulations existantes |
++| README.md et docs/ | Mode d’emploi, dépendances, matrice complète, questions Sébastien et guide de reprise |
++
++Le diff textuel complet se trouve dans `DIFF_V080_V090.patch`.
++L’état des requis distingue implémentation, limites et validation humaine.
+--- v080/docs/environnement_linux_v090.json
++++ v090/docs/environnement_linux_v090.json
+@@ -0,0 +1,216 @@
++{
++  "visu": "0.9.0",
++  "date": "2026-10-27T14:40:11.169367+01:00",
++  "python": "3.12.14",
++  "interpreteur": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
++  "os": "Linux-6.18.55-x86_64-with-glibc2.39",
++  "machine": "x86_64",
++  "bits_interpreteur": 64,
++  "bibliotheque_standard": "Version liée à l'interpréteur Python observé.",
++  "backend_voulu": "FigureCanvasTkAgg (figure intégrée, sans pyplot)",
++  "tcl": null,
++  "tk": null,
++  "distributions": {
++    "matplotlib": {
++      "version": "3.10.8",
++      "requires_python": ">=3.10",
++      "requires_dist": [
++        "contourpy>=1.0.1",
++        "cycler>=0.10",
++        "fonttools>=4.22.0",
++        "kiwisolver>=1.3.1",
++        "numpy>=1.23",
++        "packaging>=20.0",
++        "pillow>=8",
++        "pyparsing>=3",
++        "python-dateutil>=2.7",
++        "meson-python<0.17.0,>=0.13.1; extra == \"dev\"",
++        "pybind11!=2.13.3,>=2.13.2; extra == \"dev\"",
++        "setuptools_scm>=7; extra == \"dev\"",
++        "setuptools>=64; extra == \"dev\""
++      ],
++      "tags_roue": [
++        "cp312-cp312-manylinux_2_17_x86_64",
++        "cp312-cp312-manylinux2014_x86_64"
++      ]
++    },
++    "numpy": {
++      "version": "2.3.5",
++      "requires_python": ">=3.11",
++      "requires_dist": [],
++      "tags_roue": [
++        "cp312-cp312-manylinux_2_27_x86_64",
++        "cp312-cp312-manylinux_2_28_x86_64"
++      ]
++    },
++    "contourpy": {
++      "version": "1.3.3",
++      "requires_python": ">=3.11",
++      "requires_dist": [
++        "numpy>=1.25",
++        "furo; extra == \"docs\"",
++        "sphinx>=7.2; extra == \"docs\"",
++        "sphinx-copybutton; extra == \"docs\"",
++        "bokeh; extra == \"bokeh\"",
++        "selenium; extra == \"bokeh\"",
++        "contourpy[bokeh,docs]; extra == \"mypy\"",
++        "bokeh; extra == \"mypy\"",
++        "docutils-stubs; extra == \"mypy\"",
++        "mypy==1.17.0; extra == \"mypy\"",
++        "types-Pillow; extra == \"mypy\"",
++        "contourpy[test-no-images]; extra == \"test\"",
++        "matplotlib; extra == \"test\"",
++        "Pillow; extra == \"test\"",
++        "pytest; extra == \"test-no-images\"",
++        "pytest-cov; extra == \"test-no-images\"",
++        "pytest-rerunfailures; extra == \"test-no-images\"",
++        "pytest-xdist; extra == \"test-no-images\"",
++        "wurlitzer; extra == \"test-no-images\""
++      ],
++      "tags_roue": [
++        "cp312-cp312-manylinux_2_27_x86_64",
++        "cp312-cp312-manylinux_2_28_x86_64"
++      ]
++    },
++    "cycler": {
++      "version": "0.12.1",
++      "requires_python": ">=3.8",
++      "requires_dist": [
++        "ipython ; extra == 'docs'",
++        "matplotlib ; extra == 'docs'",
++        "numpydoc ; extra == 'docs'",
++        "sphinx ; extra == 'docs'",
++        "pytest ; extra == 'tests'",
++        "pytest-cov ; extra == 'tests'",
++        "pytest-xdist ; extra == 'tests'"
++      ],
++      "tags_roue": [
++        "py3-none-any"
++      ]
++    },
++    "fonttools": {
++      "version": "4.61.1",
++      "requires_python": ">=3.10",
++      "requires_dist": [
++        "lxml>=4.0; extra == \"lxml\"",
++        "brotli>=1.0.1; platform_python_implementation == \"CPython\" and extra == \"woff\"",
++        "brotlicffi>=0.8.0; platform_python_implementation != \"CPython\" and extra == \"woff\"",
++        "zopfli>=0.1.4; extra == \"woff\"",
++        "unicodedata2>=17.0.0; python_version <= \"3.14\" and extra == \"unicode\"",
++        "lz4>=1.7.4.2; extra == \"graphite\"",
++        "scipy; platform_python_implementation != \"PyPy\" and extra == \"interpolatable\"",
++        "munkres; platform_python_implementation == \"PyPy\" and extra == \"interpolatable\"",
++        "pycairo; extra == \"interpolatable\"",
++        "matplotlib; extra == \"plot\"",
++        "sympy; extra == \"symfont\"",
++        "xattr; sys_platform == \"darwin\" and extra == \"type1\"",
++        "skia-pathops>=0.5.0; extra == \"pathops\"",
++        "uharfbuzz>=0.45.0; extra == \"repacker\"",
++        "lxml>=4.0; extra == \"all\"",
++        "brotli>=1.0.1; platform_python_implementation == \"CPython\" and extra == \"all\"",
++        "brotlicffi>=0.8.0; platform_python_implementation != \"CPython\" and extra == \"all\"",
++        "zopfli>=0.1.4; extra == \"all\"",
++        "unicodedata2>=17.0.0; python_version <= \"3.14\" and extra == \"all\"",
++        "lz4>=1.7.4.2; extra == \"all\"",
++        "scipy; platform_python_implementation != \"PyPy\" and extra == \"all\"",
++        "munkres; platform_python_implementation == \"PyPy\" and extra == \"all\"",
++        "pycairo; extra == \"all\"",
++        "matplotlib; extra == \"all\"",
++        "sympy; extra == \"all\"",
++        "xattr; sys_platform == \"darwin\" and extra == \"all\"",
++        "skia-pathops>=0.5.0; extra == \"all\"",
++        "uharfbuzz>=0.45.0; extra == \"all\""
++      ],
++      "tags_roue": [
++        "cp312-cp312-manylinux_2_5_x86_64",
++        "cp312-cp312-manylinux1_x86_64",
++        "cp312-cp312-manylinux_2_17_x86_64",
++        "cp312-cp312-manylinux2014_x86_64"
++      ]
++    },
++    "kiwisolver": {
++      "version": "1.4.9",
++      "requires_python": ">=3.10",
++      "requires_dist": [],
++      "tags_roue": [
++        "cp312-cp312-manylinux_2_17_x86_64",
++        "cp312-cp312-manylinux2014_x86_64"
++      ]
++    },
++    "packaging": {
++      "version": "26.3",
++      "requires_python": ">=3.9",
++      "requires_dist": [],
++      "tags_roue": [
++        "py3-none-any"
++      ]
++    },
++    "Pillow": {
++      "version": "12.3.0",
++      "requires_python": ">=3.10",
++      "requires_dist": [
++        "furo; extra == \"docs\"",
++        "olefile; extra == \"docs\"",
++        "sphinx>=8.2; extra == \"docs\"",
++        "sphinx-autobuild; extra == \"docs\"",
++        "sphinx-copybutton; extra == \"docs\"",
++        "sphinx-inline-tabs; extra == \"docs\"",
++        "sphinxext-opengraph; extra == \"docs\"",
++        "olefile; extra == \"fpx\"",
++        "olefile; extra == \"mic\"",
++        "arro3-compute; extra == \"test-arrow\"",
++        "arro3-core; extra == \"test-arrow\"",
++        "nanoarrow; extra == \"test-arrow\"",
++        "pyarrow; extra == \"test-arrow\"",
++        "coverage>=7.4.2; extra == \"tests\"",
++        "defusedxml; extra == \"tests\"",
++        "markdown2; extra == \"tests\"",
++        "olefile; extra == \"tests\"",
++        "packaging; extra == \"tests\"",
++        "pytest; extra == \"tests\"",
++        "pytest-cov; extra == \"tests\"",
++        "pytest-timeout; extra == \"tests\"",
++        "pytest-xdist; extra == \"tests\"",
++        "setuptools; extra == \"tests\"",
++        "trove-classifiers>=2024.10.12; extra == \"tests\"",
++        "defusedxml; extra == \"xmp\""
++      ],
++      "tags_roue": [
++        "cp312-cp312-manylinux_2_27_x86_64",
++        "cp312-cp312-manylinux_2_28_x86_64"
++      ]
++    },
++    "pyparsing": {
++      "version": "3.3.2",
++      "requires_python": ">=3.9",
++      "requires_dist": [
++        "railroad-diagrams ; extra == \"diagrams\"",
++        "jinja2 ; extra == \"diagrams\""
++      ],
++      "tags_roue": [
++        "py3-none-any"
++      ]
++    },
++    "python-dateutil": {
++      "version": "2.9.0.post0",
++      "requires_python": "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7",
++      "requires_dist": [
++        "six >=1.5"
++      ],
++      "tags_roue": [
++        "py2-none-any",
++        "py3-none-any"
++      ]
++    },
++    "six": {
++      "version": "1.17.0",
++      "requires_python": ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*",
++      "requires_dist": [],
++      "tags_roue": [
++        "py2-none-any",
++        "py3-none-any"
++      ]
++    }
++  },
++  "qualification": "Environnement observé ; validation cible et exécutable distinctes."
++}--- v080/exemples/demonstration_v090.py
++++ v090/exemples/demonstration_v090.py
+@@ -0,0 +1,55 @@
++"""Créer un rapport de démonstration, sans Tk et sans modifier les CSV.
++
++Lancer depuis la racine : python exemples/demonstration_v090.py sortie.pdf
++Le PDF doit être neuf. Les deux premières pages emploient la simulation de
++perte fournie dans exemples/ ; la troisième emploie deux signaux de simulation.
++"""
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++PROJET = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(PROJET / "src"))
++from base_temps import SourceTemps, examiner_source
++from signal_csv import preparer_signal
++from moniteur_temps import construire_moniteur
++from trace_signal import creer_figure
++from curseurs import Curseurs
++from rapport_pdf import capturer, generer_pdf, PageRapport
++from vue_xy import figure_xy
++from matplotlib.backends.backend_agg import FigureCanvasAgg
++
++
++def main(destination):
++    source = SourceTemps(PROJET / "exemples/exemple_synthetique_croix.csv", unite="ms",
++                         pas_attendu="10", tolerance="0")
++    resultat = examiner_source(source)
++    s = preparer_signal(source, resultat, "signal")
++    modele = construire_moniteur(source, resultat)
++    fig, axe, temps = creer_figure(s, modele)
++    FigureCanvasAgg(fig)
++    vue = SimpleNamespace(figure=fig, axe_signal=axe, axe_temps=temps, signal=s)
++    curseurs = Curseurs(fig, axe, temps, s, lambda x: None)
++    curseurs.choisir("Double vertical")
++    curseurs.placer(540,0)
++    curseurs.placer(770,1)
++    complet = capturer(vue)
++    axe.set_xlim(450,850)
++    zoom = capturer(vue)
++    source_xy = SourceTemps(PROJET / "donnees/simulation10_execution1.csv", unite="ms",
++                            pas_attendu="1", tolerance="0")
++    r = examiner_source(source_xy)
++    x = preparer_signal(source_xy,r,"source")
++    y = preparer_signal(source_xy,r,"pub_output")
++    f, a, t, _, _ = figure_xy(x,y,construire_moniteur(source_xy,r))
++    FigureCanvasAgg(f)
++    xy = capturer(SimpleNamespace(figure=f, axe_signal=a, axe_temps=t, signal=x,
++                                  signaux=[x,y], type_vue="XY"))
++    return generer_pdf(destination, [PageRapport((complet,)),
++                      PageRapport((complet,zoom), "Deux panneaux côte à côte"), PageRapport((xy,))],
++                      emetteur="Démonstration logicielle", projet="VISU PTBG - données de simulation",
++                      unite="Essais hors installation", reference="v0.9.0 - aucune validation métier")
++
++
++if __name__ == "__main__":
++    print(main(Path(sys.argv[1])))
+--- v080/src/curseurs.py
++++ v090/src/curseurs.py
+@@ -0,0 +1,139 @@
++"""Lecture de vrais échantillons et curseurs Matplotlib (requis 5400-5406).
++
++Le clic s'accroche au timestamp enregistré le plus proche. Tous les doublons
++sont indiqués ; une cellule vide/illégale n'est jamais remplacée. La position
++est graphique en float mais la fenêtre de lecture utilise les textes du CSV.
++"""
++from bisect import bisect_left
++from math import isfinite
++
++
++class LecteurEchantillons:
++    """Index de consultation seulement : l'ordre de la courbe n'est pas changé."""
++
++    def __init__(self, signal):
++        self.signal = signal
++        self.indices = {}
++        for i, temps in enumerate(signal.temps):
++            self.indices.setdefault(temps, []).append(i)
++        self.temps_tries = sorted(self.indices)
++
++    def proche(self, x):
++        if not self.temps_tries or not isfinite(x):
++            raise ValueError("Position temporelle non représentable.")
++        rang = bisect_left(self.temps_tries, x)
++        candidats = self.temps_tries[max(0, rang - 1):rang + 1]
++        temps = min(candidats, key=lambda t: (abs(t - x), t))
++        return temps, self.indices[temps]
++
++    def decrire(self, indices):
++        s = self.signal
++        lignes = []
++        # Limiter seulement la fenêtre de texte, jamais les données stockées.
++        for i in indices[:20]:
++            temps = s.temps_bruts[i] if s.temps_bruts else str(s.temps[i])
++            brut = s.valeurs_brutes[i] if s.valeurs_brutes else str(s.valeurs[i])
++            valeur = brut if isfinite(s.valeurs[i]) else "ABSENTE" if i in s.indices_vides else "INVALIDE : " + brut
++            lignes.append(f"Ligne {s.lignes[i]} | t={temps} | {s.colonne}={valeur}")
++        if len(indices) > 20:
++            lignes.append(f"{len(indices)} mesures au même temps ; 20 montrées.")
++        return "\n".join(lignes)
++
++
++class Curseurs:
++    """Dessiner sans recalculer le raster ni changer les données du signal."""
++
++    MODES = ("Aucun", "Vertical", "Double vertical", "Horizontal")
++
++    def __init__(self, figure, axe, moniteur, signal, afficher):
++        self.figure, self.axe, self.moniteur = figure, axe, moniteur
++        self.signal, self.afficher = signal, afficher
++        self.signaux = [signal]
++        self.lecteurs = [LecteurEchantillons(signal)]
++        self.sur_position = None
++        self.lecteur = LecteurEchantillons(signal)
++        self.mode = "Aucun"
++        self.cible = 0
++        self.positions = [None, None]
++        limites = (axe.get_xlim(), axe.get_ylim(), moniteur.get_xlim(), moniteur.get_ylim())
++        self.lignes = [axe.axvline(0, color=c, visible=False, linewidth=1)
++                       for c in ("#a1266d", "#805900")]
++        self.guides = [moniteur.axvline(0, color=c, visible=False, linewidth=1)
++                       for c in ("#a1266d", "#805900")]
++        self.horizontale = axe.axhline(0, color="#a1266d", visible=False)
++        self.annotation = axe.text(.99, .02, "", transform=axe.transAxes,
++                                   ha="right", va="bottom", fontsize=8, zorder=10,
++                                   bbox=dict(facecolor="white", alpha=.85, edgecolor="none"))
++        self.connexions = [figure.canvas.mpl_connect("button_press_event", self._clic)]
++        # Un artiste invisible à x=0 ne doit pas agrandir le domaine temporel.
++        axe.set_xlim(limites[0]); axe.set_ylim(limites[1])
++        moniteur.set_xlim(limites[2]); moniteur.set_ylim(limites[3])
++
++    def choisir(self, mode):
++        if mode not in self.MODES:
++            raise ValueError("Mode de curseur inconnu.")
++        if mode == "Horizontal" and self.signal.type_signal != "Float":
++            raise ValueError("Le curseur horizontal est réservé aux signaux Float.")
++        self.mode = mode
++        self.sur_position = None
++        self.positions = [None, None]
++        for ligne in self.lignes + self.guides + [self.horizontale]:
++            ligne.set_visible(False)
++        self.annotation.set_text("")
++        self.afficher("Cliquer sur le graphique. Lecture d'échantillons réels, sans interpolation.")
++        self.figure.canvas.draw_idle()
++
++    def _clic(self, evenement):
++        # Ne pas intercepter le zoom ou le déplacement de la barre Matplotlib.
++        barre = getattr(self.figure.canvas, "toolbar", None)
++        if barre and barre.mode or evenement.inaxes is not self.axe or evenement.button != 1:
++            return
++        if self.mode == "Horizontal" and evenement.ydata is not None:
++            self.horizontale.set_ydata([evenement.ydata] * 2)
++            self.horizontale.set_visible(True)
++            self.annotation.set_text(f"Y = {evenement.ydata:.9g} (repère)")
++            self.afficher(self.annotation.get_text())
++        elif self.mode in ("Vertical", "Double vertical") and evenement.xdata is not None:
++            self.placer(evenement.xdata, self.cible if self.mode == "Double vertical" else 0)
++        self.figure.canvas.draw_idle()
++
++    def placer(self, x, cible=0, notifier=True):
++        temps, indices = self.lecteur.proche(x)
++        self.positions[cible] = (temps, indices)
++        for ligne in (self.lignes[cible], self.guides[cible]):
++            ligne.set_xdata([temps, temps])
++            ligne.set_visible(True)
++        textes, etiquettes = [], []
++        for i, position in enumerate(self.positions):
++            if position is not None:
++                lecture = []
++                for lecteur in self.lecteurs:
++                    # Les courbes superposées partagent le même fichier/hash.
++                    # Lire au même timestamp, sans chercher un point voisin
++                    # dans une autre horloge.
++                    indices_signal = lecteur.indices.get(position[0], [])
++                    lecture.append(lecteur.decrire(indices_signal) if indices_signal else "Aucune mesure à cet instant.")
++                textes.append(f"C{i + 1} — échantillon le plus proche\n" + "\n".join(lecture))
++                j = position[1][0]
++                brut = self.signal.temps_bruts[j] if self.signal.temps_bruts else str(position[0])
++                etiquettes.append(f"C{i + 1}: t={brut}")
++        self.annotation.set_text("\n".join(etiquettes))
++        self.afficher("\n\n".join(textes))
++        if notifier and self.sur_position is not None:
++            self.sur_position(temps, cible)
++        return temps
++
++    def ajouter(self, signal):
++        if not meme_horloge(self.signal, signal):
++            raise ValueError("Superposition limitée au même fichier et à la même lecture.")
++        self.signaux.append(signal)
++        self.lecteurs.append(LecteurEchantillons(signal))
++
++    def detruire(self):
++        for connexion in self.connexions:
++            self.figure.canvas.mpl_disconnect(connexion)
++
++
++def meme_horloge(a, b):
++    """L'identité du CSV, son contenu et l'unité prouvent ici le repère commun."""
++    return (a.fichier, a.sha256, a.unite_temps, a.format_temps) == (b.fichier, b.sha256, b.unite_temps, b.format_temps)
+--- v080/src/executer_tests.py
++++ v090/src/executer_tests.py
+@@ -0,0 +1,71 @@
++"""Résultat structuré unittest, indépendant de la langue du compte rendu.
++
++Ce sous-processus est appelé par verifier_robustesse.py. Un test ignoré ou
++attendu en échec donne une réussite partielle, jamais une validation complète.
++"""
++import json
++from pathlib import Path
++import sys
++import unittest
++
++
++class ResultatStructure(unittest.TextTestResult):
++    def __init__(self, *args, **kwargs):
++        super().__init__(*args, **kwargs)
++        self.cas = {}
++
++    def startTest(self, test):
++        super().startTest(test)
++        self.cas[test.id()] = {"id": test.id(), "etat": "en_cours"}
++
++    def _noter(self, test, etat, motif=""):
++        self.cas[test.id()] = {"id": test.id(), "etat": etat, "motif": motif}
++
++    def addSuccess(self, test):
++        super().addSuccess(test)
++        self._noter(test, "reussi")
++
++    def addFailure(self, test, err):
++        super().addFailure(test, err)
++        self._noter(test, "echoue", self._exc_info_to_string(err, test))
++
++    def addError(self, test, err):
++        super().addError(test, err)
++        self._noter(test, "erreur", self._exc_info_to_string(err, test))
++
++    def addSkip(self, test, reason):
++        super().addSkip(test, reason)
++        self._noter(test, "ignore", reason)
++
++    def addExpectedFailure(self, test, err):
++        super().addExpectedFailure(test, err)
++        self._noter(test, "echec_attendu", self._exc_info_to_string(err, test))
++
++    def addUnexpectedSuccess(self, test):
++        super().addUnexpectedSuccess(test)
++        self._noter(test, "succes_inattendu")
++
++    def addSubTest(self, test, subtest, err):
++        super().addSubTest(test, subtest, err)
++        if err is not None:
++            etat = "echoue" if issubclass(err[0], test.failureException) else "erreur"
++            self._noter(test, etat, self._exc_info_to_string(err, test))
++
++    def bilan(self):
++        nombres = {etat: sum(c["etat"] == etat for c in self.cas.values()) for etat in
++                   ("reussi", "echoue", "erreur", "ignore", "echec_attendu", "succes_inattendu")}
++        statut = "complete" if self.testsRun and self.wasSuccessful() else "echec"
++        if statut == "complete" and (nombres["ignore"] or nombres["echec_attendu"]):
++            statut = "partielle"
++        return {"nombre_tests": self.testsRun, "comptes": nombres, "statut": statut,
++                "cas": list(self.cas.values())}
++
++
++if __name__ == "__main__":
++    # Un script lancé depuis src/ place src en tête de sys.path, pas le dossier
++    # racine. Les tests importent aussi les lanceurs de démonstration racine.
++    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++    suite = unittest.defaultTestLoader.discover(sys.argv[1])
++    resultat = unittest.TextTestRunner(verbosity=2, resultclass=ResultatStructure).run(suite)
++    Path(sys.argv[2]).write_text(json.dumps(resultat.bilan(), ensure_ascii=False, indent=2), encoding="utf-8")
++    sys.exit(0 if resultat.wasSuccessful() and resultat.testsRun else 1)
+--- v080/src/rapport_pdf.py
++++ v090/src/rapport_pdf.py
+@@ -0,0 +1,124 @@
++"""Rapports de vues figées, avec provenance et moniteur (4104, 6000-6005).
++
++Matplotlib suffit : aucune bibliothèque PDF supplémentaire dans l'application.
++Les captures PNG conservent zoom et curseurs ; le texte de l'en-tête PDF reste
++sélectionnable. Le rapport n'est pas une nouvelle analyse des fichiers.
++"""
++from dataclasses import dataclass
++from datetime import datetime
++from io import BytesIO
++from pathlib import Path
++from textwrap import wrap
++
++from version_visu import VERSION_VISU
++
++
++@dataclass(frozen=True)
++class Capture:
++    image: bytes
++    fichier: str
++    sha256: str
++    signal: str
++    lecture: str
++    capturee_le: str
++
++
++@dataclass(frozen=True)
++class PageRapport:
++    captures: tuple[Capture, ...]
++    disposition: str = "Un panneau"
++
++
++def capturer(vue):
++    """Figer une figure dans le fil Tk ; restaurer ensuite sa présentation.
++
++    Le moniteur est systématiquement réaffiché dans le rapport même s'il est
++    masqué à l'écran. Ainsi aucun rapport ne cache une anomalie temporelle.
++    Le PNG est autonome : fermer ou zoomer la vue ne modifie pas la capture.
++    """
++    from matplotlib.backend_bases import ResizeEvent
++    figure = vue.figure
++    taille = figure.get_size_inches().copy()
++    visible = vue.axe_temps.get_visible()
++    libelle = vue.axe_signal.get_xlabel()
++    xy = getattr(vue, "type_vue", "") == "XY"
++    tampon = BytesIO()
++    try:
++        vue.axe_temps.set_visible(True)
++        vue.axe_signal.set_xlabel(libelle if xy else "")
++        vue.axe_signal.tick_params(labelbottom=xy)
++        # Une taille d'impression stable évite une page illisible si la fenêtre
++        # était petite. Les limites X/Y et les curseurs restent inchangés.
++        figure.set_size_inches(9.6, 5.4, forward=False)
++        figure.canvas.callbacks.process("resize_event", ResizeEvent("resize_event", figure.canvas))
++        figure.savefig(tampon, format="png", dpi=180, bbox_inches="tight")
++    finally:
++        vue.axe_temps.set_visible(visible)
++        vue.axe_signal.set_xlabel(libelle)
++        vue.axe_signal.tick_params(labelbottom=xy or not visible)
++        figure.set_size_inches(taille, forward=False)
++        figure.canvas.callbacks.process("resize_event", ResizeEvent("resize_event", figure.canvas))
++        figure.canvas.draw_idle()
++    s = vue.signal
++    return Capture(tampon.getvalue(), s.fichier, s.sha256, ", ".join(s.colonne for s in getattr(vue, "signaux", [s])),
++                   getattr(vue, "texte_lecture", ""), datetime.now().astimezone().isoformat(timespec="seconds"))
++
++
++def generer_pdf(chemin, pages, *, emetteur, projet, unite, reference=""):
++    """Créer un PDF neuf ; aucune source ni sortie existante n'est écrasée."""
++    from matplotlib.backends.backend_pdf import PdfPages
++    from matplotlib.figure import Figure
++    from matplotlib.image import imread
++
++    destination = Path(chemin)
++    if destination.suffix.lower() != ".pdf":
++        raise ValueError("Choisir un nom terminé par .pdf.")
++    if not pages or any(not page.captures for page in pages):
++        raise ValueError("Le rapport doit contenir au moins une vue.")
++    if not all(str(v).strip() for v in (emetteur, projet, unite)):
++        raise ValueError("Renseigner l'émetteur, le projet et l'unité d'installation.")
++    if any(len(str(v)) > 120 or '\n' in str(v) or '\r' in str(v)
++           for v in (emetteur, projet, unite, reference)):
++        raise ValueError("Chaque champ d'en-tête est limité à 120 caractères sur une ligne.")
++    tampon = BytesIO()
++    date = datetime.now().astimezone().isoformat(timespec="seconds")
++    with PdfPages(tampon, metadata={"Title": f"VISU PTBG - {projet}", "Author": emetteur,
++                                   "Creator": f"VISU PTBG {VERSION_VISU}"}) as pdf:
++        for numero, page in enumerate(pages, 1):
++            n = len(page.captures)
++            if n > 2:
++                raise ValueError("Un arrangement de rapport comporte au plus deux panneaux.")
++            superposes = "superposés" in page.disposition and n == 2
++            taille = (11.7, 16.5) if superposes else (16.5, 8.3) if n == 2 else (11.7, 8.3)
++            figure = Figure(figsize=taille)
++            titre = f"VISU PTBG {VERSION_VISU} | {projet} | Unité : {unite}"
++            lignes = [titre, f"Émetteur : {emetteur} | Édité le : {date}",
++                      f"Référence projet : {reference or 'non fournie ; empreintes des sources ci-dessous'}"]
++            for c in page.captures:
++                lignes.extend([f"Source : {c.fichier} | Signal : {c.signal}",
++                               f"SHA-256 source : {c.sha256} | Capture : {c.capturee_le}"])
++            largeur = int(taille[0] * 12)
++            texte = "\n".join("\n".join(wrap(ligne, largeur)) for ligne in lignes)
++            hauteur_entete = (texte.count("\n") + 1) * 11 / (taille[1] * 72)
++            if hauteur_entete > .32:
++                raise ValueError("En-tête trop long pour cette page ; raccourcir les champs de projet.")
++            figure.text(.04, .97, texte, va="top", fontsize=8)
++            haut = .94 - hauteur_entete
++            for i, c in enumerate(page.captures):
++                if superposes:
++                    hauteur = (haut - .07) / 2
++                    rectangle = [.035, .06 + (1 - i) * hauteur, .93, hauteur - .02]
++                else:
++                    rectangle = [.035 + i * .93 / n, .07, .91 / n, haut - .07]
++                axe = figure.add_axes(rectangle)
++                axe.imshow(imread(BytesIO(c.image), format="png"))
++                axe.set_axis_off()
++            figure.text(.04, .025, "Temps natifs conservés ; aucune synchronisation ni interpolation. "
++                        "Time Base Monitor inclus.", fontsize=8)
++            figure.text(.96, .025, f"{numero}/{len(pages)}", ha="right", fontsize=8)
++            pdf.savefig(figure)
++            figure.clear()
++    # L'exclusivité protège aussi d'un fichier créé entre le dialogue et ici.
++    with destination.open("xb") as sortie:
++        sortie.write(tampon.getvalue())
++    return destination
+--- v080/src/signal_csv.py
++++ v090/src/signal_csv.py
+@@ -52,6 +52,9 @@
+     tolerance_temps: float | None = None
+     origine_raster: str = "indisponible"
+     format_temps: str = "compteur"
++    type_signal: str = "Float"
++    temps_bruts: list[str] = field(default_factory=list)
++    valeurs_brutes: list[str] = field(default_factory=list)
+ 
+ 
+ def _flottant(nombre: Decimal | None) -> float | None:
+@@ -164,7 +167,8 @@
+ 
+ 
+ # === 2. Relire le même fichier et contrôler sa concordance avec le diagnostic ===
+-def preparer_signal(source: SourceTemps, resultat: dict[str, Any], colonne: str) -> SignalPrepare:
++def preparer_signal(source: SourceTemps, resultat: dict[str, Any], colonne: str,
++                    type_signal: str = "Auto") -> SignalPrepare:
+     """Lire une colonne numérique sans trier, resynchroniser ou interpoler.
+ 
+     Des temps distincts qui deviennent le même flottant bloquent le tracé pour
+@@ -198,6 +202,12 @@
+     # === 3. Garder tous les timestamps et n'afficher que les valeurs représentables ===
+     it = diagnostic.columns.index(diagnostic.time.column)
+     iy = diagnostic.columns.index(colonne)
++    if type_signal not in ("Auto", "Bool", "Float"):
++        raise ValueError("Le type du signal doit être Auto, Bool ou Float.")
++    # 0/1 peut aussi être une mesure analogique : seul le choix explicite Bool
++    # l'interprète comme binaire. true/false porte déjà cette information.
++    if type_signal == "Auto":
++        type_signal = "Bool" if diagnostic.inferred_types[colonne] == "booléen" else "Float"
+     temps: list[float] = []
+     temps_exacts: list[Decimal] = []
+     valeurs: list[float] = []
+@@ -211,7 +221,15 @@
+         if x is None or (x in correspondance and correspondance[x] != exact):
+             raise CsvDiagnosticError("precision_temps_graphique", "Ces temps ne peuvent pas être représentés fidèlement par le moteur graphique ; diagnostic conservé.")
+         correspondance[x] = exact
+-        y = _flottant(_decimal(ligne.fields[iy], source.decimale))
++        brut = ligne.fields[iy].strip()
++        if type_signal == "Bool":
++            # Pas d'assimilation de ACTIVE/FAILED à un état : leur codage n'est
++            # pas défini dans les requis. Une valeur illégale reste manquante.
++            binaire = {"true": 1.0, "false": 0.0}.get(brut.casefold())
++            nombre = _decimal(brut, source.decimale)
++            y = binaire if binaire is not None else float(nombre) if nombre in (0, 1) else None
++        else:
++            y = _flottant(_decimal(brut, source.decimale))
+         if y is None:
+             (indices_vides if not ligne.fields[iy].strip() else indices_invalides).append(len(temps))
+         temps.append(x)
+@@ -255,4 +273,7 @@
+                          raster_temps=_flottant(raster),
+                          tolerance_temps=_flottant(tolerance_raster),
+                          origine_raster=raster_brut.get("origine", "indisponible"),
+-                         format_temps=diagnostic.time.format_temps)
++                         format_temps=diagnostic.time.format_temps,
++                         type_signal=type_signal,
++                         temps_bruts=[r.fields[it] for r in lecture.rows],
++                         valeurs_brutes=[r.fields[iy] for r in lecture.rows])
+--- v080/src/taches.py
++++ v090/src/taches.py
+@@ -0,0 +1,58 @@
++"""Exécuter un calcul sans Tkinter ; publier son résultat au seul fil graphique.
++
++Requis 4105. Une annulation invalide le résultat, elle ne tue pas un thread
++au milieu d'une lecture. Le calcul en cours finit proprement ; aucun deuxième
++calcul ne démarre avant sa fin. Cela borne le nombre de tâches et leur mémoire.
++"""
++from queue import Queue, Empty
++from threading import Event, Thread
++
++
++class TacheFond:
++    """Une tâche à la fois, sans widget ni modification de l'état partagé."""
++
++    def __init__(self, calcul):
++        self.annulation = Event()
++        self.messages = Queue()
++        self.terminee = Event()
++        self.thread = Thread(target=self._executer, args=(calcul,), daemon=True)
++        self.thread.start()
++
++    def _executer(self, calcul):
++        try:
++            valeur = calcul(self.annulation, self.messages.put)
++            self.messages.put(("annule" if self.annulation.is_set() else "resultat", valeur))
++        except Exception as exc:
++            self.messages.put(("annule" if self.annulation.is_set() else "erreur", str(exc)))
++        finally:
++            self.terminee.set()
++
++    def annuler(self):
++        self.annulation.set()
++
++    def lire(self):
++        """Vider la file sans attendre : à appeler depuis after() dans Tk."""
++        messages = []
++        while True:
++            try:
++                messages.append(self.messages.get_nowait())
++            except Empty:
++                return messages
++
++
++def importer_copie(paquet, chemins, annulation, publier):
++    """Préparer un nouveau paquet ; les listes de l'IHM restent inchangées.
++
++    Les résultats existants ne sont pas modifiés : les deux listes sont copiées
++    avant l'ajout. Si l'utilisateur annule, la copie est simplement abandonnée.
++    """
++    from paquet_csv import PaquetCSV
++    nouveau = PaquetCSV()
++    nouveau.sources = list(paquet.sources)
++    nouveau.resultats = list(paquet.resultats)
++    for indice, chemin in enumerate(chemins):
++        if annulation.is_set():
++            break
++        publier(("progression", f"Lecture {indice + 1}/{len(chemins)} : {chemin}"))
++        nouveau.ajouter([chemin])
++    return nouveau
+--- v080/src/trace_signal.py
++++ v090/src/trace_signal.py
+@@ -46,7 +46,7 @@
+ 
+ 
+ # === 1. Afficher la courbe avec ses interruptions, sur les temps du CSV ===
+-def creer_figure(signal: SignalPrepare, moniteur: dict[str, Any], decimale: str = "."):
++def creer_figure(signal: SignalPrepare, moniteur: dict[str, Any], decimale: str = ".", *, note_signal=None):
+     """Retourner la figure et ses deux axes partageant exactement le même temps."""
+     from matplotlib.figure import Figure
+ 
+@@ -58,6 +58,12 @@
+                  f"{Path(signal.fichier).name} — {signal.colonne}",
+                  relier_points=signal.relier_points, indices_coupures=signal.indices_coupures)
+     courbe.tick_params(labelbottom=False)
++    if signal.type_signal == "Bool":
++        # Les ronds sont les états réellement lus. Aucun maintien à 0/1 entre
++        # deux mesures n'est présumé par un escalier ou une interpolation.
++        courbe.lines[0].set_linestyle("None")
++        courbe.set_yticks([0, 1], ["0 / False", "1 / True"])
++        courbe.set_ylim(-0.15, 1.15)
+     figure.subplots_adjust(left=0.11, right=0.97, top=0.89, bottom=0.24)
+ 
+     # === 1a. Croix SUR les mesures qui encadrent des cellules vides du signal ===
+@@ -151,7 +157,7 @@
+     # bornes métier ajoutées, seulement une marge de dessin Matplotlib.
+     temps.margins(y=0.2)
+     statut = figure.text(0.11, 0, moniteur["message"], color=couleur, fontsize=9, va="bottom")
+-    note = (f"{len(signal.indices_vides)} cellule(s) vide(s) du signal | "
++    note = (f"{signal.colonne} : {len(signal.indices_vides)} cellule(s) vide(s) | "
+             f"{len(signal.indices_invalides)} valeur(s) invalide(s) | {signal.lignes_rejetees} ligne(s) rejetée(s)")
+     if not signal.lecture_complete:
+         note += " | lecture partielle"
+@@ -168,6 +174,8 @@
+     if not signal.relier_points:
+         note += "\nPas irréguliers ou lecture partielle sans profil : points seuls. Renseigner le pas et sa tolérance."
+     note = resumer_moniteur(signal) + "\n" + note
++    if note_signal is not None:
++        note = resumer_moniteur(signal) + "\n" + note_signal
+     legende = figure.text(0.11, 0, note, fontsize=8, color="#4a5568", va="bottom")
+ 
+     def ajuster_marges(_evenement=None):
+--- v080/src/version_visu.py
++++ v090/src/version_visu.py
+@@ -1,3 +1,3 @@
+ """Version unique affichée et enregistrée par VISU PTBG."""
+ 
+-VERSION_VISU = "0.8.0"
++VERSION_VISU = "0.9.0"
+--- v080/src/vue_arrangements.py
++++ v090/src/vue_arrangements.py
+@@ -0,0 +1,129 @@
++"""Onglets graphiques persistants, modèles à un ou deux panneaux (5106, 5300).
++
++Chaque panneau garde son propre signal, son horloge et son moniteur. Deux PLC
++peuvent être affichés ensemble, sans suggérer qu'ils ont une origine commune.
++"""
++import tkinter as tk
++from tkinter import ttk, messagebox
++
++
++MODELES = ("Un panneau", "Deux panneaux côte à côte", "Deux panneaux superposés")
++
++
++class Arrangements(ttk.Frame):
++    def __init__(self, parent):
++        super().__init__(parent)
++        commandes = ttk.Frame(self)
++        commandes.pack(fill="x")
++        self.modele = tk.StringVar(value=MODELES[0])
++        ttk.Combobox(commandes, textvariable=self.modele, values=MODELES,
++                     state="readonly", width=30).pack(side="left")
++        ttk.Button(commandes, text="Nouvel onglet", command=self.nouveau).pack(side="left")
++        ttk.Button(commandes, text="Fermer l'onglet", command=self.fermer).pack(side="left")
++        ttk.Button(commandes, text="Curseur global (même CSV)", command=self.lier).pack(side="left")
++        self.onglets = ttk.Notebook(self)
++        self.onglets.pack(fill="both", expand=True)
++        self.pages = {}
++        self.numero = 0
++        self.nouveau()
++
++    def nouveau(self):
++        self.numero += 1
++        modele = self.modele.get()
++        page = ttk.Frame(self.onglets)
++        page.vues = []
++        page.modele = modele
++        page.numero = self.numero
++        page.capacite = 1 if modele == MODELES[0] else 2
++        # Garder une surface lisible pour chaque moniteur, même sur un écran
++        # étroit. Les barres donnent accès aux zones qui dépassent la fenêtre.
++        page.rowconfigure(0, weight=1)
++        page.columnconfigure(0, weight=1)
++        canevas = tk.Canvas(page, highlightthickness=0)
++        canevas.grid(row=0, column=0, sticky="nsew")
++        vertical = ttk.Scrollbar(page, orient="vertical", command=canevas.yview)
++        horizontal = ttk.Scrollbar(page, orient="horizontal", command=canevas.xview)
++        vertical.grid(row=0, column=1, sticky="ns")
++        horizontal.grid(row=1, column=0, sticky="ew")
++        canevas.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
++        page.panneaux = ttk.Panedwindow(canevas, orient="vertical" if modele == MODELES[2] else "horizontal")
++        item = canevas.create_window(0, 0, window=page.panneaux, anchor="nw")
++        def dimensionner(evenement):
++            largeur = max(evenement.width, 760 * (2 if modele == MODELES[1] else 1))
++            hauteur = max(evenement.height, 620 * (2 if modele == MODELES[2] else 1))
++            canevas.itemconfigure(item, width=largeur, height=hauteur)
++            canevas.configure(scrollregion=(0, 0, largeur, hauteur))
++        canevas.bind("<Configure>", dimensionner)
++        self.pages[str(page)] = page
++        self.onglets.add(page, text=f"Vue {self.numero}")
++        self.onglets.select(page)
++        return page
++
++    def active(self):
++        return self.pages.get(self.onglets.select())
++
++    def ajouter(self, signal, moniteur, decimale):
++        from vue_signal import VueSignal
++        page = self.active()
++        if page is None or len(page.vues) >= page.capacite:
++            page = self.nouveau()
++        vue = VueSignal(page.panneaux, signal, moniteur, decimale)
++        page.panneaux.add(vue, weight=1)
++        page.vues.append(vue)
++        self.onglets.tab(page, text=f"Vue {page.numero} ({len(page.vues)}/{page.capacite})")
++        return vue
++
++    def fermer(self):
++        page = self.active()
++        if page is None:
++            return
++        self.onglets.forget(page)
++        self.pages.pop(str(page))
++        for vue in page.vues:
++            vue.destroy()
++        page.destroy()
++        if not self.pages:
++            self.nouveau()
++
++    def vues_actives(self):
++        page = self.active()
++        if page is None or not page.vues:
++            raise ValueError("Afficher au moins un signal dans l'onglet actif.")
++        return page.vues
++
++    def superposer(self, signal):
++        vues = self.vues_actives()
++        if not hasattr(vues[-1], "superposer"):
++            raise ValueError("Créer un panneau temporel pour superposer des courbes.")
++        vues[-1].superposer(signal)
++        return vues[-1]
++
++    def ajouter_xy(self, x, y, modele):
++        from vue_xy import VueXY
++        page = self.nouveau()
++        vue = VueXY(page.panneaux, x, y, modele)
++        page.panneaux.add(vue, weight=1)
++        page.vues.append(vue)
++        page.capacite = 1
++        self.onglets.tab(page, text=f"Vue {page.numero} — X/Y")
++        return vue
++
++    def lier(self):
++        from curseurs import meme_horloge
++        try:
++            vues = self.vues_actives()
++            if any(not hasattr(v, "curseurs") for v in vues):
++                raise ValueError("Le curseur temporel global ne s'applique pas à un axe X/Y.")
++            if not all(meme_horloge(vues[0].signal, v.signal) for v in vues):
++                raise ValueError("Le curseur commun exige ici le même CSV. Le repère entre PLC reste à définir avec Sébastien.")
++            for vue in vues:
++                vue.mode_curseur.set("Vertical")
++                vue.curseurs.choisir("Vertical")
++            def partager(x, cible):
++                for vue in vues:
++                    vue.curseurs.placer(x, cible, notifier=False)
++                    vue.canvas.draw_idle()
++            for vue in vues:
++                vue.curseurs.sur_position = partager
++        except ValueError as exc:
++            messagebox.showinfo("Curseur global", str(exc), parent=self)
+--- v080/src/vue_rapports.py
++++ v090/src/vue_rapports.py
+@@ -0,0 +1,69 @@
++"""Dialogue de rapport : vue active ou captures ajoutées dans l'ordre choisi."""
++import getpass
++import tkinter as tk
++from tkinter import ttk, filedialog, messagebox
++
++from rapport_pdf import PageRapport, capturer, generer_pdf
++
++
++class Rapports:
++    def __init__(self, fenetre, arrangements, informer, lancer):
++        self.fenetre, self.arrangements = fenetre, arrangements
++        self.informer, self.lancer = informer, lancer
++        self.pages = []
++
++    def capture_active(self):
++        vues = self.arrangements.vues_actives()
++        return PageRapport(tuple(capturer(vue) for vue in vues), self.arrangements.active().modele)
++
++    def ajouter(self):
++        try:
++            self.pages.append(self.capture_active())
++            self.informer(f"Rapport manuel : {len(self.pages)} page(s) figée(s), dans l'ordre d'ajout.")
++        except (ValueError, OSError, RuntimeError) as exc:
++            messagebox.showerror("Capture", str(exc), parent=self.fenetre)
++
++    def vider(self):
++        self.pages.clear()
++        self.informer("Composition du rapport vidée ; fichiers PDF existants conservés.")
++
++    def exporter(self, manuel=False):
++        try:
++            pages = tuple(self.pages) if manuel else (self.capture_active(),)
++            if not pages:
++                raise ValueError("Ajouter d'abord une vue au rapport manuel.")
++        except (ValueError, OSError, RuntimeError) as exc:
++            messagebox.showerror("Rapport", str(exc), parent=self.fenetre)
++            return
++        dialogue = tk.Toplevel(self.fenetre)
++        dialogue.title(f"Rapport PDF — {len(pages)} page(s)")
++        champs = {}
++        for i, (cle, label, valeur) in enumerate((
++            ("emetteur", "Émetteur", getpass.getuser()), ("projet", "Nom du projet", ""),
++            ("unite", "Unité d'installation", ""), ("reference", "Référence projet (facultative)", ""),
++        )):
++            ttk.Label(dialogue, text=label).grid(row=i, column=0, sticky="w", padx=8, pady=6)
++            variable = tk.StringVar(value=valeur)
++            ttk.Entry(dialogue, textvariable=variable, width=45).grid(row=i, column=1, padx=8)
++            champs[cle] = variable
++
++        def enregistrer():
++            valeurs = {cle: variable.get().strip() for cle, variable in champs.items()}
++            if not all(valeurs[cle] for cle in ("emetteur", "projet", "unite")):
++                messagebox.showerror("En-tête", "Émetteur, projet et unité sont nécessaires.", parent=dialogue)
++                return
++            chemin = filedialog.asksaveasfilename(parent=dialogue, defaultextension=".pdf",
++                                                  filetypes=[("Rapport PDF", "*.pdf")])
++            if not chemin:
++                return
++            # Le rendu PDF reste sur le fil graphique : Matplotlib n'est pas
++            # thread-safe. L'import CSV utilise le travail de fond séparément.
++            try:
++                generer_pdf(chemin, pages, **valeurs)
++            except (OSError, ValueError, RuntimeError) as exc:
++                messagebox.showerror("PDF non enregistré", str(exc), parent=dialogue)
++                return
++            dialogue.destroy()
++            self.informer(f"Rapport enregistré : {chemin} ({len(pages)} page(s)).")
++
++        ttk.Button(dialogue, text="Enregistrer…", command=enregistrer).grid(row=4, column=1, sticky="e", padx=8, pady=8)
+--- v080/src/vue_signal.py
++++ v090/src/vue_signal.py
+@@ -11,7 +11,8 @@
+ """
+ from __future__ import annotations
+ 
+-from tkinter import ttk
++import tkinter as tk
++from tkinter import ttk, messagebox
+ 
+ from trace_signal import creer_figure
+ 
+@@ -41,6 +42,9 @@
+         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+         super().__init__(parent)
+         try:
++            self.signal = signal
++            self.signaux = [signal]
++            self.moniteur = moniteur
+             self.figure, self.axe_signal, self.axe_temps = creer_figure(signal, moniteur, decimale)
+             self.canvas = FigureCanvasTkAgg(self.figure, master=self)
+             self.masquage_autorise = bool(moniteur.get("masquage_autorise"))
+@@ -48,6 +52,26 @@
+                 self, text="Masquer le Time Base Monitor", command=self._basculer_moniteur,
+                 state="normal" if self.masquage_autorise else "disabled")
+             self.bouton_moniteur.pack(side="top", anchor="w")
++            # Les commandes de lecture ne dépendent pas du zoom Matplotlib.
++            commandes = ttk.Frame(self)
++            commandes.pack(fill="x")
++            from curseurs import Curseurs
++            self.mode_curseur = tk.StringVar(value="Aucun")
++            modes = Curseurs.MODES if signal.type_signal == "Float" else Curseurs.MODES[:-1]
++            liste = ttk.Combobox(commandes, textvariable=self.mode_curseur,
++                                 values=modes, state="readonly", width=18)
++            liste.pack(side="left")
++            self.liste_modes = liste
++            liste.bind("<<ComboboxSelected>>", self._choisir_curseur)
++            self.cible = tk.IntVar(value=0)
++            for i in range(2):
++                ttk.Radiobutton(commandes, text=f"C{i+1}", variable=self.cible, value=i,
++                                command=self._choisir_cible).pack(side="left")
++            ttk.Button(commandes, text="Lectures…", command=self._ouvrir_lectures).pack(side="left")
++            self.texte_lecture = "Choisir un curseur, puis cliquer sur un échantillon."
++            self.popup = None
++            self.curseurs = Curseurs(self.figure, self.axe_signal, self.axe_temps,
++                                     signal, self._lecture)
+ 
+             class BarreNavigation(NavigationToolbar2Tk):
+                 """Garder le zoom/déplacement ; les rapports seront une étape dédiée."""
+@@ -63,6 +87,78 @@
+             self.destroy()
+             raise
+ 
++    def _choisir_curseur(self, _evenement=None):
++        self.curseurs.choisir(self.mode_curseur.get())
++        if self.mode_curseur.get() != "Aucun":
++            self._ouvrir_lectures()
++
++    def _choisir_cible(self):
++        self.curseurs.cible = self.cible.get()
++
++    def superposer(self, signal):
++        from curseurs import meme_horloge, Curseurs
++        from _signal_draw import sample_chart
++        if not meme_horloge(self.signal, signal):
++            raise ValueError("Pour superposer, choisir le même CSV. Les autres sources restent dans des panneaux indépendants.")
++        if (self.signal.raster_temps, self.signal.tolerance_temps) != (signal.raster_temps, signal.tolerance_temps):
++            raise ValueError("Les profils temporels diffèrent. Créer un nouveau panneau avec le profil actuel.")
++        if any(s.colonne == signal.colonne for s in self.signaux):
++            raise ValueError("Ce signal est déjà affiché dans le panneau.")
++        if signal.type_signal != self.signal.type_signal:
++            raise ValueError("Séparer Bool et Float dans deux panneaux pour préserver leurs échelles.")
++        if len(self.signaux) >= 8:
++            raise ValueError("Ce panneau atteint la limite de présentation de 8 signaux ; créer un autre panneau.")
++        self.curseurs.ajouter(signal)
++        self.signaux.append(signal)
++        teinte = ("#d65f00", "#7040a0", "#278350", "#a52243", "#9a7000", "#4565b0", "#555555")[len(self.signaux)-2]
++        ligne = sample_chart(self.axe_signal, signal.temps, signal.valeurs, "", "Valeurs",
++                             " / ".join(s.colonne for s in self.signaux),
++                             relier_points=signal.relier_points and signal.type_signal != "Bool",
++                             indices_coupures=signal.indices_coupures)
++        ligne.set_color(teinte)
++        ligne.set_label(signal.colonne)
++        if signal.indices_croix:
++            self.axe_signal.plot([signal.temps[i] for i in signal.indices_croix],
++                                 [signal.valeurs[i] for i in signal.indices_croix],
++                                 linestyle="None", marker="x", color="#dc6a00", markersize=8, zorder=4)
++        self.axe_signal.legend(fontsize=8, loc="upper left")
++        self.axe_signal.relim(visible_only=True)
++        if signal.type_signal == "Float":
++            self.axe_signal.autoscale(enable=True, axis="y")
++        self.canvas.draw_idle()
++
++    def _lecture(self, texte):
++        self.texte_lecture = texte
++        if self.popup is not None and self.popup.winfo_exists():
++            self.lecture.configure(state="normal")
++            self.lecture.delete("1.0", "end")
++            self.lecture.insert("1.0", texte)
++            self.lecture.configure(state="disabled")
++
++    def _ouvrir_lectures(self):
++        if self.popup is None or not self.popup.winfo_exists():
++            self.popup = tk.Toplevel(self)
++            self.popup.title(f"Lectures — {self.signal.colonne}")
++            self.popup.geometry("460x240")
++            self.lecture = tk.Text(self.popup, wrap="word")
++            self.lecture.pack(fill="both", expand=True)
++            self.popup.update_idletasks()
++            # Placer à droite tout en restant à l'intérieur de l'écran.
++            x = min(self.winfo_rootx() + self.winfo_width(), self.winfo_screenwidth() - 470)
++            self.popup.geometry(f"+{max(0, x)}+{max(0, self.winfo_rooty())}")
++        self._lecture(self.texte_lecture)
++        self.popup.lift()
++
++    def destroy(self):
++        # Déconnecter les callbacks et fermer les lectures avec leur onglet.
++        if hasattr(self, "curseurs"):
++            self.curseurs.detruire()
++        if getattr(self, "popup", None) is not None and self.popup.winfo_exists():
++            self.popup.destroy()
++        if hasattr(self, "figure"):
++            self.figure.clear()
++        super().destroy()
++
+     def _basculer_moniteur(self):
+         """Masquer ou réafficher le seul axe temporel sans toucher aux données."""
+         if basculer_moniteur(self.axe_signal, self.axe_temps, self.masquage_autorise):
+--- v080/src/vue_xy.py
++++ v090/src/vue_xy.py
+@@ -0,0 +1,95 @@
++"""Nuage X/Y d'un seul CSV, avec point de lecture (requis 5408).
++
++L'appariement utilise la ligne physique commune, jamais la proximité temporelle
++entre deux PLC. Aucun coefficient de corrélation ni interpolation n'est ajouté.
++"""
++import math
++from tkinter import ttk
++from pathlib import Path
++
++from curseurs import meme_horloge
++from trace_signal import creer_figure
++
++
++def couples_xy(x, y):
++    """Retourner les vrais couples et leur provenance, dans l'ordre du CSV."""
++    if not meme_horloge(x, y):
++        raise ValueError("X et Y doivent provenir de la même lecture du même CSV.")
++    if x.type_signal != "Float" or y.type_signal != "Float":
++        raise ValueError("Le nuage X/Y utilise deux signaux Float.")
++    par_ligne = {ligne: i for i, ligne in enumerate(y.lignes)}
++    couples = []
++    for i, ligne in enumerate(x.lignes):
++        j = par_ligne.get(ligne)
++        if j is not None and math.isfinite(x.valeurs[i]) and math.isfinite(y.valeurs[j]):
++            couples.append((x.valeurs[i], y.valeurs[j], i, j, ligne))
++    if not couples:
++        raise ValueError("Aucun couple X/Y présent et valide sur une même ligne.")
++    return couples
++
++
++def figure_xy(x, y, modele):
++    """Garder le moniteur natif ; l'axe XY est indépendant de l'axe temporel."""
++    couples = couples_xy(x, y)
++    note = (f"X/Y : {len(couples)} couples présents et valides sur {len(x.lignes)} lignes retenues.\n"
++            f"{x.colonne} : {len(x.indices_vides)} cellule(s) vide(s), {len(x.indices_invalides)} invalide(s). "
++            f"{y.colonne} : {len(y.indices_vides)} cellule(s) vide(s), {len(y.indices_invalides)} invalide(s).\n"
++            "Moniteur : Δt du CSV sur son axe temporel, indépendant de l'axe X/Y.")
++    fig, ancien, temps = creer_figure(x, modele, note_signal=note)
++    emplacement = ancien.get_subplotspec()
++    fig.delaxes(ancien)
++    axe = fig.add_subplot(emplacement)
++    points = axe.scatter([p[0] for p in couples], [p[1] for p in couples], s=12, color="#176a94", picker=7)
++    axe.set_xlabel(x.colonne)
++    axe.set_ylabel(y.colonne)
++    axe.set_title(f"{Path(x.fichier).name} — X/Y, couples présents sur la même ligne", fontsize=10, loc="left")
++    axe.grid(alpha=.2)
++    return fig, axe, temps, points, couples
++
++
++class VueXY(ttk.Frame):
++    def __init__(self, parent, x, y, modele):
++        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
++        super().__init__(parent)
++        self.signal, self.signaux, self.moniteur = x, [x,y], modele
++        self.type_vue = "XY"
++        self.figure, self.axe_signal, self.axe_temps, self.points, self.couples = figure_xy(x, y, modele)
++        self.canvas = FigureCanvasTkAgg(self.figure, master=self)
++        self.texte_lecture = "Cliquer sur un point du nuage : lecture de sa ligne CSV."
++        ttk.Label(self, text=self.texte_lecture).pack(anchor="w")
++        self.lecture = ttk.Label(self, wraplength=700)
++        self.lecture.pack(anchor="w")
++        self.anneau, = self.axe_signal.plot([], [], marker="o", markersize=10,
++                                          markerfacecolor="none", markeredgecolor="#a1266d", linestyle="None")
++        self.annotation = self.axe_signal.text(.02, .98, "", transform=self.axe_signal.transAxes,
++                                               va="top", fontsize=8, bbox=dict(facecolor="white", alpha=.8))
++        class Barre(NavigationToolbar2Tk):
++            toolitems = tuple(item for item in NavigationToolbar2Tk.toolitems if item[0] != "Save")
++        self.barre = Barre(self.canvas, self, pack_toolbar=False)
++        self.barre.pack(side="bottom", fill="x")
++        self.canvas.get_tk_widget().pack(fill="both", expand=True)
++        self.connexion = self.canvas.mpl_connect("pick_event", self._choisir)
++        self.canvas.draw()
++
++    def _choisir(self, evenement):
++        if evenement.artist is not self.points or self.barre.mode or len(evenement.ind) == 0:
++            return
++        # Plusieurs couples peuvent occuper le même pixel : tous sont nommés
++        # (jusqu'à 20 lignes de lecture), sans sélectionner un doublon en secret.
++        lignes = []
++        for k in evenement.ind[:20]:
++            px, py, i, j, ligne = self.couples[k]
++            x, y = self.signaux
++            lignes.append(f"Ligne {ligne} | t={x.temps_bruts[i]} | {x.colonne}={x.valeurs_brutes[i]} | {y.colonne}={y.valeurs_brutes[j]}")
++        if len(evenement.ind) > 20:
++            lignes.append(f"{len(evenement.ind)} couples dans la zone de sélection, 20 montrés.")
++        self.texte_lecture = "\n".join(lignes)
++        self.lecture.configure(text=self.texte_lecture)
++        self.annotation.set_text("\n".join(lignes[:3]))
++        self.anneau.set_data([self.couples[k][0] for k in evenement.ind], [self.couples[k][1] for k in evenement.ind])
++        self.canvas.draw_idle()
++
++    def destroy(self):
++        self.canvas.mpl_disconnect(self.connexion)
++        self.figure.clear()
++        super().destroy()
+--- v080/tests/test_requis_v090.py
++++ v090/tests/test_requis_v090.py
+@@ -0,0 +1,241 @@
++"""Régressions des nouveaux parcours ; identifiants requis dans les noms.
++
++Les tests de calcul et de rendu utilisent des fichiers temporaires et Agg.
++Ils ne remplacent pas les essais Tkinter natifs sous Windows 11 / SLES.
++"""
++import io
++import math
++import sys
++import tempfile
++import threading
++import unittest
++from dataclasses import replace
++from pathlib import Path
++from types import SimpleNamespace
++
++PROJET = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(PROJET / "src"))
++from base_temps import SourceTemps, examiner_source
++from signal_csv import preparer_signal
++from moniteur_temps import construire_moniteur
++from curseurs import LecteurEchantillons, Curseurs, meme_horloge
++from taches import TacheFond, importer_copie
++from paquet_csv import PaquetCSV
++
++
++class RequisSignalTests(unittest.TestCase):
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.fichier = Path(self.temp.name) / "source.csv"
++
++    def signal(self, texte, type_signal="Auto", colonne="v"):
++        self.fichier.write_text(texte, encoding="utf-8")
++        source = SourceTemps(self.fichier)
++        resultat = examiner_source(source)
++        return preparer_signal(source, resultat, colonne, type_signal), construire_moniteur(source, resultat)
++
++    def test_2200_bool_textuel_et_croix_limitees_aux_vides(self):
++        s, _ = self.signal("t,v\n0,true\n1,\n2,false\n3,FAILED\n4,true\n", "Bool")
++        self.assertEqual(s.type_signal, "Bool")
++        self.assertEqual([s.valeurs[i] for i in (0,2,4)], [1,0,1])
++        self.assertEqual(s.indices_vides, [1])
++        self.assertEqual(s.indices_invalides, [3])
++        self.assertEqual(s.indices_croix, [0,2])
++        self.assertTrue(math.isnan(s.valeurs[3]))
++
++    def test_2200_2201_auto_ne_confond_pas_mesure_01_et_bool(self):
++        s, _ = self.signal("t,v\n0,0\n1,1\n")
++        self.assertEqual(s.type_signal, "Float")
++        s, _ = self.signal("t,v\n0,0\n1,1\n2,2\n", "Bool")
++        self.assertEqual(s.type_signal, "Bool")
++        self.assertEqual(s.indices_invalides, [2])
++        s, _ = self.signal("t,v\n0,true\n1,false\n")
++        self.assertEqual(s.type_signal, "Bool")
++
++    def test_5401_aucune_valeur_inventee_dans_manque_et_doublons(self):
++        s, _ = self.signal("t,v\n10,3.1234567890123456789\n20,\n30,5\n30,6\n5,2\n")
++        lecteur = LecteurEchantillons(s)
++        self.assertEqual(lecteur.proche(21), (20, [1]))
++        self.assertIn("ABSENTE", lecteur.decrire([1]))
++        self.assertEqual(lecteur.proche(29), (30, [2,3]))
++        self.assertIn("3.1234567890123456789", lecteur.decrire([0]))
++        self.assertEqual(s.temps, [10,20,30,30,5])
++        with self.assertRaises(ValueError):
++            lecteur.proche(math.nan)
++
++    def test_5405_horloges_distinctes_pas_de_liaison(self):
++        s, _ = self.signal("t,v\n0,1\n1,2\n")
++        for autre in (replace(s, fichier="autre.csv"), replace(s, sha256="different"),
++                      replace(s, unite_temps="s")):
++            self.assertFalse(meme_horloge(s, autre))
++        self.assertTrue(meme_horloge(s, replace(s, colonne="autre")))
++
++    def test_5408_xy_sans_faux_couple_ni_interpolation(self):
++        from vue_xy import couples_xy, figure_xy
++        from matplotlib.backends.backend_agg import FigureCanvasAgg
++        s, modele = self.signal("t,v,w\n0,1,4\n1,,5\n2,3,\n3,7,8\n")
++        source = SourceTemps(self.fichier)
++        w = preparer_signal(source, examiner_source(source), "w")
++        self.assertEqual(couples_xy(s,w), [(1,4,0,0,2), (7,8,3,3,5)])
++        with self.assertRaises(ValueError):
++            couples_xy(s, replace(w, fichier="autre.csv"))
++        fig, axe, temps, _, _ = figure_xy(s,w,modele)
++        FigureCanvasAgg(fig).draw()
++        bornes_temps = temps.get_xlim()
++        axe.set_xlim(2,5)
++        self.assertEqual(temps.get_xlim(), bornes_temps)
++        self.assertEqual(axe.get_xlabel(), "v")
++
++    def test_5400_5403_curseurs_lecture_et_limites_preservees(self):
++        from trace_signal import creer_figure
++        from matplotlib.backends.backend_agg import FigureCanvasAgg
++        s, modele = self.signal("t,v\n100,1\n110,\n120,3\n")
++        fig, axe, temps = creer_figure(s, modele)
++        FigureCanvasAgg(fig)
++        limites = axe.get_xlim()
++        lectures = []
++        curseurs = Curseurs(fig, axe, temps, s, lectures.append)
++        self.assertEqual(axe.get_xlim(), limites)
++        curseurs.choisir("Double vertical")
++        curseurs.placer(101, 0)
++        curseurs.placer(109, 1)
++        self.assertEqual([c.get_xdata()[0] for c in curseurs.lignes], [100,110])
++        self.assertIn("ABSENTE", lectures[-1])
++        self.assertIn("C2: t=110", curseurs.annotation.get_text())
++        curseurs.choisir("Aucun")
++        self.assertFalse(any(c.get_visible() for c in curseurs.lignes))
++
++    def test_5402_lectures_de_toutes_les_courbes(self):
++        from trace_signal import creer_figure
++        from matplotlib.backends.backend_agg import FigureCanvasAgg
++        s, modele = self.signal("t,v,w\n0,1,4\n1,2,5\n")
++        source = SourceTemps(self.fichier)
++        w = preparer_signal(source, examiner_source(source), "w")
++        fig, axe, temps = creer_figure(s, modele)
++        FigureCanvasAgg(fig)
++        lectures = []
++        curseurs = Curseurs(fig, axe, temps, s, lectures.append)
++        curseurs.ajouter(w)
++        curseurs.placer(1)
++        self.assertIn("v=2", lectures[-1])
++        self.assertIn("w=5", lectures[-1])
++
++    def test_5406_horizontal_refuse_sur_bool(self):
++        from trace_signal import creer_figure
++        from matplotlib.backends.backend_agg import FigureCanvasAgg
++        s, modele = self.signal("t,v\n0,true\n1,false\n")
++        fig, axe, temps = creer_figure(s, modele)
++        FigureCanvasAgg(fig)
++        curseurs = Curseurs(fig, axe, temps, s, lambda x: None)
++        with self.assertRaises(ValueError):
++            curseurs.choisir("Horizontal")
++        self.assertEqual(axe.lines[0].get_linestyle(), "None")
++        self.assertEqual(list(axe.get_yticks()), [0,1])
++
++    def test_4104_6000_capture_rapport_restaure_moniteur_et_zoom(self):
++        from trace_signal import creer_figure
++        from matplotlib.backends.backend_agg import FigureCanvasAgg
++        from rapport_pdf import capturer, generer_pdf, PageRapport
++        s, modele = self.signal("t,v\n0,1\n1,2\n2,3\n")
++        fig, axe, temps = creer_figure(s, modele)
++        FigureCanvasAgg(fig)
++        axe.set_xlim(.5,1.5)
++        temps.set_visible(False)
++        vue = SimpleNamespace(figure=fig, axe_signal=axe, axe_temps=temps, signal=s)
++        capture = capturer(vue)
++        self.assertFalse(temps.get_visible())
++        self.assertEqual(axe.get_xlim(), (.5,1.5))
++        self.assertTrue(capture.image.startswith(b"\x89PNG"))
++        avant = self.fichier.read_bytes()
++        pdf = Path(self.temp.name)/"rapport.pdf"
++        generer_pdf(pdf, [PageRapport((capture,)), PageRapport((capture,))],
++                    emetteur="Test", projet="PTBG", unite="Essai")
++        self.assertTrue(pdf.read_bytes().startswith(b"%PDF"))
++        self.assertEqual(self.fichier.read_bytes(), avant)
++        taille = pdf.stat().st_size
++        with self.assertRaises(FileExistsError):
++            generer_pdf(pdf, [PageRapport((capture,))], emetteur="Test", projet="PTBG", unite="Essai")
++        self.assertEqual(pdf.stat().st_size, taille)
++        with self.assertRaises(ValueError):
++            generer_pdf(self.fichier, [PageRapport((capture,))], emetteur="Test", projet="PTBG", unite="Essai")
++        with self.assertRaises(ValueError):
++            generer_pdf(Path(self.temp.name)/"vide.pdf", [], emetteur="Test", projet="PTBG", unite="Essai")
++
++
++class TachesTests(unittest.TestCase):
++    def test_4105_resultat_publie_sans_executer_dans_fil_appelant(self):
++        appelant = threading.get_ident()
++        tache = TacheFond(lambda annulation, publier: threading.get_ident())
++        self.assertTrue(tache.terminee.wait(2))
++        nature, thread = tache.lire()[-1]
++        self.assertEqual(nature, "resultat")
++        self.assertNotEqual(thread, appelant)
++
++    def test_4105_annulation_ne_publie_pas_un_resultat_valide(self):
++        debut, finir = threading.Event(), threading.Event()
++        def calcul(annulation, publier):
++            debut.set()
++            finir.wait(2)
++            return 123
++        tache = TacheFond(calcul)
++        self.assertTrue(debut.wait(2))
++        tache.annuler()
++        finir.set()
++        self.assertTrue(tache.terminee.wait(2))
++        self.assertEqual(tache.lire()[-1][0], "annule")
++
++    def test_4105_exception_isolee(self):
++        def calcul(annulation, publier):
++            raise OSError("lecture refusée")
++        tache = TacheFond(calcul)
++        self.assertTrue(tache.terminee.wait(2))
++        self.assertEqual(tache.lire()[-1], ("erreur", "lecture refusée"))
++
++    def test_2105_import_transactionnel(self):
++        with tempfile.TemporaryDirectory() as dossier:
++            a = Path(dossier)/"a.csv"
++            a.write_text("t,v\n0,1\n1,2\n", encoding="utf-8")
++            ancien = PaquetCSV()
++            nouveau = importer_copie(ancien, [a], threading.Event(), lambda p: None)
++            self.assertEqual(len(ancien.sources), 0)
++            self.assertEqual(len(nouveau.sources), 1)
++            annuler = threading.Event()
++            annuler.set()
++            self.assertEqual(len(importer_copie(ancien, [a], annuler, lambda p: None).sources), 0)
++
++
++class LanceurTests(unittest.TestCase):
++    def test_validation_structuree_ignore_ne_vaut_pas_reussite_complete(self):
++        from executer_tests import ResultatStructure
++        class Cas(unittest.TestCase):
++            def test_ok(self):
++                pass
++            @unittest.skip("motif explicite")
++            def test_ignore(self):
++                pass
++        resultat = unittest.TextTestRunner(stream=io.StringIO(), resultclass=ResultatStructure).run(
++            unittest.defaultTestLoader.loadTestsFromTestCase(Cas))
++        bilan = resultat.bilan()
++        self.assertEqual(bilan["statut"], "partielle")
++        self.assertEqual(bilan["comptes"]["ignore"], 1)
++        self.assertEqual(bilan["comptes"]["reussi"], 1)
++
++    def test_validation_structuree_soustest_en_echec(self):
++        from executer_tests import ResultatStructure
++        class Cas(unittest.TestCase):
++            def test_echec(self):
++                with self.subTest(exemple=1):
++                    self.fail("échec volontaire du sous-test")
++        resultat = unittest.TextTestRunner(stream=io.StringIO(), resultclass=ResultatStructure).run(
++            unittest.defaultTestLoader.loadTestsFromTestCase(Cas))
++        self.assertEqual(resultat.bilan()["statut"], "echec")
++        self.assertEqual(resultat.bilan()["comptes"]["echoue"], 1)
++
++    def test_surveillance_lanceurs_et_donnees(self):
++        sys.path.insert(0, str(PROJET))
++        from verifier_robustesse import empreintes_sources
++        empreintes = empreintes_sources()
++        self.assertIn("MAIN.py", empreintes)
++        self.assertIn("verifier_robustesse.py", empreintes)
++        self.assertTrue(any(p.startswith("donnees/") for p in empreintes))
+--- v080/verifier_robustesse.py
++++ v090/verifier_robustesse.py
+@@ -17,7 +17,7 @@
+ import json
+ import os
+ import platform
+-import re
++import tempfile
+ import struct
+ import subprocess
+ import sys
+@@ -33,15 +33,22 @@
+ def empreintes_sources() -> dict[str, str]:
+     """Retourner les empreintes SHA-256 des données, références, src et tests.
+ 
+-    Aucun paramètre. Les caches __pycache__ sont exclus ; les lanceurs, docs et
+-    journaux ne font pas partie de ce contrôle. OSError est propagée à main.
++    Aucun paramètre. Les caches __pycache__ sont exclus. Les fichiers Python
++    racine, tests d’intégration et exemples sont inclus ; docs et journaux exclus. OSError est propagée à main.
+     L'égalité avant/après vérifie les octets, pas la pertinence métier des fichiers.
+     """
+     # === 2. Préparer le contrôle de non-modification des fichiers surveillés ===
+     fichiers = []
+-    for dossier in ("donnees", "references_simulation", "src", "tests"):
++    for dossier in ("donnees", "references_simulation", "src", "tests", "tests_integration", "exemples"):
+         fichiers.extend(p for p in (PROJET / dossier).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
+-    return {str(p.relative_to(PROJET)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(fichiers)}
++    fichiers.extend(PROJET.glob("*.py"))
++    def hacher(chemin):
++        empreinte = hashlib.sha256()
++        with chemin.open("rb") as fichier:
++            for bloc in iter(lambda: fichier.read(1024 * 1024), b""):
++                empreinte.update(bloc)
++        return empreinte.hexdigest()
++    return {str(p.relative_to(PROJET)): hacher(p) for p in sorted(fichiers)}
+ 
+ 
+ def main() -> dict:
+@@ -69,31 +76,36 @@
+         environnement = os.environ.copy()
+         environnement["PYTHONIOENCODING"] = "utf-8"
+         environnement["PYTHONDONTWRITEBYTECODE"] = "1"
+-        execution = subprocess.run(
+-            [sys.executable, "-m", "unittest", "discover", "-s", str(PROJET / "tests"), "-v"],
+-            cwd=PROJET, env=environnement, capture_output=True, text=True,
+-            encoding="utf-8", errors="replace", timeout=60, check=False,
+-        )
+-        # === 5. Vérifier ensemble le résultat des tests et les sources inchangées ===
+-        # Un retour zéro sans test exécuté n'est pas considéré comme une réussite.
++        with tempfile.TemporaryDirectory() as temporaire:
++            resultat_json = Path(temporaire) / "tests.json"
++            execution = subprocess.run(
++                [sys.executable, str(PROJET / "src/executer_tests.py"), str(PROJET / "tests"), str(resultat_json)],
++                cwd=PROJET, env=environnement, capture_output=True, text=True,
++                encoding="utf-8", errors="replace", timeout=60, check=False,
++            )
++            # Un crash avant la création du JSON est un échec, pas zéro test OK.
++            structure = json.loads(resultat_json.read_text(encoding="utf-8")) if resultat_json.exists() else {
++                "nombre_tests": 0, "comptes": {}, "statut": "echec", "cas": []}
+         texte = execution.stdout + execution.stderr
+         print(texte)
+-        compte = re.search(r"Ran (\d+) tests? in", texte)
+-        nombre = int(compte.group(1)) if compte else 0
+-        ignores = re.search(r"skipped=(\d+)", texte)
+-        nombre_ignores = int(ignores.group(1)) if ignores else 0
++        nombre = structure["nombre_tests"]
++        nombre_ignores = structure["comptes"].get("ignore", 0)
++        bilan["resultat_structure"] = structure
++        bilan["statut"] = structure["statut"]
+         inchange = avant == empreintes_sources()
+         bilan.update({"code_retour": execution.returncode, "nombre_tests": nombre,
+                       "sources_inchangees": inchange, "sha256_sources": avant,
+                       "journal_tests": texte,
+                       "tests_ignores": nombre_ignores,
+-                      "tests_reussis": execution.returncode == 0 and nombre > 0 and inchange,
+-                      "suite_integralement_executee": nombre > 0 and nombre_ignores == 0})
++                      "tests_reussis": execution.returncode == 0 and structure["statut"] == "complete" and inchange,
++                      "suite_integralement_executee": structure["statut"] == "complete"})
++        if not inchange or execution.returncode != 0:
++            bilan["statut"] = "echec"
+         print(f"Bilan : {nombre} tests | réussite : {bilan['tests_reussis']} | sources inchangées : {inchange}")
+         if nombre_ignores:
+             print(f"ATTENTION : {nombre_ignores} test(s) ignoré(s), lire leur motif ci-dessus ; couverture incomplète.")
+-    except (OSError, subprocess.TimeoutExpired) as exc:
+-        bilan.update({"tests_reussis": False, "erreur": str(exc)})
++    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
++        bilan.update({"tests_reussis": False, "statut": "echec", "erreur": str(exc)})
+         print(f"Vérification non terminée : {exc}")
+     # === 6. Conserver le bilan, y compris si l'essai a échoué ou expiré ===
+     try:
+@@ -111,4 +123,6 @@
+ 
+ if __name__ == "__main__":
+     # L'import du module ne lance pas la suite de tests.
+-    main()
++    resultat = main()
++    if not resultat.get("tests_reussis"):
++        raise SystemExit(1)

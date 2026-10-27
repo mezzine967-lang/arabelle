@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.venv/
+visu_ptbg/resultats/tests_v100_*.json
+visu_ptbg/resultats/environnement_*.json
+dist/

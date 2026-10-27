@@ -1,0 +1,40 @@
+{
+  "version_projet": "0.7.7",
+  "date_utc": "2026-10-27T13:14:08Z",
+  "environnement": {
+    "systeme": "Linux",
+    "python": "3.12.14",
+    "bits_interpreteur": 64,
+    "python_3_11_disponible": false
+  },
+  "tests_rapides": {
+    "executes": 118,
+    "reussis": 118,
+    "echecs": 0,
+    "erreurs": 0,
+    "ignores": 0,
+    "sources_surveillees_inchangees": true
+  },
+  "tests_integration": {
+    "executes": 1,
+    "reussis": 1,
+    "echecs": 0,
+    "erreurs": 0,
+    "ignores": 0
+  },
+  "bilan": {
+    "executes": 119,
+    "reussis": 119,
+    "echecs": 0,
+    "erreurs": 0,
+    "ignores": 0
+  },
+  "controle_supplementaire": {
+    "syntaxe_python_3_12": true,
+    "csv_et_references_identiques_a_v076": true,
+    "image_exemple_generee": "exemples/Time_Base_Monitor_categories_v077.png"
+  },
+  "qualification_windows_11": false,
+  "qualification_sles_15_sp7": false,
+  "limite": "Les essais utilisent Linux/Python 3.12 et Matplotlib Agg ; ils ne remplacent pas les essais natifs Windows 11 et SLES 15 SP7."
+}

@@ -1,0 +1,2633 @@
+--- a/visu_ptbg/MAIN.py
++++ b/visu_ptbg/MAIN.py
+@@ -44,6 +44,7 @@
+         self.vue_signal = None
+         self.vue_temps = None
+         self.noeuds_signaux: dict[str, str] = {}
++        self.types_signaux = {}  # Choix explicites par fichier, hash et colonne.
+         self.temps_choisi = tk.StringVar()
+         self.unite = tk.StringVar()
+         self.pas = tk.StringVar()
+@@ -57,7 +58,9 @@
+         self.moniteur_modele: dict | None = None
+         self.moniteur_visible = True
+         self.fenetre.title(f"VISU PTBG — import CSV {VERSION}")
+-        self.fenetre.geometry("1080x660")
++        largeur = min(1280, max(800, self.fenetre.winfo_screenwidth() - 80))
++        hauteur = min(960, max(600, self.fenetre.winfo_screenheight() - 80))
++        self.fenetre.geometry(f"{largeur}x{hauteur}")
+         self._construire_menu()
+         self._construire_contenu()
+         from vue_rapports import Rapports
+@@ -71,9 +74,9 @@
+     def _construire_menu(self) -> None:
+         barre = tk.Menu(self.fenetre)
+         fichiers = tk.Menu(barre, tearoff=False)
+-        fichiers.add_command(label="Ajouter des CSV…", command=self._ajouter)
+-        fichiers.add_command(label="Ajouter un dossier CSV…", command=self._ajouter_dossier)
+-        fichiers.add_command(label="Enregistrer le diagnostic…", command=self._enregistrer)
++        fichiers.add_command(label="Ajouter des CSV...", command=self._ajouter)
++        fichiers.add_command(label="Ajouter un dossier CSV...", command=self._ajouter_dossier)
++        fichiers.add_command(label="Enregistrer le diagnostic...", command=self._enregistrer)
+         fichiers.add_separator()
+         fichiers.add_command(label="Quitter", command=self._fermer)
+         barre.add_cascade(label="Fichier", menu=fichiers)
+@@ -95,13 +98,13 @@
+         barre.add_cascade(label="Informations", menu=informations)
+         informations.add_separator()
+         informations.add_command(label="Fichier d'aide (README)", command=lambda: self._document(PROJET / "README.md"))
+-        informations.add_command(label="Historique et requis", command=lambda: self._document(PROJET / "docs/AVANCEMENT_V090.md"))
++        informations.add_command(label="Historique et requis", command=lambda: self._document(PROJET / "docs/VALIDATION_V100.md"))
+         informations.add_command(label="Bibliothèques et packages", command=lambda: self._document(PROJET / "docs/DEPENDANCES.md"))
+         informations.add_command(label="Journal d'activité", command=self._voir_activite)
+         rapports = tk.Menu(barre, tearoff=False)
+-        rapports.add_command(label="Exporter l'onglet actif en PDF…", command=lambda: self.rapports.exporter())
++        rapports.add_command(label="Exporter l'onglet actif en PDF...", command=lambda: self.rapports.exporter())
+         rapports.add_command(label="Ajouter l'onglet actif au rapport manuel", command=lambda: self.rapports.ajouter())
+-        rapports.add_command(label="Exporter le rapport manuel…", command=lambda: self.rapports.exporter(manuel=True))
++        rapports.add_command(label="Exporter le rapport manuel...", command=lambda: self.rapports.exporter(manuel=True))
+         rapports.add_command(label="Vider la composition manuelle", command=lambda: self.rapports.vider())
+         barre.add_cascade(label="Rapport", menu=rapports)
+         self.fenetre.config(menu=barre)
+@@ -111,8 +114,8 @@
+         self.zone.pack(fill="both", expand=True)
+         self.zone.columnconfigure(1, weight=1)
+         self.zone.rowconfigure(1, weight=1)
+-        ttk.Button(self.zone, text="Ajouter des CSV…", command=self._ajouter).grid(row=0, column=0, sticky="w")
+-        ttk.Button(self.zone, text="Ajouter un dossier CSV…", command=self._ajouter_dossier).grid(
++        ttk.Button(self.zone, text="Ajouter des CSV...", command=self._ajouter).grid(row=0, column=0, sticky="w")
++        ttk.Button(self.zone, text="Ajouter un dossier CSV...", command=self._ajouter_dossier).grid(
+             row=0, column=1, sticky="w", padx=8)
+         ttk.Button(self.zone, text="Masquer/afficher l'arbre", command=self._basculer_arbre).grid(
+             row=0, column=1, sticky="e", padx=8)
+@@ -184,12 +187,17 @@
+         self.liste_signaux = ttk.Combobox(choix_signal, textvariable=self.signal_choisi,
+                                          state="readonly", width=28)
+         self.liste_signaux.pack(side="left", padx=6)
++        self.liste_signaux.bind("<<ComboboxSelected>>", self._restaurer_type)
+         ttk.Button(choix_signal, text="Afficher le signal", command=self._afficher_courbe).pack(side="left")
+         ttk.Button(outils_signal, text="Superposer un signal", command=lambda: self._afficher_courbe(True)).pack(side="left")
+         ttk.Label(choix_signal, text=" Type :").pack(side="left")
+-        ttk.Combobox(choix_signal, textvariable=self.type_signal, values=("Auto", "Float", "Bool"),
+-                     width=7, state="readonly").pack(side="left")
+-        ttk.Button(outils_signal, text="Nuage X/Y…", command=self._afficher_xy).pack(side="left", padx=5)
++        choix_type = ttk.Combobox(choix_signal, textvariable=self.type_signal, values=("Auto", "Float", "Bool"),
++                                  width=7, state="readonly")
++        choix_type.pack(side="left")
++        choix_type.bind("<<ComboboxSelected>>", self._memoriser_type)
++        ttk.Button(outils_signal, text="Nuage X/Y...", command=self._afficher_xy).pack(side="left", padx=5)
++        ttk.Button(outils_signal, text="Groupe Bool...", command=self._groupe_bool).pack(side="left")
++        ttk.Button(outils_signal, text="Condition Bool...", command=self._condition_bool).pack(side="left", padx=5)
+         self.conteneur_courbe = ttk.Frame(self.onglet_courbe)
+         self.conteneur_courbe.pack(fill="both", expand=True)
+         from vue_arrangements import Arrangements
+@@ -239,7 +247,7 @@
+             return
+         def calcul(annulation, publier):
+             from decouverte_csv import decouvrir_csv
+-            publier(("progression", "Découverte des CSV dans les sous-dossiers…"))
++            publier(("progression", "Découverte des CSV dans les sous-dossiers..."))
+             return importer_copie(self.paquet, decouvrir_csv(dossier), annulation, publier)
+         self._lancer(calcul, self._import_termine)
+ 
+@@ -270,7 +278,10 @@
+                     continue
+                 typage = diagnostic["inferred_types"].get(colonne, "inconnu")
+                 typage = {"booléen": "Bool", "numérique": "Float"}.get(typage, typage)
+-                noeud = self.arbre.insert(identifiant, "end", text=f"{colonne} ({typage} indicatif)")
++                choix = self.types_signaux.get((str(source.fichier), diagnostic["sha256"], colonne), "Auto")
++                libelle = f"{typage} indicatif" if choix == "Auto" else f"{choix} choisi"
++                original = diagnostic.get("original_columns", diagnostic["columns"])[diagnostic["columns"].index(colonne)]
++                noeud = self.arbre.insert(identifiant, "end", text=f"{original} ({libelle})")
+                 self.noeuds_signaux[noeud] = colonne
+ 
+     def _selectionner(self, _evenement: object = None) -> None:
+@@ -302,6 +313,27 @@
+             self.signal_choisi.set(demande)
+         elif self.signal_choisi.get() not in colonnes:
+             self.signal_choisi.set(colonnes[0] if colonnes else "")
++        self._restaurer_type()
++
++    def _cle_type(self):
++        if self.indice_actif is None:
++            return None
++        source = self.paquet.sources[self.indice_actif]
++        diagnostic = self.paquet.resultats[self.indice_actif].get("diagnostic_csv", {})
++        return str(source.fichier), diagnostic.get("sha256"), self.signal_choisi.get()
++
++    def _restaurer_type(self, _evenement=None):
++        self.type_signal.set(self.types_signaux.get(self._cle_type(), "Auto"))
++
++    def _memoriser_type(self, _evenement=None):
++        cle = self._cle_type()
++        if cle is not None:
++            selection = self.arbre.selection()
++            self.types_signaux[cle] = self.type_signal.get()
++            self._actualiser_arbre()
++            if selection:
++                self.arbre.selection_set(f"f{self.indice_actif}")
++            self._noter("Type mémorisé pour cette colonne et cette lecture du CSV.")
+ 
+     def _configurer(self) -> None:
+         if self.indice_actif is None:
+@@ -479,7 +511,7 @@
+         self.tache = TacheFond(calcul)
+         self.progression.start(15)
+         self.bouton_annuler.configure(state="normal")
+-        self._noter("Calcul en cours…")
++        self._noter("Calcul en cours...")
+         def surveiller():
+             for nature, contenu in self.tache.lire():
+                 if nature == "progression":
+@@ -513,6 +545,69 @@
+             self.bouton_annuler.configure(state="disabled")
+             self._noter("Annulation demandée ; la lecture en cours doit se terminer proprement.")
+ 
++    def _dialogue_colonnes(self, titre, multiple, appliquer):
++        """Choix explicite ; aucun 0/1 numérique n'est déclaré Bool en silence."""
++        if self.indice_actif is None or not self._profil_applique():
++            messagebox.showinfo(titre, "Choisir un CSV et appliquer son profil temporel.")
++            return
++        source = self.paquet.sources[self.indice_actif]
++        resultat = self.paquet.resultats[self.indice_actif]
++        if "erreur" in resultat:
++            messagebox.showinfo(titre, "Corriger la lecture ou le profil du CSV.")
++            return
++        colonnes = [c for c in resultat["diagnostic_csv"]["columns"] if c != resultat["diagnostic_csv"]["time"]["column"]]
++        dialogue = tk.Toplevel(self.fenetre)
++        dialogue.title(titre)
++        ttk.Label(dialogue, text="Bool : true/false ou 0/1. Toute autre valeur reste invalide.",
++                  wraplength=480).pack(padx=10, pady=8)
++        liste = tk.Listbox(dialogue, selectmode="extended" if multiple else "browse",
++                           exportselection=False, width=55, height=min(12, max(3, len(colonnes))))
++        for colonne in colonnes:
++            liste.insert("end", colonne)
++        liste.pack(fill="both", expand=True, padx=10)
++        def valider():
++            choix = [colonnes[i] for i in liste.curselection()]
++            if not choix or (multiple and not 2 <= len(choix) <= 8):
++                messagebox.showinfo(titre, "Choisir 2 à 8 colonnes." if multiple else "Choisir une colonne.", parent=dialogue)
++                return
++            def calcul(_annulation, _publier):
++                signaux = [preparer_signal(source, resultat, c, "Bool", autoriser_vide=True) for c in choix]
++                return signaux, construire_moniteur(source, resultat)
++            def terminer(contenu):
++                signaux, modele = contenu
++                appliquer(signaux, modele, source.decimale)
++                diagnostic = resultat["diagnostic_csv"]
++                for c in choix:
++                    self.types_signaux[(str(source.fichier), diagnostic["sha256"], c)] = "Bool"
++                self._actualiser_arbre()
++            if self._lancer(calcul, terminer):
++                dialogue.destroy()
++        ttk.Button(dialogue, text="Appliquer", command=valider).pack(anchor="e", padx=10, pady=10)
++
++    def _groupe_bool(self):
++        def appliquer(signaux, modele, decimale):
++            self.vue_signal = self.arrangements.ajouter_groupe(signaux, modele, decimale)
++            self.onglets.select(self.onglet_courbe)
++            self._noter(f"Groupe de {len(signaux)} Bool : pistes et lectures indépendantes, sans interpolation.")
++        self._dialogue_colonnes("Groupe de colonnes Bool", True, appliquer)
++
++    def _condition_bool(self):
++        try:
++            vue = self.arrangements.vues_actives()[-1]
++            if not hasattr(vue, "curseurs") or vue.signal.type_signal != "Float":
++                raise ValueError("Afficher d'abord un panneau temporel Float dans l'onglet actif.")
++        except ValueError as exc:
++            messagebox.showinfo("Condition Bool", str(exc), parent=self.fenetre)
++            return
++        def appliquer(signaux, _modele, _decimale):
++            if not vue.winfo_exists():
++                raise ValueError("Le panneau a été fermé ; afficher de nouveau le signal Float.")
++            vue.curseurs.definir_condition(signaux[0])
++            vue.mode_curseur.set("Horizontal")
++            vue._choisir_curseur()
++            self._noter(f"Lecture horizontale : {signaux[0].colonne} vrai sur la même ligne uniquement.")
++        self._dialogue_colonnes("Condition Bool du dernier panneau Float", False, appliquer)
++
+     def _afficher_xy(self):
+         if self.indice_actif is None or not self._profil_applique():
+             messagebox.showinfo("X/Y", "Choisir un CSV et appliquer son profil temporel.")
+--- a/visu_ptbg/MISSION_CODEX.md
++++ b/visu_ptbg/MISSION_CODEX.md
+@@ -1,4 +1,18 @@
+-# Mission courante — poursuite des requis réalisables, v0.9.0
++# Mission courante — programme fonctionnel et couverture des requis, v1.0.0 candidate
++
++Demande de Mourad : poursuivre le programme reçu dans GitHub jusqu'aux fonctions
++réalisables et testées. Décisions confirmées dans cette conversation :
++
++- Groupe binaire = plusieurs colonnes Bool à regrouper.
++- Lecture horizontale conditionnelle = Bool vrai sur la même ligne ; Bool
++  absent ou invalide exclu, sans interpolation.
++- Aucune référence commune entre PLC n'est disponible. Ne pas fabriquer de
++  temps absolu, de synchronisation ou de déphasage inter-PLC.
++
++État courant : `docs/VALIDATION_V100.md` et `docs/MATRICE_REQUIS_V100.json`.
++Les sections ci-dessous constituent l'historique de la mission précédente.
++
++## Historique v0.9.0
+ 
+ La demande explicite de Mourad (« fait tout ce que tu peux réaliser ») autorise
+ les onglets, types, curseurs et rapports demandés par les requis. Les anciennes
+--- a/visu_ptbg/README.md
++++ b/visu_ptbg/README.md
+@@ -1,4 +1,18 @@
+-# VISU PTBG — v0.9.0
++# VISU PTBG — v1.0.0, version candidate
++
++Le programme est désormais disponible directement dans le dépôt, sans devoir
++extraire l'archive. Le guide courant est `../README.md` ; le bilan de couverture
++est `docs/VALIDATION_V100.md`. Les sections v0.9.0 et antérieures ci-dessous
++restent un historique et ne constituent pas les instructions de cette version.
++
++Ajouts : groupe de plusieurs colonnes Bool, suivi continu du curseur,
++lecture horizontale conditionnée par un Bool vrai sur la même ligne, typage
++explicite par variable et export PDF dans un processus séparé.
++Les essais Tkinter Linux utilisent maintenant un écran virtuel ; les essais
++Windows/SLES et les fonctionnalités dépendant d'une référence commune entre
++PLC restent distincts. Voir la matrice v100 pour chaque limite.
++
++## Historique v0.9.0
+ 
+ Présentation actualisée : la courbe s'ouvre en premier, le fichier sélectionné
+ est indiqué au-dessus de ses réglages temporels, et les commandes graphiques
+--- a/visu_ptbg/docs/REPRENDRE_LE_CODE.md
++++ b/visu_ptbg/docs/REPRENDRE_LE_CODE.md
+@@ -1,8 +1,35 @@
+ # Reprendre VISU PTBG — guide pour Sébastien
+ 
+-Ce guide concerne la v0.8.0. Le projet utilise Python et la bibliothèque
++Ce guide concerne la v1.0.0 candidate. Le projet utilise Python et la bibliothèque
+ standard pour lire/analyser les CSV. Tkinter affiche la fenêtre et Matplotlib
+ dessine les graphiques. Les calculs peuvent être testés sans ouvrir la fenêtre.
++
++## Ajouts v1.0.0
++
++Le point d'entrée du dépôt est `../lancer.py`, qui ouvre `MAIN.py`. Les
++dépendances sont figées dans `../requirements.txt`. Ne pas travailler dans
++l'ancienne copie de préparation `/workspace/arabelle-dev`.
++
++- `src/groupe_binaire.py` valide les groupes de 2 à 8 colonnes Bool du même
++  CSV et dessine leurs pistes. Les décalages Y sont graphiques uniquement.
++- `src/curseurs.py` gère `motion_notify_event` et le suivi optionnel de la
++  souris. `definir_condition` et `placer_horizontal` utilisent les lignes
++  physiques du CSV ; un Bool absent/invalide n'autorise aucune mesure.
++- `MAIN._dialogue_colonnes` prépare les Bool en arrière-plan. Le paramètre
++  `preparer_signal(..., autoriser_vide=True)` conserve une colonne de groupe
++  entièrement vide au lieu d'en inventer l'état. Les tracés ordinaires gardent
++  leur refus explicite d'une colonne entièrement non affichable.
++- `src/rapport_pdf.py`, `exporter_pdf_en_fond` : les captures de figures vivantes
++  restent sur Tk ; les PNG figés sont passés à un processus Matplotlib isolé.
++  L'annulation écarte le résultat avant écriture du fichier demandé. Ne jamais
++  envoyer une figure Tk ou appeler Matplotlib dans le thread de travail partagé.
++- `src/vue_signal.py`, `fermer_canvas` : annuler le rendu différé de TkAgg
++  avant destruction, pour éviter un callback vers un onglet fermé.
++- `tests/test_requis_v100.py` couvre les régressions métier ;
++  `tests_gui/test_parcours_tk.py` teste les vraies fenêtres avec un DISPLAY.
++
++Les types choisis dans l'arbre sont mémorisés par chemin, SHA-256 et colonne,
++pendant la session. Ils ne changent jamais les données source.
+ 
+ ## Parcours de lecture conseillé
+ 
+--- a/visu_ptbg/references_simulation/Redundancy10.py
++++ b/visu_ptbg/references_simulation/Redundancy10.py
+@@ -1,352 +1,352 @@
+-import numpy as np
+-import csv
+-import random
+-import heapq
+-
+-from scipy.signal       import square
+-from graphical_report10 import draw
+-from generate_report10  import report
+-
+-# ============================================================
+-# PARAMETERS
+-# ============================================================
+-
+-SQW_F           = 1
+-SQW_MN          = 0
+-SQW_MX          = 1
+-SQW_CR          = 50
+-SOURCE_CYCLE    = 0.001
+-
+-DT              = 0.001
+-T_SIM           = 10
+-HB_TIMEOUT      = 0.050
+-STALL_LIMIT     = 2
+-TIME_FAULT      = 8
+-
+-PRODUCER_CYCLE        = 0.010
+-PRODUCER_WORK_DELAY   = 0.004
+-PRODUCER_JITTER_MAX   = 0.001
+-
+-CONSUMER_CYCLE        = 0.020
+-CONSUMER_WORK_DELAY   = 0.010
+-CONSUMER_JITTER_MAX   = 0.001
+-
+-PUBLISHER_CYCLE       = 0.010
+-PUBLISHER_WORK_DELAY  = 0.004    
+-PUBLISHER_JITTER_MAX  = 0.001
+-
+-# ============================================================
+-# SIGNAL
+-# ============================================================
+-
+-def square_signal(t):
+-    return ((SQW_MX - SQW_MN) / 2) * (square(2 * np.pi * SQW_F * t, duty=SQW_CR / 100) + 1)
+-
+-# ============================================================
+-# VOTER Logic
+-# ============================================================
+-
+-def voter(a, b, c):
+-    return (a + b + c) >= 2
+-
+-# ============================================================
+-# SCHEDULER (original + internal event queue)
+-# ============================================================
+-
+-class Task:
+-    def __init__(self, period, phase, callback):
+-        self.period = period
+-        self.next_run = phase
+-        self.callback = callback
+-
+-    def tick(self, sim_time):
+-        if sim_time >= self.next_run:
+-            self.callback(self.next_run)
+-            self.next_run += self.period
+-
+-# ---- Internal event queue (for intra-cycle delays) ----
+-
+-event_queue = []
+-event_counter = 0
+-
+-def schedule_event(time, callback):
+-    global event_counter
+-    event_counter += 1
+-    heapq.heappush(event_queue, (time, event_counter, callback))
+-
+-def run_events(sim_time):
+-    while event_queue and event_queue[0][0] <= sim_time:
+-        _, _, cb = heapq.heappop(event_queue)
+-        cb(sim_time)
+-
+-# ============================================================
+-# SHARED STATE
+-# ============================================================
+-
+-source_value     = 0
+-shared_prod      = {1: 0, 2: 0, 3: 0}
+-plc_image        = {1: {}, 2: {}}
+-failure_plc      = 0
+-consumer_state   = {1: "STOP", 2: "STOP"}
+-consumer_vote    = {1: 0, 2: 0}
+-consumer_hb      = {1: {"value": 0, "time": None},2: {"value": 0, "time": None}}
+-last_seen_hb     = {1: None, 2: None}
+-hb_stall_cnt     = {1: 0, 2: 0}
+-
+-seed_init        = 123
+-random.seed(seed_init)
+-INIT_TIME        = {1: random.uniform(0.6, 0.7),2: random.uniform(0.6, 0.7)}
+-
+-published_value  = 0
+-
+-overrun_prod     = {1: False, 2: False, 3: False}
+-overrun_cons     = {1: False, 2: False}
+-overrun_pub      = False
+-
+-start_flags      = {"prod1": False, "prod2": False, "prod3": False,"cons1": False, "cons2": False, "pub": False}
+-start_pulse      = {"prod1": 0, "prod2": 0, "prod3": 0,"cons1": 0, "cons2": 0, "pub": 0}
+-
+-publisher_output = []
+-log_all          = []
+-
+-prod_slot        = {1: 0, 2: 0, 3: 0}   # tampon producteur (valeur capturée dans le slot)
+-cons_slot_vote   = {1: 0, 2: 0}         # tampon consommateur (vote calculé dans le slot)
+-cons_slot_active = {1: False, 2: False} # tampon consommateur (état ACTIVE dans le slot)
+-pub_slot_value   = None                 # tampon publisher (snapshot à émettre en fin de slot)
+-
+-# ============================================================
+-# TASKS
+-# ============================================================
+-
+-def source_task(t):
+-    global source_value
+-    source_value = square_signal(t)
+-
+-# ------------------------------------------------------------
+-# PRODUCER (work in slot, publish at end of period)
+-# ------------------------------------------------------------
+-
+-def producer_task(pid):
+-    def task(t0):
+-        global start_flags, start_pulse, overrun_prod, prod_slot, shared_prod
+-
+-        key = f"prod{pid}"
+-        if not start_flags[key]:
+-            start_flags[key] = True
+-            start_pulse[key] = 1
+-
+-        def work_phase(t):
+-            prod_slot[pid] = source_value
+-
+-        def publish_phase(t):
+-            shared_prod[pid] = prod_slot[pid]
+-
+-        jitter = random.uniform(-PRODUCER_JITTER_MAX, PRODUCER_JITTER_MAX)
+-        schedule_event(t0 + PRODUCER_WORK_DELAY + jitter, work_phase)
+-        schedule_event(t0 + PRODUCER_CYCLE, publish_phase)
+-
+-    return task
+-
+-# ------------------------------------------------------------
+-# CONSUMER (work in slot, publish at end of period)
+-# ------------------------------------------------------------
+-
+-def consumer_task(cid):
+-    def task(t0):
+-        global start_flags, start_pulse
+-        global plc_image, consumer_hb, last_seen_hb, hb_stall_cnt
+-        global consumer_state, cons_slot_vote, cons_slot_active, published_value, failure_plc
+-
+-        key = f"cons{cid}"
+-        if not start_flags[key]:
+-            start_flags[key] = True
+-            start_pulse[key] = 1
+-        # ---------------------------------------------------------------------
+-        def work_phase(t):
+-
+-            if t >= TIME_FAULT:
+-                if cid == 1:
+-                    failure_plc = 1
+-                    cons_slot_active[cid] = False
+-                    return
+-
+-            plc_image[cid] = shared_prod.copy()
+-
+-            consumer_hb[cid]["value"] += 1
+-            consumer_hb[cid]["time"] = t
+-
+-            if t < INIT_TIME[cid]:
+-                consumer_state[cid] = "INIT"
+-                cons_slot_active[cid] = False
+-                return
+-
+-            other = 2 if cid == 1 else 1
+-            hb_other = consumer_hb[other]
+-            
+-            if hb_other["time"] is not None:
+-                if last_seen_hb[other] == hb_other["value"]:
+-                    hb_stall_cnt[other] += 1
+-                else:
+-                    hb_stall_cnt[other] = 0
+-                    last_seen_hb[other] = hb_other["value"]
+-                    
+-            # -----------------------------------------------------------------
+-            def unhealthy(c):
+-                hb = consumer_hb[c]
+-                if hb["time"] is None:
+-                    return True
+-                timeout = (t - hb["time"]) > HB_TIMEOUT
+-                stall = hb_stall_cnt[c] >= STALL_LIMIT
+-                return timeout and stall
+-            # -----------------------------------------------------------------
+-
+-            if t <= max(INIT_TIME.values()):
+-                consumer_state[1] = "INIT"
+-                consumer_state[2] = "INIT"
+-                cons_slot_active[cid] = False
+-                return
+-            else:
+-                if not unhealthy(1):
+-                    consumer_state[1] = "ACTIVE"
+-                    consumer_state[2] = "STANDBY"
+-                else:
+-                    consumer_state[1] = "FAILED"
+-                    consumer_state[2] = "ACTIVE"
+-
+-            v = voter(plc_image[cid][1], plc_image[cid][2], plc_image[cid][3])
+-            cons_slot_vote[cid] = int(v)
+-            consumer_vote[cid] = int(v)  
+-            cons_slot_active[cid] = (consumer_state[cid] == "ACTIVE")
+-        # ---------------------------------------------------------------------
+-        def publish_phase(t):
+-            global published_value
+-            if cons_slot_active[cid]:
+-                published_value = cons_slot_vote[cid]
+-        # ---------------------------------------------------------------------
+-        jitter = random.uniform(-CONSUMER_JITTER_MAX, CONSUMER_JITTER_MAX)
+-        schedule_event(t0 + CONSUMER_WORK_DELAY + jitter, work_phase)
+-        schedule_event(t0 + CONSUMER_CYCLE, publish_phase)
+-
+-    return task
+-
+-
+-# ------------------------------------------------------------
+-# PUBLISHER (work in slot, publish at end of period)
+-# ------------------------------------------------------------
+-
+-def publisher_task(t0):
+-    global start_flags, start_pulse
+-    global pub_slot_value, publisher_output, published_value
+-
+-    if not start_flags["pub"]:
+-        start_flags["pub"] = True
+-        start_pulse["pub"] = 1
+-
+-    def work_phase(t):
+-        global pub_slot_value, published_value
+-        pub_slot_value = published_value
+-
+-    def publish_phase(t):
+-        global publisher_output, pub_slot_value
+-        plc_value = pub_slot_value
+-        publisher_output.append((t, plc_value))
+-
+-    jitter = random.uniform(-PUBLISHER_JITTER_MAX, PUBLISHER_JITTER_MAX)
+-    schedule_event(t0 + PUBLISHER_WORK_DELAY + jitter, work_phase)
+-    schedule_event(t0 + PUBLISHER_CYCLE, publish_phase)
+-
+-
+-# ------------------------------------------------------------
+-# LOGGER
+-# ------------------------------------------------------------
+-
+-def logger_task(t):
+-    pub_val = publisher_output[-1][1] if publisher_output else None
+-    log_all.append((
+-        int(t*1000),
+-        source_value,
+-        shared_prod[1],
+-        shared_prod[2],
+-        shared_prod[3],
+-        consumer_state[1],
+-        consumer_state[2],
+-        consumer_vote[1],
+-        consumer_vote[2],
+-        published_value,
+-        failure_plc,
+-        pub_val,
+-        start_pulse["prod1"],
+-        start_pulse["prod2"],
+-        start_pulse["prod3"],
+-        start_pulse["cons1"],
+-        start_pulse["cons2"],
+-        start_pulse["pub"]
+-    ))
+-    for k in start_pulse:
+-        start_pulse[k] = 0
+-
+-
+-# ============================================================
+-# PHASES
+-# ============================================================
+-random.seed()
+-phase_prod = {i: random.uniform(0, 0.5) for i in [1, 2, 3]}
+-phase_cons = {i: random.uniform(0, 0.5) for i in [1, 2]}
+-phase_pub  = random.uniform(0, 0.5)
+-
+-# ============================================================
+-# BUILD TASK LIST
+-# ============================================================
+-
+-tasks = []
+-
+-tasks.append(Task(SOURCE_CYCLE, 0, source_task))
+-
+-for i in [1, 2, 3]:
+-    tasks.append(Task(PRODUCER_CYCLE, phase_prod[i], producer_task(i)))
+-
+-for i in [1, 2]:
+-    tasks.append(Task(CONSUMER_CYCLE, phase_cons[i], consumer_task(i)))
+-
+-tasks.append(Task(PRODUCER_CYCLE, phase_pub, publisher_task))
+-
+-tasks.append(Task(DT, 0, logger_task))
+-
+-# ============================================================
+-# RUN SIMULATION
+-# ============================================================
+-
+-sim_time = 0.0
+-while sim_time < T_SIM:
+-
+-    for task in tasks:
+-        task.tick(sim_time)
+-
+-    run_events(sim_time)
+-
+-    sim_time += DT
+-
+-# ============================================================
+-# WRITE CSV
+-# ============================================================
+-
+-with open("simulation10.csv", "w", newline="") as f:
+-    w = csv.writer(f)
+-    w.writerow([
+-        "t_ms",
+-        "source",
+-        "prod1","prod2","prod3",
+-        "cons1_state","cons2_state",
+-        "cons1_vote","cons2_vote",
+-        "published",
+-        "failure_plc",
+-        "pub_output",
+-        "start_p1","start_p2","start_p3",
+-        "start_c1","start_c2",
+-        "start_pub"
+-    ])
+-    w.writerows(log_all)
+-
+-print("Simulation complete. Single deterministic log generated.")
+-#report()
++import numpy as np
++import csv
++import random
++import heapq
++
++from scipy.signal       import square
++from graphical_report10 import draw
++from generate_report10  import report
++
++# ============================================================
++# PARAMETERS
++# ============================================================
++
++SQW_F           = 1
++SQW_MN          = 0
++SQW_MX          = 1
++SQW_CR          = 50
++SOURCE_CYCLE    = 0.001
++
++DT              = 0.001
++T_SIM           = 10
++HB_TIMEOUT      = 0.050
++STALL_LIMIT     = 2
++TIME_FAULT      = 8
++
++PRODUCER_CYCLE        = 0.010
++PRODUCER_WORK_DELAY   = 0.004
++PRODUCER_JITTER_MAX   = 0.001
++
++CONSUMER_CYCLE        = 0.020
++CONSUMER_WORK_DELAY   = 0.010
++CONSUMER_JITTER_MAX   = 0.001
++
++PUBLISHER_CYCLE       = 0.010
++PUBLISHER_WORK_DELAY  = 0.004    
++PUBLISHER_JITTER_MAX  = 0.001
++
++# ============================================================
++# SIGNAL
++# ============================================================
++
++def square_signal(t):
++    return ((SQW_MX - SQW_MN) / 2) * (square(2 * np.pi * SQW_F * t, duty=SQW_CR / 100) + 1)
++
++# ============================================================
++# VOTER Logic
++# ============================================================
++
++def voter(a, b, c):
++    return (a + b + c) >= 2
++
++# ============================================================
++# SCHEDULER (original + internal event queue)
++# ============================================================
++
++class Task:
++    def __init__(self, period, phase, callback):
++        self.period = period
++        self.next_run = phase
++        self.callback = callback
++
++    def tick(self, sim_time):
++        if sim_time >= self.next_run:
++            self.callback(self.next_run)
++            self.next_run += self.period
++
++# ---- Internal event queue (for intra-cycle delays) ----
++
++event_queue = []
++event_counter = 0
++
++def schedule_event(time, callback):
++    global event_counter
++    event_counter += 1
++    heapq.heappush(event_queue, (time, event_counter, callback))
++
++def run_events(sim_time):
++    while event_queue and event_queue[0][0] <= sim_time:
++        _, _, cb = heapq.heappop(event_queue)
++        cb(sim_time)
++
++# ============================================================
++# SHARED STATE
++# ============================================================
++
++source_value     = 0
++shared_prod      = {1: 0, 2: 0, 3: 0}
++plc_image        = {1: {}, 2: {}}
++failure_plc      = 0
++consumer_state   = {1: "STOP", 2: "STOP"}
++consumer_vote    = {1: 0, 2: 0}
++consumer_hb      = {1: {"value": 0, "time": None},2: {"value": 0, "time": None}}
++last_seen_hb     = {1: None, 2: None}
++hb_stall_cnt     = {1: 0, 2: 0}
++
++seed_init        = 123
++random.seed(seed_init)
++INIT_TIME        = {1: random.uniform(0.6, 0.7),2: random.uniform(0.6, 0.7)}
++
++published_value  = 0
++
++overrun_prod     = {1: False, 2: False, 3: False}
++overrun_cons     = {1: False, 2: False}
++overrun_pub      = False
++
++start_flags      = {"prod1": False, "prod2": False, "prod3": False,"cons1": False, "cons2": False, "pub": False}
++start_pulse      = {"prod1": 0, "prod2": 0, "prod3": 0,"cons1": 0, "cons2": 0, "pub": 0}
++
++publisher_output = []
++log_all          = []
++
++prod_slot        = {1: 0, 2: 0, 3: 0}   # tampon producteur (valeur capturée dans le slot)
++cons_slot_vote   = {1: 0, 2: 0}         # tampon consommateur (vote calculé dans le slot)
++cons_slot_active = {1: False, 2: False} # tampon consommateur (état ACTIVE dans le slot)
++pub_slot_value   = None                 # tampon publisher (snapshot à émettre en fin de slot)
++
++# ============================================================
++# TASKS
++# ============================================================
++
++def source_task(t):
++    global source_value
++    source_value = square_signal(t)
++
++# ------------------------------------------------------------
++# PRODUCER (work in slot, publish at end of period)
++# ------------------------------------------------------------
++
++def producer_task(pid):
++    def task(t0):
++        global start_flags, start_pulse, overrun_prod, prod_slot, shared_prod
++
++        key = f"prod{pid}"
++        if not start_flags[key]:
++            start_flags[key] = True
++            start_pulse[key] = 1
++
++        def work_phase(t):
++            prod_slot[pid] = source_value
++
++        def publish_phase(t):
++            shared_prod[pid] = prod_slot[pid]
++
++        jitter = random.uniform(-PRODUCER_JITTER_MAX, PRODUCER_JITTER_MAX)
++        schedule_event(t0 + PRODUCER_WORK_DELAY + jitter, work_phase)
++        schedule_event(t0 + PRODUCER_CYCLE, publish_phase)
++
++    return task
++
++# ------------------------------------------------------------
++# CONSUMER (work in slot, publish at end of period)
++# ------------------------------------------------------------
++
++def consumer_task(cid):
++    def task(t0):
++        global start_flags, start_pulse
++        global plc_image, consumer_hb, last_seen_hb, hb_stall_cnt
++        global consumer_state, cons_slot_vote, cons_slot_active, published_value, failure_plc
++
++        key = f"cons{cid}"
++        if not start_flags[key]:
++            start_flags[key] = True
++            start_pulse[key] = 1
++        # ---------------------------------------------------------------------
++        def work_phase(t):
++
++            if t >= TIME_FAULT:
++                if cid == 1:
++                    failure_plc = 1
++                    cons_slot_active[cid] = False
++                    return
++
++            plc_image[cid] = shared_prod.copy()
++
++            consumer_hb[cid]["value"] += 1
++            consumer_hb[cid]["time"] = t
++
++            if t < INIT_TIME[cid]:
++                consumer_state[cid] = "INIT"
++                cons_slot_active[cid] = False
++                return
++
++            other = 2 if cid == 1 else 1
++            hb_other = consumer_hb[other]
++            
++            if hb_other["time"] is not None:
++                if last_seen_hb[other] == hb_other["value"]:
++                    hb_stall_cnt[other] += 1
++                else:
++                    hb_stall_cnt[other] = 0
++                    last_seen_hb[other] = hb_other["value"]
++                    
++            # -----------------------------------------------------------------
++            def unhealthy(c):
++                hb = consumer_hb[c]
++                if hb["time"] is None:
++                    return True
++                timeout = (t - hb["time"]) > HB_TIMEOUT
++                stall = hb_stall_cnt[c] >= STALL_LIMIT
++                return timeout and stall
++            # -----------------------------------------------------------------
++
++            if t <= max(INIT_TIME.values()):
++                consumer_state[1] = "INIT"
++                consumer_state[2] = "INIT"
++                cons_slot_active[cid] = False
++                return
++            else:
++                if not unhealthy(1):
++                    consumer_state[1] = "ACTIVE"
++                    consumer_state[2] = "STANDBY"
++                else:
++                    consumer_state[1] = "FAILED"
++                    consumer_state[2] = "ACTIVE"
++
++            v = voter(plc_image[cid][1], plc_image[cid][2], plc_image[cid][3])
++            cons_slot_vote[cid] = int(v)
++            consumer_vote[cid] = int(v)  
++            cons_slot_active[cid] = (consumer_state[cid] == "ACTIVE")
++        # ---------------------------------------------------------------------
++        def publish_phase(t):
++            global published_value
++            if cons_slot_active[cid]:
++                published_value = cons_slot_vote[cid]
++        # ---------------------------------------------------------------------
++        jitter = random.uniform(-CONSUMER_JITTER_MAX, CONSUMER_JITTER_MAX)
++        schedule_event(t0 + CONSUMER_WORK_DELAY + jitter, work_phase)
++        schedule_event(t0 + CONSUMER_CYCLE, publish_phase)
++
++    return task
++
++
++# ------------------------------------------------------------
++# PUBLISHER (work in slot, publish at end of period)
++# ------------------------------------------------------------
++
++def publisher_task(t0):
++    global start_flags, start_pulse
++    global pub_slot_value, publisher_output, published_value
++
++    if not start_flags["pub"]:
++        start_flags["pub"] = True
++        start_pulse["pub"] = 1
++
++    def work_phase(t):
++        global pub_slot_value, published_value
++        pub_slot_value = published_value
++
++    def publish_phase(t):
++        global publisher_output, pub_slot_value
++        plc_value = pub_slot_value
++        publisher_output.append((t, plc_value))
++
++    jitter = random.uniform(-PUBLISHER_JITTER_MAX, PUBLISHER_JITTER_MAX)
++    schedule_event(t0 + PUBLISHER_WORK_DELAY + jitter, work_phase)
++    schedule_event(t0 + PUBLISHER_CYCLE, publish_phase)
++
++
++# ------------------------------------------------------------
++# LOGGER
++# ------------------------------------------------------------
++
++def logger_task(t):
++    pub_val = publisher_output[-1][1] if publisher_output else None
++    log_all.append((
++        int(t*1000),
++        source_value,
++        shared_prod[1],
++        shared_prod[2],
++        shared_prod[3],
++        consumer_state[1],
++        consumer_state[2],
++        consumer_vote[1],
++        consumer_vote[2],
++        published_value,
++        failure_plc,
++        pub_val,
++        start_pulse["prod1"],
++        start_pulse["prod2"],
++        start_pulse["prod3"],
++        start_pulse["cons1"],
++        start_pulse["cons2"],
++        start_pulse["pub"]
++    ))
++    for k in start_pulse:
++        start_pulse[k] = 0
++
++
++# ============================================================
++# PHASES
++# ============================================================
++random.seed()
++phase_prod = {i: random.uniform(0, 0.5) for i in [1, 2, 3]}
++phase_cons = {i: random.uniform(0, 0.5) for i in [1, 2]}
++phase_pub  = random.uniform(0, 0.5)
++
++# ============================================================
++# BUILD TASK LIST
++# ============================================================
++
++tasks = []
++
++tasks.append(Task(SOURCE_CYCLE, 0, source_task))
++
++for i in [1, 2, 3]:
++    tasks.append(Task(PRODUCER_CYCLE, phase_prod[i], producer_task(i)))
++
++for i in [1, 2]:
++    tasks.append(Task(CONSUMER_CYCLE, phase_cons[i], consumer_task(i)))
++
++tasks.append(Task(PRODUCER_CYCLE, phase_pub, publisher_task))
++
++tasks.append(Task(DT, 0, logger_task))
++
++# ============================================================
++# RUN SIMULATION
++# ============================================================
++
++sim_time = 0.0
++while sim_time < T_SIM:
++
++    for task in tasks:
++        task.tick(sim_time)
++
++    run_events(sim_time)
++
++    sim_time += DT
++
++# ============================================================
++# WRITE CSV
++# ============================================================
++
++with open("simulation10.csv", "w", newline="") as f:
++    w = csv.writer(f)
++    w.writerow([
++        "t_ms",
++        "source",
++        "prod1","prod2","prod3",
++        "cons1_state","cons2_state",
++        "cons1_vote","cons2_vote",
++        "published",
++        "failure_plc",
++        "pub_output",
++        "start_p1","start_p2","start_p3",
++        "start_c1","start_c2",
++        "start_pub"
++    ])
++    w.writerows(log_all)
++
++print("Simulation complete. Single deterministic log generated.")
++#report()
+ draw()--- a/visu_ptbg/references_simulation/generate_report10.py
++++ b/visu_ptbg/references_simulation/generate_report10.py
+@@ -1,239 +1,239 @@
+-# -*- coding: utf-8 -*-
+-# generate_report10.py — reads simulation9.csv / simulation10.csv
+-
+-import os
+-import numpy as np
+-import pandas as pd
+-
+-# ============================================================
+-# PARAMETERS (miroir de la simu pour fallback)
+-# ============================================================
+-HB_TIMEOUT_MS        = 50.0
+-STALL_LIMIT          = 2
+-CONSUMER_CYCLE_MS    = 20.0
+-# detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
+-
+-# ============================================================
+-# UTILITIES
+-# ============================================================
+-
+-def load_data():
+-    # auto-pick latest if both exist
+-    fn = "simulation10.csv" if os.path.exists("simulation10.csv") else "simulation9.csv"
+-    df = pd.read_csv(fn)
+-    df["t_ms"] = pd.to_numeric(df["t_ms"], errors="coerce")
+-    df.dropna(subset=["t_ms"], inplace=True)
+-    df.sort_values("t_ms", inplace=True)
+-    df.reset_index(drop=True, inplace=True)
+-    return df
+-
+-def rising_edges_bool(series, t):
+-    x = series.fillna(0).astype(int).to_numpy()
+-    tt = t.to_numpy(dtype=float)
+-    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
+-    return tt[idx]
+-
+-def rising_edges_threshold(series, t, thr=0.5):
+-    x = (series > thr).astype(int).to_numpy()
+-    tt = t.to_numpy(dtype=float)
+-    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
+-    return tt[idx]
+-
+-def mean_delay(src_edges, dst_edges):
+-    delays = []
+-    j = 0
+-    for e in src_edges:
+-        while j < len(dst_edges) and dst_edges[j] < e:
+-            j += 1
+-        if j < len(dst_edges):
+-            delays.append(dst_edges[j] - e)
+-    return np.mean(delays) if len(delays) > 0 else np.nan
+-
+-def first_time(df, col, value=1):
+-    rows = df[df[col] == value]
+-    return float(rows["t_ms"].iloc[0]) if not rows.empty else np.nan
+-
+-def state_at(df, state_col, time_ms):
+-    rows = df[df["t_ms"] >= time_ms]
+-    return rows[state_col].iloc[0] if not rows.empty else "UNKNOWN"
+-
+-# ============================================================
+-# MAIN REPORT
+-# ============================================================
+-
+-def report():
+-
+-    DF = load_data()
+-    T = DF["t_ms"]
+-
+-    # ========== SOURCE (pour stats seulement) ==========
+-    SRC_EDGES = rising_edges_threshold(DF["source"], T)
+-    SRC_EDGES = SRC_EDGES[SRC_EDGES >= 1000]
+-    if len(SRC_EDGES) > 1:
+-        periods = np.diff(SRC_EDGES)
+-        freq = 1000.0 / np.mean(periods)
+-        cycle_rate = np.mean(DF["source"]) * 100
+-    else:
+-        freq = np.nan
+-        cycle_rate = np.nan
+-
+-    # ========== PRODUCERS ==========
+-    producers = {}
+-    for pid in [1, 2, 3]:
+-        start = first_time(DF, f"start_p{pid}")
+-        edges = rising_edges_threshold(DF[f"prod{pid}"], T)
+-        delay = mean_delay(SRC_EDGES, edges)
+-        overruns = int(DF[f"ov_p{pid}"].sum())
+-        producers[pid] = {"start": start, "delay": delay, "overruns": overruns}
+-
+-    # ========== CONSUMERS ==========
+-    consumers = {}
+-    for cid in [1, 2]:
+-        start = first_time(DF, f"start_c{cid}")
+-        vote_edges = rising_edges_bool(DF[f"cons{cid}_vote"], T)
+-        delay = mean_delay(SRC_EDGES, vote_edges)
+-        overruns = int(DF[f"ov_c{cid}"].sum())
+-        status_1s = state_at(DF, f"cons{cid}_state", 1000)
+-        fail_rows = DF[DF[f"cons{cid}_state"] == "FAILED"]
+-        if not fail_rows.empty:
+-            fail_time = float(fail_rows["t_ms"].iloc[0])
+-            new_status = "FAILED"
+-        else:
+-            fail_time = np.nan
+-            new_status = "N/A"
+-        consumers[cid] = {
+-            "start": start,
+-            "delay": delay,
+-            "overruns": overruns,
+-            "status_1s": status_1s,
+-            "fail_time": fail_time,
+-            "new_status": new_status
+-        }
+-
+-    # ========== PUBLISHER ==========
+-    pub_start = first_time(DF, "start_pub")
+-    # fronts logiques (diagnostic): dépend de changements de valeur
+-    PUB_EDGES = rising_edges_bool(DF["pub_output"], T)
+-    # liste de TOUS les instants de publication (plus robuste)
+-    PUB_TIMES = DF.loc[DF["pub_output"].notna(), "t_ms"].to_numpy(dtype=float)
+-    pub_delay = mean_delay(SRC_EDGES, PUB_EDGES)
+-    pub_overruns = int(DF["ov_pub"].sum())
+-
+-    # ========== FAILURE / SWITCH / RECOVERY ==========
+-    # 1) fault_time direct si disponible
+-    fault_time_raw = first_time(DF, "failure_plc")  # peut être NaN
+-    # 2) switch_time = 1er instant où C2 devient ACTIVE
+-    c2_rows = DF[DF["cons2_state"] == "ACTIVE"]
+-    switch_time = float(c2_rows["t_ms"].iloc[0]) if not c2_rows.empty else np.nan
+-
+-    # 3) fallback si fault_time absent: estimer par la détection HB + stall
+-    detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
+-    fault_time = fault_time_raw if not np.isnan(fault_time_raw) else (
+-        switch_time - detect_delay if not np.isnan(switch_time) else np.nan
+-    )
+-
+-    # 4) délais
+-    switch_delay = (
+-        switch_time - fault_time
+-        if (not np.isnan(fault_time) and not np.isnan(switch_time))
+-        else np.nan
+-    )
+-
+-    # publication la plus proche APRES le switch (indépendant d'un front)
+-    first_pub_after_switch = np.nan
+-    if not np.isnan(switch_time) and len(PUB_TIMES) > 0:
+-        after = PUB_TIMES[PUB_TIMES >= switch_time]
+-        if len(after) > 0:
+-            first_pub_after_switch = after[0]
+-
+-    # recovery pure pipeline (switch -> publish)
+-    recovery_switch_to_pub = (
+-        first_pub_after_switch - switch_time
+-        if (not np.isnan(first_pub_after_switch) and not np.isnan(switch_time))
+-        else np.nan
+-    )
+-    # recovery end-to-end (fault -> publish)
+-    recovery_fault_to_pub = (
+-        first_pub_after_switch - fault_time
+-        if (not np.isnan(first_pub_after_switch) and not np.isnan(fault_time))
+-        else np.nan
+-    )
+-
+-    # (optionnel) edge-to-edge purement diagnostique
+-    complete_delay_edge2edge = np.nan
+-    if not np.isnan(fault_time) and not np.isnan(switch_time):
+-        src_edge = SRC_EDGES[SRC_EDGES <= fault_time]
+-        last_src = src_edge[-1] if len(src_edge) > 0 else np.nan
+-        pub_edge = PUB_EDGES[PUB_EDGES >= switch_time]
+-        first_pub_edge = pub_edge[0] if len(pub_edge) > 0 else np.nan
+-        if not np.isnan(last_src) and not np.isnan(first_pub_edge):
+-            complete_delay_edge2edge = first_pub_edge - last_src
+-
+-    # ========== MARKDOWN ==========
+-    with open("report.md", "w", encoding="utf-8") as f:
+-
+-        f.write("# REDUNDANCY8 REPORT\n\n")
+-
+-        f.write("## Source\n")
+-        f.write(f">Frequency calculated: {freq:.3f} Hz\n")
+-        f.write(f">Cycle rate calculated: {cycle_rate:.2f} %\n\n")
+-
+-        for pid in [1, 2, 3]:
+-            p = producers[pid]
+-            f.write(f"## Producer {pid}\n")
+-            f.write(f">start time: {p['start']:.3f} ms\n")
+-            f.write(f">mean delay edges / source: {p['delay']:.3f} ms\n")
+-            f.write(f">overruns: {p['overruns']}\n\n")
+-
+-        for cid in [1, 2]:
+-            c = consumers[cid]
+-            f.write(f"## Consumer {cid}\n")
+-            f.write(f">start time: {c['start']:.3f} ms\n")
+-            f.write(f">mean delay 2oo3 edges / source: {c['delay']:.3f} ms\n")
+-            f.write(f">overruns: {c['overruns']}\n")
+-            f.write(f">status @ 1s: {c['status_1s']}\n")
+-            f.write(f">Moment of failure: {c['fail_time']:.3f} ms\n")
+-            f.write(f">New status: {c['new_status']}\n\n")
+-
+-        f.write("## Publisher 1\n")
+-        f.write(f">start time: {pub_start:.3f} ms\n")
+-        f.write(f">mean delay edges / source (publisher output): {pub_delay:.3f} ms\n")
+-        f.write(f">overruns: {pub_overruns}\n\n")
+-
+-        f.write("## PLC Failure / Recovery\n")
+-        f.write(f">fault time (raw/fallback): {fault_time:.3f} ms\n")
+-        f.write(f">switch time (C2 ACTIVE): {switch_time:.3f} ms\n")
+-        f.write(f">switch delay (fault -> switch): {switch_delay:.3f} ms\n")
+-        f.write(f">recovery (switch -> first publish): {recovery_switch_to_pub:.3f} ms\n")
+-        f.write(f">recovery (fault -> first publish): {recovery_fault_to_pub:.3f} ms\n")
+-        f.write(f">diagnostic edge-to-edge (src edge -> pub edge): {complete_delay_edge2edge:.3f} ms\n")
+-
+-    # ========== SUMMARY CSV ==========
+-    summary = {
+-        "freq": freq,
+-        "cycle_rate": cycle_rate,
+-        "p1_start": producers[1]["start"],
+-        "p2_start": producers[2]["start"],
+-        "p3_start": producers[3]["start"],
+-        "c1_start": consumers[1]["start"],
+-        "c2_start": consumers[2]["start"],
+-        "p1_delay": producers[1]["delay"],
+-        "p2_delay": producers[2]["delay"],
+-        "p3_delay": producers[3]["delay"],
+-        "c1_delay": consumers[1]["delay"],
+-        "c2_delay": consumers[2]["delay"],
+-        "pub_delay": pub_delay,
+-        "fault_time": fault_time,
+-        "switch_time": switch_time,
+-        "switch_delay": switch_delay,
+-        "recovery_switch_to_pub": recovery_switch_to_pub,
+-        "recovery_fault_to_pub": recovery_fault_to_pub,
+-        "edge2edge_delay": complete_delay_edge2edge
+-    }
+-
+-    file = "reports.csv"
+-    df_res = pd.read_csv(file) if os.path.exists(file) else pd.DataFrame()
+-    df_res = pd.concat([df_res, pd.DataFrame([summary])], ignore_index=True)
+-    df_res.to_csv(file, index=False)
+-
++# -*- coding: utf-8 -*-
++# generate_report10.py — reads simulation9.csv / simulation10.csv
++
++import os
++import numpy as np
++import pandas as pd
++
++# ============================================================
++# PARAMETERS (miroir de la simu pour fallback)
++# ============================================================
++HB_TIMEOUT_MS        = 50.0
++STALL_LIMIT          = 2
++CONSUMER_CYCLE_MS    = 20.0
++# detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
++
++# ============================================================
++# UTILITIES
++# ============================================================
++
++def load_data():
++    # auto-pick latest if both exist
++    fn = "simulation10.csv" if os.path.exists("simulation10.csv") else "simulation9.csv"
++    df = pd.read_csv(fn)
++    df["t_ms"] = pd.to_numeric(df["t_ms"], errors="coerce")
++    df.dropna(subset=["t_ms"], inplace=True)
++    df.sort_values("t_ms", inplace=True)
++    df.reset_index(drop=True, inplace=True)
++    return df
++
++def rising_edges_bool(series, t):
++    x = series.fillna(0).astype(int).to_numpy()
++    tt = t.to_numpy(dtype=float)
++    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
++    return tt[idx]
++
++def rising_edges_threshold(series, t, thr=0.5):
++    x = (series > thr).astype(int).to_numpy()
++    tt = t.to_numpy(dtype=float)
++    idx = np.where((x[:-1] == 0) & (x[1:] == 1))[0] + 1
++    return tt[idx]
++
++def mean_delay(src_edges, dst_edges):
++    delays = []
++    j = 0
++    for e in src_edges:
++        while j < len(dst_edges) and dst_edges[j] < e:
++            j += 1
++        if j < len(dst_edges):
++            delays.append(dst_edges[j] - e)
++    return np.mean(delays) if len(delays) > 0 else np.nan
++
++def first_time(df, col, value=1):
++    rows = df[df[col] == value]
++    return float(rows["t_ms"].iloc[0]) if not rows.empty else np.nan
++
++def state_at(df, state_col, time_ms):
++    rows = df[df["t_ms"] >= time_ms]
++    return rows[state_col].iloc[0] if not rows.empty else "UNKNOWN"
++
++# ============================================================
++# MAIN REPORT
++# ============================================================
++
++def report():
++
++    DF = load_data()
++    T = DF["t_ms"]
++
++    # ========== SOURCE (pour stats seulement) ==========
++    SRC_EDGES = rising_edges_threshold(DF["source"], T)
++    SRC_EDGES = SRC_EDGES[SRC_EDGES >= 1000]
++    if len(SRC_EDGES) > 1:
++        periods = np.diff(SRC_EDGES)
++        freq = 1000.0 / np.mean(periods)
++        cycle_rate = np.mean(DF["source"]) * 100
++    else:
++        freq = np.nan
++        cycle_rate = np.nan
++
++    # ========== PRODUCERS ==========
++    producers = {}
++    for pid in [1, 2, 3]:
++        start = first_time(DF, f"start_p{pid}")
++        edges = rising_edges_threshold(DF[f"prod{pid}"], T)
++        delay = mean_delay(SRC_EDGES, edges)
++        overruns = int(DF[f"ov_p{pid}"].sum())
++        producers[pid] = {"start": start, "delay": delay, "overruns": overruns}
++
++    # ========== CONSUMERS ==========
++    consumers = {}
++    for cid in [1, 2]:
++        start = first_time(DF, f"start_c{cid}")
++        vote_edges = rising_edges_bool(DF[f"cons{cid}_vote"], T)
++        delay = mean_delay(SRC_EDGES, vote_edges)
++        overruns = int(DF[f"ov_c{cid}"].sum())
++        status_1s = state_at(DF, f"cons{cid}_state", 1000)
++        fail_rows = DF[DF[f"cons{cid}_state"] == "FAILED"]
++        if not fail_rows.empty:
++            fail_time = float(fail_rows["t_ms"].iloc[0])
++            new_status = "FAILED"
++        else:
++            fail_time = np.nan
++            new_status = "N/A"
++        consumers[cid] = {
++            "start": start,
++            "delay": delay,
++            "overruns": overruns,
++            "status_1s": status_1s,
++            "fail_time": fail_time,
++            "new_status": new_status
++        }
++
++    # ========== PUBLISHER ==========
++    pub_start = first_time(DF, "start_pub")
++    # fronts logiques (diagnostic): dépend de changements de valeur
++    PUB_EDGES = rising_edges_bool(DF["pub_output"], T)
++    # liste de TOUS les instants de publication (plus robuste)
++    PUB_TIMES = DF.loc[DF["pub_output"].notna(), "t_ms"].to_numpy(dtype=float)
++    pub_delay = mean_delay(SRC_EDGES, PUB_EDGES)
++    pub_overruns = int(DF["ov_pub"].sum())
++
++    # ========== FAILURE / SWITCH / RECOVERY ==========
++    # 1) fault_time direct si disponible
++    fault_time_raw = first_time(DF, "failure_plc")  # peut être NaN
++    # 2) switch_time = 1er instant où C2 devient ACTIVE
++    c2_rows = DF[DF["cons2_state"] == "ACTIVE"]
++    switch_time = float(c2_rows["t_ms"].iloc[0]) if not c2_rows.empty else np.nan
++
++    # 3) fallback si fault_time absent: estimer par la détection HB + stall
++    detect_delay = max(HB_TIMEOUT_MS, STALL_LIMIT * CONSUMER_CYCLE_MS)
++    fault_time = fault_time_raw if not np.isnan(fault_time_raw) else (
++        switch_time - detect_delay if not np.isnan(switch_time) else np.nan
++    )
++
++    # 4) délais
++    switch_delay = (
++        switch_time - fault_time
++        if (not np.isnan(fault_time) and not np.isnan(switch_time))
++        else np.nan
++    )
++
++    # publication la plus proche APRES le switch (indépendant d'un front)
++    first_pub_after_switch = np.nan
++    if not np.isnan(switch_time) and len(PUB_TIMES) > 0:
++        after = PUB_TIMES[PUB_TIMES >= switch_time]
++        if len(after) > 0:
++            first_pub_after_switch = after[0]
++
++    # recovery pure pipeline (switch -> publish)
++    recovery_switch_to_pub = (
++        first_pub_after_switch - switch_time
++        if (not np.isnan(first_pub_after_switch) and not np.isnan(switch_time))
++        else np.nan
++    )
++    # recovery end-to-end (fault -> publish)
++    recovery_fault_to_pub = (
++        first_pub_after_switch - fault_time
++        if (not np.isnan(first_pub_after_switch) and not np.isnan(fault_time))
++        else np.nan
++    )
++
++    # (optionnel) edge-to-edge purement diagnostique
++    complete_delay_edge2edge = np.nan
++    if not np.isnan(fault_time) and not np.isnan(switch_time):
++        src_edge = SRC_EDGES[SRC_EDGES <= fault_time]
++        last_src = src_edge[-1] if len(src_edge) > 0 else np.nan
++        pub_edge = PUB_EDGES[PUB_EDGES >= switch_time]
++        first_pub_edge = pub_edge[0] if len(pub_edge) > 0 else np.nan
++        if not np.isnan(last_src) and not np.isnan(first_pub_edge):
++            complete_delay_edge2edge = first_pub_edge - last_src
++
++    # ========== MARKDOWN ==========
++    with open("report.md", "w", encoding="utf-8") as f:
++
++        f.write("# REDUNDANCY8 REPORT\n\n")
++
++        f.write("## Source\n")
++        f.write(f">Frequency calculated: {freq:.3f} Hz\n")
++        f.write(f">Cycle rate calculated: {cycle_rate:.2f} %\n\n")
++
++        for pid in [1, 2, 3]:
++            p = producers[pid]
++            f.write(f"## Producer {pid}\n")
++            f.write(f">start time: {p['start']:.3f} ms\n")
++            f.write(f">mean delay edges / source: {p['delay']:.3f} ms\n")
++            f.write(f">overruns: {p['overruns']}\n\n")
++
++        for cid in [1, 2]:
++            c = consumers[cid]
++            f.write(f"## Consumer {cid}\n")
++            f.write(f">start time: {c['start']:.3f} ms\n")
++            f.write(f">mean delay 2oo3 edges / source: {c['delay']:.3f} ms\n")
++            f.write(f">overruns: {c['overruns']}\n")
++            f.write(f">status @ 1s: {c['status_1s']}\n")
++            f.write(f">Moment of failure: {c['fail_time']:.3f} ms\n")
++            f.write(f">New status: {c['new_status']}\n\n")
++
++        f.write("## Publisher 1\n")
++        f.write(f">start time: {pub_start:.3f} ms\n")
++        f.write(f">mean delay edges / source (publisher output): {pub_delay:.3f} ms\n")
++        f.write(f">overruns: {pub_overruns}\n\n")
++
++        f.write("## PLC Failure / Recovery\n")
++        f.write(f">fault time (raw/fallback): {fault_time:.3f} ms\n")
++        f.write(f">switch time (C2 ACTIVE): {switch_time:.3f} ms\n")
++        f.write(f">switch delay (fault -> switch): {switch_delay:.3f} ms\n")
++        f.write(f">recovery (switch -> first publish): {recovery_switch_to_pub:.3f} ms\n")
++        f.write(f">recovery (fault -> first publish): {recovery_fault_to_pub:.3f} ms\n")
++        f.write(f">diagnostic edge-to-edge (src edge -> pub edge): {complete_delay_edge2edge:.3f} ms\n")
++
++    # ========== SUMMARY CSV ==========
++    summary = {
++        "freq": freq,
++        "cycle_rate": cycle_rate,
++        "p1_start": producers[1]["start"],
++        "p2_start": producers[2]["start"],
++        "p3_start": producers[3]["start"],
++        "c1_start": consumers[1]["start"],
++        "c2_start": consumers[2]["start"],
++        "p1_delay": producers[1]["delay"],
++        "p2_delay": producers[2]["delay"],
++        "p3_delay": producers[3]["delay"],
++        "c1_delay": consumers[1]["delay"],
++        "c2_delay": consumers[2]["delay"],
++        "pub_delay": pub_delay,
++        "fault_time": fault_time,
++        "switch_time": switch_time,
++        "switch_delay": switch_delay,
++        "recovery_switch_to_pub": recovery_switch_to_pub,
++        "recovery_fault_to_pub": recovery_fault_to_pub,
++        "edge2edge_delay": complete_delay_edge2edge
++    }
++
++    file = "reports.csv"
++    df_res = pd.read_csv(file) if os.path.exists(file) else pd.DataFrame()
++    df_res = pd.concat([df_res, pd.DataFrame([summary])], ignore_index=True)
++    df_res.to_csv(file, index=False)
++
+     print("REDUNDANCY10 report generated.")--- a/visu_ptbg/references_simulation/graphical_report10.py
++++ b/visu_ptbg/references_simulation/graphical_report10.py
+@@ -1,207 +1,207 @@
+-import pandas as pd
+-import matplotlib.pyplot as plt
+-from matplotlib.ticker import MultipleLocator, AutoMinorLocator
+-
+-def draw():
+-
+-    # ==========================================================
+-    # LOAD DATA
+-    # ==========================================================
+-
+-    df = pd.read_csv("simulation10.csv")
+-
+-    # ==========================================================
+-    # STATE MAPPING
+-    # ==========================================================
+-
+-    STATE_MAP = {"STOP":-1,"FAILED":0,"INIT": 1, "STANDBY": 2, "ACTIVE": 3}
+-    df["cons1_state_val"] = df["cons1_state"].map(STATE_MAP)
+-    df["cons2_state_val"] = df["cons2_state"].map(STATE_MAP)
+-
+-    # ==========================================================
+-    # START DETECTION
+-    # ==========================================================
+-
+-    def first_change(col):
+-        diff = df[col].diff().fillna(0)
+-        idx = diff.ne(0)
+-        if idx.any():
+-            return df.loc[idx, "t_ms"].iloc[0]
+-        return None
+-    
+-    def first_specific_change(col, from_state, to_state):
+-        prev = df[col].shift(1)
+-        curr = df[col]
+-        
+-        mask = (prev == from_state) & (curr == to_state)
+-        
+-        if mask.any():
+-            return df.loc[mask, "t_ms"].iloc[0]
+-        return None
+-    
+-    start_prod1 = first_change("prod1")
+-    start_prod2 = first_change("prod2")
+-    start_prod3 = first_change("prod3")
+-    start_cons1 = first_specific_change("cons1_state","STOP","INIT")
+-    start_cons2 = first_specific_change("cons2_state","STOP","INIT")
+-    start_pub   = first_change("published")
+-    start_fail  = first_change("failure_plc")
+-
+-    # ==========================================================
+-    # DELAY COMPUTATION
+-    # ==========================================================
+-
+-    def detect_edges(df, column):
+-        tmp = df.copy()
+-        tmp["prev"] = tmp[column].shift(1)
+-        return tmp[tmp[column] != tmp["prev"]][["t_ms", column]]
+-
+-    source_edges = detect_edges(df, "source")
+-    edges_c1 = detect_edges(df, "cons1_vote")
+-    edges_c2 = detect_edges(df, "cons2_vote")
+-
+-    def compute_delay(consumer_edges, source_edges, colname):
+-
+-        delays = []
+-
+-        for _, row in consumer_edges.iterrows():
+-
+-            t_cons = row["t_ms"]
+-            val = row[colname]
+-
+-            src_match = source_edges[
+-                (source_edges["source"] == val) &
+-                (source_edges["t_ms"] <= t_cons)
+-            ]
+-
+-            if not src_match.empty:
+-                t_src = src_match.iloc[-1]["t_ms"]
+-                delays.append((t_cons, t_cons - t_src))
+-
+-        return pd.DataFrame(delays, columns=["t_ms", "delay_ms"])
+-
+-    delay_c1 = compute_delay(edges_c1, source_edges, "cons1_vote")
+-    delay_c2 = compute_delay(edges_c2, source_edges, "cons2_vote")
+-
+-    # ==========================================================
+-    # HELPER: DRAW START ARROW
+-    # ==========================================================
+-
+-    def draw_start_arrow(ax, x, label):
+-        if x is None:
+-            return
+-        ymin, ymax = ax.get_ylim()
+-        ax.annotate(
+-            label,
+-            xy=(x, ymin),
+-            xycoords='data',
+-            xytext=(x, ymin - (ymax - ymin)*0.25),
+-            arrowprops=dict(arrowstyle="->"),
+-            ha="center",
+-            fontsize=8
+-        )
+-
+-    # ==========================================================
+-    # FIGURE (9 plots now)
+-    # ==========================================================
+-
+-    fig, axs = plt.subplots(
+-        8, 1,
+-        figsize=(12, 12),
+-        sharex=True,
+-        gridspec_kw={'height_ratios': [1,1,1,1,1,2,2,1]}
+-    )
+-
+-    # ----------------------------------------------------------
+-    # 1) SOURCE
+-    # ----------------------------------------------------------
+-
+-    axs[0].step(df["t_ms"], df["source"], where="post", linewidth=2, color="black")
+-    axs[0].set_title("Signal Source")
+-    axs[0].grid(True)
+-
+-    # ----------------------------------------------------------
+-    # 2–4) PRODUCERS
+-    # ----------------------------------------------------------
+-
+-    axs[1].step(df["t_ms"], df["prod1"], where="post", linewidth=2)
+-    axs[1].set_title("Producer 1")
+-    axs[1].grid(True)
+-
+-    axs[2].step(df["t_ms"], df["prod2"], where="post", linewidth=2)
+-    axs[2].set_title("Producer 2")
+-    axs[2].grid(True)
+-
+-    axs[3].step(df["t_ms"], df["prod3"], where="post", linewidth=2)
+-    axs[3].set_title("Producer 3")
+-    axs[3].grid(True)
+-
+-    # Draw producer start arrows
+-    draw_start_arrow(axs[1], start_prod1, "Start P1")
+-    draw_start_arrow(axs[2], start_prod2, "Start P2")
+-    draw_start_arrow(axs[3], start_prod3, "Start P3")
+-
+-    # ----------------------------------------------------------
+-    # 5) CONSUMER VOTES
+-    # ----------------------------------------------------------
+-
+-    axs[4].step(df["t_ms"], df["cons1_vote"],where="post", linewidth=2, label="Cons1")
+-    axs[4].step(df["t_ms"], df["cons2_vote"],where="post", linewidth=2, label="Cons2")
+-    axs[4].set_title("Vote 2oo3 from consumers")
+-    axs[4].legend()
+-    axs[4].grid(True)
+-
+-
+-
+-    # ----------------------------------------------------------
+-    # 6) DELAYS
+-    # ----------------------------------------------------------
+-
+-    if not delay_c1.empty:
+-        axs[5].step(delay_c1["t_ms"], delay_c1["delay_ms"],where="post", linewidth=2, label="Cons1")
+-
+-    if not delay_c2.empty:
+-        axs[5].step(delay_c2["t_ms"], delay_c2["delay_ms"],where="post", linewidth=2, label="Cons2")
+-
+-    axs[5].set_title("delay consumers vs source (ms)")
+-    axs[5].set_ylim(0, 60)
+-    axs[5].legend()
+-    axs[5].grid(True)
+-
+-    # ----------------------------------------------------------
+-    # 7) CONSUMER STATES
+-    # ----------------------------------------------------------
+-
+-    axs[6].step(df["t_ms"], df["cons1_state_val"],where="post", linewidth=2, label="Cons1")
+-    axs[6].step(df["t_ms"], df["cons2_state_val"],where="post", linewidth=2, label="Cons2")
+-    axs[6].set_yticks([-1,0,1,2,3])
+-    axs[6].set_yticklabels(["STOP","FAILED","INIT","STANDBY","ACTIVE"])
+-    axs[6].set_title("Consumers Status")
+-    axs[6].legend()
+-    axs[6].grid(True)
+-
+-    draw_start_arrow(axs[6], start_fail , "Failure PLC1")
+-    draw_start_arrow(axs[6], start_cons1, "Start C1")
+-    draw_start_arrow(axs[6], start_cons2, "Start C2")
+-
+-    # ----------------------------------------------------------
+-    # 8) PUBLISHER (dedicated)
+-    # ----------------------------------------------------------
+-
+-    axs[7].step(df["t_ms"], df["pub_output"],where="post", linewidth=2)
+-    axs[7].set_title("Publisher (brut)")
+-    axs[7].grid(True)
+-
+-    for ax in axs:
+-        ax.xaxis.set_major_locator(MultipleLocator(1000))
+-        ax.xaxis.set_minor_locator(MultipleLocator(250))
+-        ax.grid(which='major', color='#505050', linestyle='--', linewidth=0.8)
+-        ax.grid(which='minor', color='#505050', linestyle=':', linewidth=0.5)
+-
+-    # ----------------------------------------------------------
+-    # GLOBAL
+-    # ----------------------------------------------------------
+-
+-    axs[-1].set_xlim(left=0)
+-    plt.tight_layout()
+-    plt.show()
++import pandas as pd
++import matplotlib.pyplot as plt
++from matplotlib.ticker import MultipleLocator, AutoMinorLocator
++
++def draw():
++
++    # ==========================================================
++    # LOAD DATA
++    # ==========================================================
++
++    df = pd.read_csv("simulation10.csv")
++
++    # ==========================================================
++    # STATE MAPPING
++    # ==========================================================
++
++    STATE_MAP = {"STOP":-1,"FAILED":0,"INIT": 1, "STANDBY": 2, "ACTIVE": 3}
++    df["cons1_state_val"] = df["cons1_state"].map(STATE_MAP)
++    df["cons2_state_val"] = df["cons2_state"].map(STATE_MAP)
++
++    # ==========================================================
++    # START DETECTION
++    # ==========================================================
++
++    def first_change(col):
++        diff = df[col].diff().fillna(0)
++        idx = diff.ne(0)
++        if idx.any():
++            return df.loc[idx, "t_ms"].iloc[0]
++        return None
++    
++    def first_specific_change(col, from_state, to_state):
++        prev = df[col].shift(1)
++        curr = df[col]
++        
++        mask = (prev == from_state) & (curr == to_state)
++        
++        if mask.any():
++            return df.loc[mask, "t_ms"].iloc[0]
++        return None
++    
++    start_prod1 = first_change("prod1")
++    start_prod2 = first_change("prod2")
++    start_prod3 = first_change("prod3")
++    start_cons1 = first_specific_change("cons1_state","STOP","INIT")
++    start_cons2 = first_specific_change("cons2_state","STOP","INIT")
++    start_pub   = first_change("published")
++    start_fail  = first_change("failure_plc")
++
++    # ==========================================================
++    # DELAY COMPUTATION
++    # ==========================================================
++
++    def detect_edges(df, column):
++        tmp = df.copy()
++        tmp["prev"] = tmp[column].shift(1)
++        return tmp[tmp[column] != tmp["prev"]][["t_ms", column]]
++
++    source_edges = detect_edges(df, "source")
++    edges_c1 = detect_edges(df, "cons1_vote")
++    edges_c2 = detect_edges(df, "cons2_vote")
++
++    def compute_delay(consumer_edges, source_edges, colname):
++
++        delays = []
++
++        for _, row in consumer_edges.iterrows():
++
++            t_cons = row["t_ms"]
++            val = row[colname]
++
++            src_match = source_edges[
++                (source_edges["source"] == val) &
++                (source_edges["t_ms"] <= t_cons)
++            ]
++
++            if not src_match.empty:
++                t_src = src_match.iloc[-1]["t_ms"]
++                delays.append((t_cons, t_cons - t_src))
++
++        return pd.DataFrame(delays, columns=["t_ms", "delay_ms"])
++
++    delay_c1 = compute_delay(edges_c1, source_edges, "cons1_vote")
++    delay_c2 = compute_delay(edges_c2, source_edges, "cons2_vote")
++
++    # ==========================================================
++    # HELPER: DRAW START ARROW
++    # ==========================================================
++
++    def draw_start_arrow(ax, x, label):
++        if x is None:
++            return
++        ymin, ymax = ax.get_ylim()
++        ax.annotate(
++            label,
++            xy=(x, ymin),
++            xycoords='data',
++            xytext=(x, ymin - (ymax - ymin)*0.25),
++            arrowprops=dict(arrowstyle="->"),
++            ha="center",
++            fontsize=8
++        )
++
++    # ==========================================================
++    # FIGURE (9 plots now)
++    # ==========================================================
++
++    fig, axs = plt.subplots(
++        8, 1,
++        figsize=(12, 12),
++        sharex=True,
++        gridspec_kw={'height_ratios': [1,1,1,1,1,2,2,1]}
++    )
++
++    # ----------------------------------------------------------
++    # 1) SOURCE
++    # ----------------------------------------------------------
++
++    axs[0].step(df["t_ms"], df["source"], where="post", linewidth=2, color="black")
++    axs[0].set_title("Signal Source")
++    axs[0].grid(True)
++
++    # ----------------------------------------------------------
++    # 2–4) PRODUCERS
++    # ----------------------------------------------------------
++
++    axs[1].step(df["t_ms"], df["prod1"], where="post", linewidth=2)
++    axs[1].set_title("Producer 1")
++    axs[1].grid(True)
++
++    axs[2].step(df["t_ms"], df["prod2"], where="post", linewidth=2)
++    axs[2].set_title("Producer 2")
++    axs[2].grid(True)
++
++    axs[3].step(df["t_ms"], df["prod3"], where="post", linewidth=2)
++    axs[3].set_title("Producer 3")
++    axs[3].grid(True)
++
++    # Draw producer start arrows
++    draw_start_arrow(axs[1], start_prod1, "Start P1")
++    draw_start_arrow(axs[2], start_prod2, "Start P2")
++    draw_start_arrow(axs[3], start_prod3, "Start P3")
++
++    # ----------------------------------------------------------
++    # 5) CONSUMER VOTES
++    # ----------------------------------------------------------
++
++    axs[4].step(df["t_ms"], df["cons1_vote"],where="post", linewidth=2, label="Cons1")
++    axs[4].step(df["t_ms"], df["cons2_vote"],where="post", linewidth=2, label="Cons2")
++    axs[4].set_title("Vote 2oo3 from consumers")
++    axs[4].legend()
++    axs[4].grid(True)
++
++
++
++    # ----------------------------------------------------------
++    # 6) DELAYS
++    # ----------------------------------------------------------
++
++    if not delay_c1.empty:
++        axs[5].step(delay_c1["t_ms"], delay_c1["delay_ms"],where="post", linewidth=2, label="Cons1")
++
++    if not delay_c2.empty:
++        axs[5].step(delay_c2["t_ms"], delay_c2["delay_ms"],where="post", linewidth=2, label="Cons2")
++
++    axs[5].set_title("delay consumers vs source (ms)")
++    axs[5].set_ylim(0, 60)
++    axs[5].legend()
++    axs[5].grid(True)
++
++    # ----------------------------------------------------------
++    # 7) CONSUMER STATES
++    # ----------------------------------------------------------
++
++    axs[6].step(df["t_ms"], df["cons1_state_val"],where="post", linewidth=2, label="Cons1")
++    axs[6].step(df["t_ms"], df["cons2_state_val"],where="post", linewidth=2, label="Cons2")
++    axs[6].set_yticks([-1,0,1,2,3])
++    axs[6].set_yticklabels(["STOP","FAILED","INIT","STANDBY","ACTIVE"])
++    axs[6].set_title("Consumers Status")
++    axs[6].legend()
++    axs[6].grid(True)
++
++    draw_start_arrow(axs[6], start_fail , "Failure PLC1")
++    draw_start_arrow(axs[6], start_cons1, "Start C1")
++    draw_start_arrow(axs[6], start_cons2, "Start C2")
++
++    # ----------------------------------------------------------
++    # 8) PUBLISHER (dedicated)
++    # ----------------------------------------------------------
++
++    axs[7].step(df["t_ms"], df["pub_output"],where="post", linewidth=2)
++    axs[7].set_title("Publisher (brut)")
++    axs[7].grid(True)
++
++    for ax in axs:
++        ax.xaxis.set_major_locator(MultipleLocator(1000))
++        ax.xaxis.set_minor_locator(MultipleLocator(250))
++        ax.grid(which='major', color='#505050', linestyle='--', linewidth=0.8)
++        ax.grid(which='minor', color='#505050', linestyle=':', linewidth=0.5)
++
++    # ----------------------------------------------------------
++    # GLOBAL
++    # ----------------------------------------------------------
++
++    axs[-1].set_xlim(left=0)
++    plt.tight_layout()
++    plt.show()
+--- a/visu_ptbg/src/curseurs.py
++++ b/visu_ptbg/src/curseurs.py
+@@ -53,6 +53,8 @@
+         self.sur_position = None
+         self.lecteur = LecteurEchantillons(signal)
+         self.mode = "Aucun"
++        self.suivi = False
++        self.condition = None
+         self.cible = 0
+         self.positions = [None, None]
+         limites = (axe.get_xlim(), axe.get_ylim(), moniteur.get_xlim(), moniteur.get_ylim())
+@@ -64,7 +66,8 @@
+         self.annotation = axe.text(.99, .02, "", transform=axe.transAxes,
+                                    ha="right", va="bottom", fontsize=8, zorder=10,
+                                    bbox=dict(facecolor="white", alpha=.85, edgecolor="none"))
+-        self.connexions = [figure.canvas.mpl_connect("button_press_event", self._clic)]
++        self.connexions = [figure.canvas.mpl_connect("button_press_event", self._clic),
++                           figure.canvas.mpl_connect("motion_notify_event", self._mouvement)]
+         # Un artiste invisible à x=0 ne doit pas agrandir le domaine temporel.
+         axe.set_xlim(limites[0]); axe.set_ylim(limites[1])
+         moniteur.set_xlim(limites[2]); moniteur.set_ylim(limites[3])
+@@ -89,12 +92,68 @@
+         if barre and barre.mode or evenement.inaxes is not self.axe or evenement.button != 1:
+             return
+         if self.mode == "Horizontal" and evenement.ydata is not None:
+-            self.horizontale.set_ydata([evenement.ydata] * 2)
+-            self.horizontale.set_visible(True)
+-            self.annotation.set_text(f"Y = {evenement.ydata:.9g} (repère)")
+-            self.afficher(self.annotation.get_text())
++            self.placer_horizontal(evenement.ydata)
+         elif self.mode in ("Vertical", "Double vertical") and evenement.xdata is not None:
+             self.placer(evenement.xdata, self.cible if self.mode == "Double vertical" else 0)
++        self.figure.canvas.draw_idle()
++
++    def definir_condition(self, condition):
++        """Même CSV et même ligne physique ; jamais d'alignement par proximité."""
++        if condition is not None:
++            if condition.type_signal != "Bool" or not meme_horloge(self.signal, condition):
++                raise ValueError("La condition doit être un Bool de la même lecture du CSV.")
++        self.condition = condition
++        self.horizontale.set_visible(False)
++        self.annotation.set_text("")
++        self.afficher("Condition : " + (condition.colonne + " = vrai ; absences et invalides exclues."
++                                      if condition else "aucune"))
++        self.figure.canvas.draw_idle()
++
++    def placer_horizontal(self, y):
++        """Lire la valeur analogique mesurée la plus proche de l'ordonnée visée.
++
++        Le Bool vrai autorise uniquement la mesure sur sa propre ligne. On ne
++        prolonge pas un état à travers un champ vide ni un autre timestamp.
++        """
++        if self.signal.type_signal != "Float" or not isfinite(y):
++            raise ValueError("Choisir une ordonnée finie sur un signal Float.")
++        autorisees = None
++        if self.condition is not None:
++            autorisees = {ligne for ligne, valeur in zip(self.condition.lignes, self.condition.valeurs)
++                          if valeur == 1}
++        candidats = [i for i, valeur in enumerate(self.signal.valeurs)
++                     if isfinite(valeur) and (autorisees is None or self.signal.lignes[i] in autorisees)]
++        if not candidats:
++            self.horizontale.set_visible(False)
++            self.annotation.set_text("Aucune mesure autorisée")
++            self.afficher("Aucune mesure analogique présente avec un Bool vrai sur la même ligne.")
++            return []
++        meilleur = min(candidats, key=lambda i: (abs(self.signal.valeurs[i] - y), i))
++        valeur = self.signal.valeurs[meilleur]
++        indices = [i for i in candidats if self.signal.valeurs[i] == valeur]
++        self.horizontale.set_ydata([valeur] * 2)
++        self.horizontale.set_visible(True)
++        condition = "" if self.condition is None else f" | {self.condition.colonne} = vrai"
++        self.annotation.set_text(f"Y mesuré = {valeur:.9g}" + condition)
++        self.afficher(self.annotation.get_text() + "\n" + self.lecteur.decrire(indices))
++        return indices
++
++    def _mouvement(self, evenement):
++        """REQ 5402 : suivre la souris seulement en mode demandé, hors zoom/pan.
++
++        Ne redessiner que lorsque l'échantillon change : le suivi ne doit pas
++        déclencher un rendu coûteux pour chaque pixel parcouru.
++        """
++        barre = getattr(self.figure.canvas, "toolbar", None)
++        if (not self.suivi or self.mode not in ("Vertical", "Double vertical")
++                or evenement.inaxes is not self.axe or evenement.xdata is None
++                or (barre and barre.mode)):
++            return
++        cible = self.cible if self.mode == "Double vertical" else 0
++        temps, _ = self.lecteur.proche(evenement.xdata)
++        if self.positions[cible] is not None and self.positions[cible][0] == temps:
++            return
++        self.placer(evenement.xdata, cible)
+         self.figure.canvas.draw_idle()
+ 
+     def placer(self, x, cible=0, notifier=True):
+--- a/visu_ptbg/src/rapport_pdf.py
++++ b/visu_ptbg/src/rapport_pdf.py
+@@ -122,3 +122,35 @@
+     with destination.open("xb") as sortie:
+         sortie.write(tampon.getvalue())
+     return destination
++
++
++def _rendre_pdf_isole(pages, valeurs):
++    """Processus séparé : aucune figure ou instance Tk partagée avec l'IHM."""
++    from tempfile import TemporaryDirectory
++    with TemporaryDirectory() as dossier:
++        fichier = generer_pdf(Path(dossier) / "rapport.pdf", pages, **valeurs)
++        return fichier.read_bytes()
++
++
++def exporter_pdf_en_fond(chemin, pages, annulation, publier, **valeurs):
++    """REQ 4105 : rendu isolé et publication seulement si non annulé.
++
++    La capture des figures vivantes reste sur le fil Tk ; les images figées
++    sont ensuite rendues par un autre processus Matplotlib. Annuler écarte le
++    résultat et ne crée pas le PDF demandé, même si le rendu a déjà commencé.
++    """
++    from concurrent.futures import ProcessPoolExecutor
++    from multiprocessing import get_context
++    destination = Path(chemin)
++    if destination.suffix.lower() != ".pdf" or destination.exists():
++        raise ValueError("Choisir un nouveau fichier .pdf pour préserver les fichiers existants.")
++    if annulation.is_set():
++        return None
++    publier(("progression", "Génération PDF en arrière-plan…"))
++    with ProcessPoolExecutor(max_workers=1, mp_context=get_context("spawn")) as executeur:
++        contenu = executeur.submit(_rendre_pdf_isole, pages, valeurs).result()
++    if annulation.is_set():
++        return None
++    with destination.open("xb") as sortie:
++        sortie.write(contenu)
++    return destination
+--- a/visu_ptbg/src/signal_csv.py
++++ b/visu_ptbg/src/signal_csv.py
+@@ -168,7 +168,7 @@
+ 
+ # === 2. Relire le même fichier et contrôler sa concordance avec le diagnostic ===
+ def preparer_signal(source: SourceTemps, resultat: dict[str, Any], colonne: str,
+-                    type_signal: str = "Auto") -> SignalPrepare:
++                    type_signal: str = "Auto", *, autoriser_vide: bool = False) -> SignalPrepare:
+     """Lire une colonne numérique sans trier, resynchroniser ou interpoler.
+ 
+     Des temps distincts qui deviennent le même flottant bloquent le tracé pour
+@@ -236,7 +236,7 @@
+         temps_exacts.append(exact)
+         valeurs.append(y if y is not None else math.nan)
+         absentes += y is None
+-    if absentes == len(valeurs):
++    if absentes == len(valeurs) and not autoriser_vide:
+         raise CsvDiagnosticError("signal_non_numerique", "Cette colonne ne contient aucune valeur numérique affichable.")
+     if not math.isfinite(max(temps) - min(temps)):
+         raise CsvDiagnosticError("precision_temps_graphique", "L'étendue temporelle dépasse la capacité du tracé.")
+--- a/visu_ptbg/src/version_visu.py
++++ b/visu_ptbg/src/version_visu.py
+@@ -1,3 +1,3 @@
+ """Version unique affichée et enregistrée par VISU PTBG."""
+ 
+-VERSION_VISU = "0.9.0"
++VERSION_VISU = "1.0.0"
+--- a/visu_ptbg/src/vue_arrangements.py
++++ b/visu_ptbg/src/vue_arrangements.py
+@@ -50,7 +50,7 @@
+         item = canevas.create_window(0, 0, window=page.panneaux, anchor="nw")
+         def dimensionner(evenement):
+             largeur = max(evenement.width, 760 * (2 if modele == MODELES[1] else 1))
+-            hauteur = max(evenement.height, 620 * (2 if modele == MODELES[2] else 1))
++            hauteur = max(evenement.height, 520 * (2 if modele == MODELES[2] else 1))
+             canevas.itemconfigure(item, width=largeur, height=hauteur)
+             canevas.configure(scrollregion=(0, 0, largeur, hauteur))
+         canevas.bind("<Configure>", dimensionner)
+@@ -108,6 +108,18 @@
+         self.onglets.tab(page, text=f"Vue {page.numero} — X/Y")
+         return vue
+ 
++    def ajouter_groupe(self, signaux, modele, decimale):
++        from groupe_binaire import verifier_groupe
++        from vue_signal import VueSignal
++        verifier_groupe(signaux)
++        page = self.nouveau()
++        vue = VueSignal(page.panneaux, signaux[0], modele, decimale, groupe=signaux)
++        page.panneaux.add(vue, weight=1)
++        page.vues.append(vue)
++        page.capacite = 1
++        self.onglets.tab(page, text=f"Vue {page.numero} — Groupe Bool")
++        return vue
++
+     def lier(self):
+         from curseurs import meme_horloge
+         try:
+--- a/visu_ptbg/src/vue_rapports.py
++++ b/visu_ptbg/src/vue_rapports.py
+@@ -3,7 +3,7 @@
+ import tkinter as tk
+ from tkinter import ttk, filedialog, messagebox
+ 
+-from rapport_pdf import PageRapport, capturer, generer_pdf
++from rapport_pdf import PageRapport, capturer, exporter_pdf_en_fond
+ 
+ 
+ class Rapports:
+@@ -56,14 +56,11 @@
+                                                   filetypes=[("Rapport PDF", "*.pdf")])
+             if not chemin:
+                 return
+-            # Le rendu PDF reste sur le fil graphique : Matplotlib n'est pas
+-            # thread-safe. L'import CSV utilise le travail de fond séparément.
+-            try:
+-                generer_pdf(chemin, pages, **valeurs)
+-            except (OSError, ValueError, RuntimeError) as exc:
+-                messagebox.showerror("PDF non enregistré", str(exc), parent=dialogue)
+-                return
+-            dialogue.destroy()
+-            self.informer(f"Rapport enregistré : {chemin} ({len(pages)} page(s)).")
++            def calcul(annulation, publier):
++                return exporter_pdf_en_fond(chemin, pages, annulation, publier, **valeurs)
++            def termine(destination):
++                self.informer(f"Rapport enregistré : {destination} ({len(pages)} page(s)).")
++            if self.lancer(calcul, termine):
++                dialogue.destroy()
+ 
+-        ttk.Button(dialogue, text="Enregistrer…", command=enregistrer).grid(row=4, column=1, sticky="e", padx=8, pady=8)
++        ttk.Button(dialogue, text="Enregistrer...", command=enregistrer).grid(row=4, column=1, sticky="e", padx=8, pady=8)
+--- a/visu_ptbg/src/vue_signal.py
++++ b/visu_ptbg/src/vue_signal.py
+@@ -15,6 +15,19 @@
+ from tkinter import ttk, messagebox
+ 
+ from trace_signal import creer_figure
++
++
++def fermer_canvas(canvas):
++    """Annuler le rendu Tk différé avant de détruire son widget.
++
++    TkAgg garde l'identifiant du after_idle : sans l'annuler, fermer un onglet
++    juste après un curseur laisse un callback visant un widget détruit.
++    """
++    identifiant = getattr(canvas, "_idle_draw_id", None)
++    if identifiant is not None:
++        canvas.get_tk_widget().after_cancel(identifiant)
++        canvas._idle_draw_id = None
++    canvas.stop_event_loop()
+ 
+ 
+ def basculer_moniteur(axe_signal, axe_temps, autorise: bool) -> bool:
+@@ -37,15 +50,20 @@
+ class VueSignal(ttk.Frame):
+     """Héberger le canevas et une barre de navigation, sans export de rapport."""
+ 
+-    def __init__(self, parent, signal, moniteur, decimale="."):
++    def __init__(self, parent, signal, moniteur, decimale=".", *, groupe=None):
+         # === 1. Importer seulement quand la fonction graphique est demandée ===
+         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+         super().__init__(parent)
+         try:
+             self.signal = signal
+-            self.signaux = [signal]
++            self.signaux = list(groupe) if groupe else [signal]
++            self.groupe = bool(groupe)
+             self.moniteur = moniteur
+-            self.figure, self.axe_signal, self.axe_temps = creer_figure(signal, moniteur, decimale)
++            if groupe:
++                from groupe_binaire import creer_figure_groupe
++                self.figure, self.axe_signal, self.axe_temps = creer_figure_groupe(groupe, moniteur, decimale)
++            else:
++                self.figure, self.axe_signal, self.axe_temps = creer_figure(signal, moniteur, decimale)
+             self.canvas = FigureCanvasTkAgg(self.figure, master=self)
+             self.masquage_autorise = bool(moniteur.get("masquage_autorise"))
+             self.bouton_moniteur = ttk.Button(
+@@ -67,11 +85,19 @@
+             for i in range(2):
+                 ttk.Radiobutton(commandes, text=f"C{i+1}", variable=self.cible, value=i,
+                                 command=self._choisir_cible).pack(side="left")
+-            ttk.Button(commandes, text="Lectures…", command=self._ouvrir_lectures).pack(side="left")
++            ttk.Button(commandes, text="Lectures...", command=self._ouvrir_lectures).pack(side="left")
++            self.suivi = tk.BooleanVar(value=False)
++            ttk.Checkbutton(commandes, text="Suivi souris", variable=self.suivi,
++                            command=self._choisir_suivi).pack(side="left")
++            if signal.type_signal == "Float":
++                ttk.Button(self, text="Retirer la condition Bool",
++                           command=lambda: self.curseurs.definir_condition(None)).pack(anchor="w")
+             self.texte_lecture = "Choisir un curseur, puis cliquer sur un échantillon."
+             self.popup = None
+             self.curseurs = Curseurs(self.figure, self.axe_signal, self.axe_temps,
+                                      signal, self._lecture)
++            for supplement in self.signaux[1:]:
++                self.curseurs.ajouter(supplement)
+ 
+             class BarreNavigation(NavigationToolbar2Tk):
+                 """Garder le zoom/déplacement ; les rapports seront une étape dédiée."""
+@@ -95,9 +121,19 @@
+     def _choisir_cible(self):
+         self.curseurs.cible = self.cible.get()
+ 
++    def _choisir_suivi(self):
++        self.curseurs.suivi = self.suivi.get()
++        if self.suivi.get():
++            if self.mode_curseur.get() not in ("Vertical", "Double vertical"):
++                self.mode_curseur.set("Vertical")
++                self._choisir_curseur()
++            self._ouvrir_lectures()
++
+     def superposer(self, signal):
+         from curseurs import meme_horloge, Curseurs
+         from _signal_draw import sample_chart
++        if self.groupe:
++            raise ValueError("Créer un nouveau groupe pour modifier la liste de ses colonnes.")
+         if not meme_horloge(self.signal, signal):
+             raise ValueError("Pour superposer, choisir le même CSV. Les autres sources restent dans des panneaux indépendants.")
+         if (self.signal.raster_temps, self.signal.tolerance_temps) != (signal.raster_temps, signal.tolerance_temps):
+@@ -151,6 +187,8 @@
+ 
+     def destroy(self):
+         # Déconnecter les callbacks et fermer les lectures avec leur onglet.
++        if hasattr(self, "canvas"):
++            fermer_canvas(self.canvas)
+         if hasattr(self, "curseurs"):
+             self.curseurs.detruire()
+         if getattr(self, "popup", None) is not None and self.popup.winfo_exists():
+--- a/visu_ptbg/src/vue_temps.py
++++ b/visu_ptbg/src/vue_temps.py
+@@ -40,7 +40,7 @@
+         commandes.grid(row=2, column=0, sticky="ew", pady=(0, 5))
+         ttk.Checkbutton(commandes, text="Points à examiner uniquement", variable=self.anomalies_seules,
+                         command=self._filtrer).pack(side="left")
+-        ttk.Button(commandes, text="Graphique des écarts…", command=self._ouvrir_graphique).pack(side="right")
++        ttk.Button(commandes, text="Graphique des écarts...", command=self._ouvrir_graphique).pack(side="right")
+         tableau = ttk.Frame(self)
+         tableau.grid(row=3, column=0, sticky="nsew")
+         tableau.columnconfigure(0, weight=1)
+--- a/visu_ptbg/src/vue_xy.py
++++ b/visu_ptbg/src/vue_xy.py
+@@ -90,6 +90,8 @@
+         self.canvas.draw_idle()
+ 
+     def destroy(self):
++        from vue_signal import fermer_canvas
++        fermer_canvas(self.canvas)
+         self.canvas.mpl_disconnect(self.connexion)
+         self.figure.clear()
+         super().destroy()
+--- a/visu_ptbg/verifier_robustesse.py
++++ b/visu_ptbg/verifier_robustesse.py
+@@ -39,7 +39,7 @@
+     """
+     # === 2. Préparer le contrôle de non-modification des fichiers surveillés ===
+     fichiers = []
+-    for dossier in ("donnees", "references_simulation", "src", "tests", "tests_integration", "exemples"):
++    for dossier in ("donnees", "references_simulation", "src", "tests", "tests_integration", "tests_gui", "exemples"):
+         fichiers.extend(p for p in (PROJET / dossier).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
+     fichiers.extend(PROJET.glob("*.py"))
+     def hacher(chemin):
+--- /dev/null
++++ b/visu_ptbg/src/groupe_binaire.py
+@@ -0,0 +1,48 @@
++"""REQ 2201 : plusieurs colonnes Bool, sans mot binaire ni état recomposé.
++
++Les décalages verticaux servent à séparer les pistes. Les lectures et les
++étiquettes conservent les valeurs Bool réelles ; aucune donnée n'est modifiée.
++"""
++from curseurs import meme_horloge
++from trace_signal import creer_figure
++
++
++def verifier_groupe(signaux):
++    if not 2 <= len(signaux) <= 8:
++        raise ValueError("Choisir entre 2 et 8 colonnes Bool pour un groupe.")
++    if len({s.colonne for s in signaux}) != len(signaux):
++        raise ValueError("Chaque colonne doit apparaître une seule fois.")
++    if any(s.type_signal != "Bool" or not meme_horloge(signaux[0], s) for s in signaux):
++        raise ValueError("Le groupe doit contenir des Bool de la même lecture du CSV.")
++    if any((s.raster_temps, s.tolerance_temps) !=
++           (signaux[0].raster_temps, signaux[0].tolerance_temps) for s in signaux):
++        raise ValueError("Les colonnes du groupe doivent partager le même profil temporel.")
++
++
++def creer_figure_groupe(signaux, moniteur, decimale="."):
++    verifier_groupe(signaux)
++    note = "\n".join(f"{s.colonne} : {len(s.indices_vides)} cellule(s) vide(s), "
++                     f"{len(s.indices_invalides)} invalide(s)" for s in signaux)
++    note += "\nPistes Bool indépendantes ; croix aux bords des cellules vides uniquement."
++    figure, axe, temps = creer_figure(signaux[0], moniteur, decimale, note_signal=note)
++    axe.clear()
++    ticks, libelles = [], []
++    for numero, signal in enumerate(signaux):
++        origine = 3 * (len(signaux) - 1 - numero)
++        couleur = f"C{numero}"
++        axe.plot(signal.temps, [v + origine for v in signal.valeurs],
++                 linestyle="None", marker=".", markersize=3, color=couleur)
++        if signal.indices_croix:
++            axe.plot([signal.temps[i] for i in signal.indices_croix],
++                     [signal.valeurs[i] + origine for i in signal.indices_croix],
++                     linestyle="None", marker="x", color="#dc6a00", markersize=8)
++        ticks.extend([origine, origine + 1])
++        libelles.extend([f"{signal.colonne} : 0", f"{signal.colonne} : 1"])
++        axe.axhspan(origine - .3, origine + 1.3, color=couleur, alpha=.04)
++    axe.set_yticks(ticks, libelles, fontsize=8)
++    axe.set_ylim(-.5, 3 * (len(signaux) - 1) + 1.5)
++    axe.set_title("Groupe Bool — états mesurés, sans maintien entre échantillons", fontsize=10, loc="left")
++    axe.tick_params(labelbottom=False)
++    axe.grid(axis="x", alpha=.2)
++    figure.subplots_adjust(left=.25)
++    return figure, axe, temps
+--- /dev/null
++++ b/visu_ptbg/tests/test_requis_v100.py
+@@ -0,0 +1,170 @@
++"""Cas métier décidés par Mourad : groupe Bool, suivi et condition par ligne."""
++import math
++from pathlib import Path
++import sys
++import tempfile
++from dataclasses import replace
++from threading import Event
++from types import SimpleNamespace
++import unittest
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
++from base_temps import SourceTemps, examiner_source
++from signal_csv import preparer_signal
++from moniteur_temps import construire_moniteur
++from curseurs import Curseurs
++from groupe_binaire import creer_figure_groupe, verifier_groupe
++from trace_signal import creer_figure
++from matplotlib.backends.backend_agg import FigureCanvasAgg
++
++
++class NouveauxRequisTests(unittest.TestCase):
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.fichier = Path(self.temp.name) / "plc.csv"
++        # Les doublons temporels ont des Bool différents : une jointure au
++        # timestamp aurait autorisé des mesures interdites.
++        self.fichier.write_text("t,v,a,b\n0,10,true,0\n1,20,false,1\n1,30,true,\n"
++                                "2,40,,0\n3,50,FAILED,1\n4,,true,0\n5,60,true,1\n", encoding="utf-8")
++        self.source = SourceTemps(self.fichier)
++        self.resultat = examiner_source(self.source)
++        self.modele = construire_moniteur(self.source, self.resultat)
++
++    def signal(self, colonne, typage="Auto"):
++        return preparer_signal(self.source, self.resultat, colonne, typage)
++
++    def curseurs(self):
++        signal = self.signal("v")
++        fig, axe, temps = creer_figure(signal, self.modele)
++        FigureCanvasAgg(fig)
++        self.addCleanup(fig.clear)
++        lectures = []
++        curseurs = Curseurs(fig, axe, temps, signal, lectures.append)
++        return curseurs, lectures
++
++    def test_5402_suivi_selectionne_les_mesures_et_conserve_les_doublons(self):
++        c, lectures = self.curseurs()
++        c.choisir("Vertical")
++        event = SimpleNamespace(inaxes=c.axe, xdata=1.1)
++        c._mouvement(event)
++        self.assertIsNone(c.positions[0])
++        c.suivi = True
++        c._mouvement(event)
++        self.assertEqual(c.positions[0], (1, [1, 2]))
++        self.assertIn("v=20", lectures[-1])
++        self.assertIn("v=30", lectures[-1])
++        compte = len(lectures)
++        c._mouvement(SimpleNamespace(inaxes=c.axe, xdata=1.2))
++        self.assertEqual(len(lectures), compte)
++
++    def test_5402_suivi_respecte_zoom_axes_et_cible_double(self):
++        c, _ = self.curseurs()
++        c.suivi = True
++        c.choisir("Double vertical")
++        c.cible = 1
++        c.figure.canvas.toolbar = SimpleNamespace(mode="zoom rect")
++        c._mouvement(SimpleNamespace(inaxes=c.axe, xdata=4))
++        self.assertEqual(c.positions, [None, None])
++        c.figure.canvas.toolbar = None
++        c._mouvement(SimpleNamespace(inaxes=c.moniteur, xdata=4))
++        self.assertEqual(c.positions, [None, None])
++        c._mouvement(SimpleNamespace(inaxes=c.axe, xdata=4))
++        self.assertIsNone(c.positions[0])
++        self.assertEqual(c.positions[1][0], 4)
++        c.detruire()
++
++    def test_5407_bool_vrai_sur_meme_ligne_uniquement(self):
++        c, lectures = self.curseurs()
++        c.definir_condition(self.signal("a", "Bool"))
++        self.assertEqual(c.placer_horizontal(20), [0])  # égalité : première mesure
++        self.assertEqual(c.placer_horizontal(29), [2])
++        self.assertIn("v=30", lectures[-1])
++        self.assertNotIn("v=20", lectures[-1])
++        self.assertEqual(c.placer_horizontal(50), [6])  # FAILED exclu
++        self.assertNotIn("v=50", lectures[-1])
++        self.assertIn("a = vrai", c.annotation.get_text())
++
++    def test_5407_aucun_bool_vrai_et_retrait_condition(self):
++        c, lectures = self.curseurs()
++        a = self.signal("a", "Bool")
++        c.definir_condition(replace(a, valeurs=[0, 0, math.nan, math.nan, math.nan, 0, 0]))
++        self.assertEqual(c.placer_horizontal(20), [])
++        self.assertFalse(c.horizontale.get_visible())
++        self.assertIn("Aucune mesure", lectures[-1])
++        c.definir_condition(None)
++        self.assertEqual(c.placer_horizontal(20), [1])
++
++    def test_5407_refuse_autre_fichier_autre_hash_et_float(self):
++        c, _ = self.curseurs()
++        a = self.signal("a", "Bool")
++        for autre in (replace(a, fichier="autre.csv"), replace(a, sha256="autre"), self.signal("v")):
++            with self.assertRaises(ValueError):
++                c.definir_condition(autre)
++
++    def test_2201_groupe_mesures_brutes_absences_et_moniteur(self):
++        signaux = [self.signal(c, "Bool") for c in ("a", "b")]
++        avant = self.fichier.read_bytes()
++        fig, axe, temps = creer_figure_groupe(signaux, self.modele)
++        self.addCleanup(fig.clear)
++        FigureCanvasAgg(fig).draw()
++        self.assertEqual(temps.get_title(loc="left"), "Time Base Monitor")
++        self.assertEqual(list(axe.lines[0].get_ydata())[:2], [4, 3])
++        self.assertTrue(math.isnan(axe.lines[0].get_ydata()[3]))
++        self.assertEqual(signaux[0].valeurs[:2], [1, 0])
++        self.assertEqual(signaux[1].indices_vides, [2])
++        self.assertEqual(signaux[0].indices_invalides, [4])
++        self.assertEqual(self.fichier.read_bytes(), avant)
++        from rapport_pdf import capturer
++        capture = capturer(SimpleNamespace(figure=fig, axe_signal=axe, axe_temps=temps,
++                                           signal=signaux[0], signaux=signaux))
++        self.assertEqual(capture.signal, "a, b")
++        self.assertTrue(capture.image.startswith(b"\x89PNG"))
++
++    def test_2201_refuse_groupe_ambigu_ou_non_bool(self):
++        a, b = self.signal("a", "Bool"), self.signal("b", "Bool")
++        for groupe in ([a], [a, a], [a, self.signal("v")], [a, replace(b, sha256="autre")]):
++            with self.assertRaises(ValueError):
++                verifier_groupe(groupe)
++
++    def test_2201_colonne_entierement_vide_conservee_sans_faux_etat(self):
++        self.fichier.write_text("t,v,a,b\n0,10,true,\n1,20,false,\n", encoding="utf-8")
++        self.resultat = examiner_source(self.source)
++        self.modele = construire_moniteur(self.source, self.resultat)
++        b = preparer_signal(self.source, self.resultat, "b", "Bool", autoriser_vide=True)
++        self.assertTrue(all(math.isnan(v) for v in b.valeurs))
++        self.assertEqual(b.indices_vides, [0, 1])
++        self.assertEqual(b.indices_croix, [])
++        fig, _, _ = creer_figure_groupe([self.signal("a", "Bool"), b], self.modele)
++        self.addCleanup(fig.clear)
++        FigureCanvasAgg(fig).draw()
++        c, lectures = self.curseurs()
++        c.definir_condition(b)
++        self.assertEqual(c.placer_horizontal(10), [])
++        self.assertIn("Aucune mesure", lectures[-1])
++
++    def test_4105_export_processus_et_annulation_preservent_fichiers(self):
++        from rapport_pdf import Capture, PageRapport, exporter_pdf_en_fond
++        from io import BytesIO
++        from matplotlib.figure import Figure
++        fig = Figure(figsize=(1, 1))
++        fig.add_subplot().plot([0, 1], [1, 0])
++        image = BytesIO()
++        fig.savefig(image, format="png")
++        pages = (PageRapport((Capture(image.getvalue(), str(self.fichier), "a" * 64, "v", "", "2026-10-27"),)),)
++        champs = dict(emetteur="Test", projet="PLC", unite="Simulation")
++        destination = Path(self.temp.name) / "rapport.pdf"
++        annulation = Event()
++        exporter_pdf_en_fond(destination, pages, annulation, lambda x: None, **champs)
++        avant = destination.read_bytes()
++        self.assertTrue(avant.startswith(b"%PDF"))
++        with self.assertRaises(ValueError):
++            exporter_pdf_en_fond(destination, pages, annulation, lambda x: None, **champs)
++        self.assertEqual(destination.read_bytes(), avant)
++        annule = destination.with_name("annule.pdf")
++        exporter_pdf_en_fond(annule, pages, annulation, lambda x: annulation.set(), **champs)
++        self.assertFalse(annule.exists())
++
++
++if __name__ == "__main__":
++    unittest.main()
+--- /dev/null
++++ b/visu_ptbg/tests_gui/test_parcours_tk.py
+@@ -0,0 +1,160 @@
++"""Parcours réels Tk/TkAgg. Exécuter avec un DISPLAY, séparément des tests rapides.
++
++Ces tests exercent la fenêtre native Linux, pas la qualification Windows/SLES.
++"""
++from pathlib import Path
++import sys
++import tempfile
++import time
++import tkinter as tk
++from tkinter import ttk
++from unittest.mock import patch
++import unittest
++
++PROJET = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(PROJET))
++from MAIN import FenetreVISU
++from vue_arrangements import MODELES
++
++
++class ParcoursTkTests(unittest.TestCase):
++    def setUp(self):
++        self.temp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.csv = Path(self.temp.name) / "PLC accentué.csv"
++        self.csv.write_text("t,v,w,a,b\n0,10,3,true,0\n1,20,4,false,1\n"
++                            "1,30,5,true,\n2,40,6,,0\n3,50,7,FAILED,1\n4,,8,true,0\n5,60,9,true,1\n", encoding="utf-8")
++        self.racine = tk.Tk()
++        self.addCleanup(self.racine.destroy)
++        self.erreurs_callbacks = []
++        self.racine.report_callback_exception = lambda typ, valeur, trace: self.erreurs_callbacks.append(valeur)
++        for nom in ("showinfo", "showerror"):
++            mock = patch("tkinter.messagebox." + nom, side_effect=lambda *a, **kw: self.fail(str(a)))
++            mock.start()
++            self.addCleanup(mock.stop)
++        self.app = FenetreVISU(self.racine)
++        self.racine.update()
++        with patch("MAIN.filedialog.askopenfilenames", return_value=(str(self.csv),)):
++            self.app._ajouter()
++        self.attendre()
++        self.assertEqual(len(self.app.paquet.sources), 1)
++
++    def attendre(self, condition=None):
++        condition = condition or (lambda: self.app.tache is None)
++        limite = time.monotonic() + 20
++        while not condition() and time.monotonic() < limite:
++            self.racine.update()
++            time.sleep(.01)
++        self.racine.update()
++        self.assertTrue(condition(), "Le parcours Tk n'a pas terminé sous 20 s")
++        self.assertEqual(self.erreurs_callbacks, [])
++
++    def widgets(self, parent=None):
++        for enfant in (parent or self.racine).winfo_children():
++            yield enfant
++            yield from self.widgets(enfant)
++
++    def bouton(self, texte, parent=None):
++        return next(w for w in self.widgets(parent) if isinstance(w, ttk.Button) and w.cget("text") == texte)
++
++    def test_5106_5300_panneaux_zoom_masquage_et_fermeture(self):
++        self.app.arrangements.modele.set(MODELES[1])
++        self.app.arrangements.nouveau()
++        for colonne in ("v", "w"):
++            self.app.signal_choisi.set(colonne)
++            self.app._afficher_courbe()
++            self.attendre()
++        vues = self.app.arrangements.vues_actives()
++        self.assertEqual(len(vues), 2)
++        vues[0].axe_signal.set_xlim(0, 2)
++        self.app.arrangements.lier()
++        vues[0].curseurs.placer(1)
++        self.assertEqual(vues[1].curseurs.positions[0][0], 1)
++        self.assertEqual(vues[0].axe_signal.get_xlim(), (0, 2))
++        self.app._basculer_arbre()
++        self.racine.update()
++        self.assertFalse(self.app.volet_arbre.winfo_ismapped())
++        self.app._basculer_arbre()
++        self.app.arrangements.fermer()
++        self.racine.update()
++        self.assertEqual(self.erreurs_callbacks, [])
++
++    def test_2201_dialogue_groupe_lecture_et_capture_pdf(self):
++        self.app._groupe_bool()
++        liste = next(w for w in self.widgets() if isinstance(w, tk.Listbox))
++        liste.selection_set(2, 3)  # colonnes a et b
++        self.bouton("Appliquer").invoke()
++        self.attendre()
++        vue = self.app.arrangements.vues_actives()[0]
++        self.assertTrue(vue.groupe)
++        self.assertEqual([s.colonne for s in vue.signaux], ["a", "b"])
++        vue.mode_curseur.set("Vertical")
++        vue._choisir_curseur()
++        vue.curseurs.placer(1)
++        self.assertIn("a=true", vue.texte_lecture)
++        self.assertIn("b=ABSENTE", vue.texte_lecture)
++        vue.suivi.set(True)
++        vue._choisir_suivi()
++        vue.canvas.draw()
++        px, py = vue.axe_signal.transData.transform((3, .5))
++        widget = vue.canvas.get_tk_widget()
++        widget.event_generate("<Motion>", x=int(px), y=int(widget.winfo_height() - py))
++        self.racine.update()
++        self.assertEqual(vue.curseurs.positions[0][0], 3)
++        self.assertIn("INVALIDE : FAILED", vue.texte_lecture)
++        self.app.rapports.ajouter()
++        self.assertEqual(len(self.app.rapports.pages), 1)
++        self.assertEqual(self.app.rapports.pages[0].captures[0].signal, "a, b")
++
++    def test_5407_dialogue_condition_et_retrait(self):
++        self.app.signal_choisi.set("v")
++        self.app._afficher_courbe()
++        self.attendre()
++        self.app._condition_bool()
++        liste = next(w for w in self.widgets() if isinstance(w, tk.Listbox))
++        liste.selection_set(2)  # a
++        self.bouton("Appliquer").invoke()
++        self.attendre()
++        vue = self.app.arrangements.vues_actives()[0]
++        self.assertEqual(vue.curseurs.mode, "Horizontal")
++        self.assertEqual(vue.curseurs.placer_horizontal(21), [2])
++        self.assertIn("v=30", vue.texte_lecture)
++        self.bouton("Retirer la condition Bool", vue).invoke()
++        self.assertEqual(vue.curseurs.placer_horizontal(21), [1])
++
++    def test_5202_type_par_colonne_et_affichage_arbre(self):
++        self.app.signal_choisi.set("b")
++        self.app.type_signal.set("Bool")
++        self.app._memoriser_type()
++        self.racine.update()
++        self.app.signal_choisi.set("v")
++        self.app._restaurer_type()
++        self.assertEqual(self.app.type_signal.get(), "Auto")
++        self.app.signal_choisi.set("b")
++        self.app._restaurer_type()
++        self.assertEqual(self.app.type_signal.get(), "Bool")
++        textes = [self.app.arbre.item(i, "text") for i in self.app.arbre.get_children("f0")]
++        self.assertIn("b (Bool choisi)", textes)
++
++    def test_6000_export_interface_en_fond_et_fenetre_reactive(self):
++        self.app.signal_choisi.set("v")
++        self.app._afficher_courbe()
++        self.attendre()
++        sortie = Path(self.temp.name) / "rapport.pdf"
++        self.app.rapports.exporter()
++        dialogue = next(w for w in self.racine.winfo_children() if isinstance(w, tk.Toplevel))
++        champs = [w for w in self.widgets(dialogue) if isinstance(w, ttk.Entry)]
++        for champ in champs:
++            champ.delete(0, "end")
++            champ.insert(0, "Essai Tk")
++        with patch("vue_rapports.filedialog.asksaveasfilename", return_value=str(sortie)):
++            self.bouton("Enregistrer...", dialogue).invoke()
++        battements = []
++        self.racine.after(5, lambda: battements.append(True))
++        self.attendre()
++        self.assertTrue(battements)
++        self.assertTrue(sortie.read_bytes().startswith(b"%PDF"))
++
++
++if __name__ == "__main__":
++    unittest.main()

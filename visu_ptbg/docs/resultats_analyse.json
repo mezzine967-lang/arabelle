@@ -1,0 +1,2235 @@
+{
+  "environment": {
+    "python": "3.12.14",
+    "os": "Linux",
+    "architecture_bits": 64,
+    "versions_observed_not_windows_pins": {
+      "numpy": "2.3.5",
+      "scipy": "1.17.0",
+      "pandas": "2.2.3",
+      "matplotlib": "3.10.8"
+    },
+    "target_not_validated_here": "Windows 11 64 bits / Python 3.11"
+  },
+  "source_sha256": {
+    "scenari0045.csv": "966959e74eaee1eb8590541cccfe6f80b5beae81ddee28cab53cd5047e8473e1",
+    "Test_PID_P_AS_scenari0045.csv": "6303acbe508b7c0d0d3307c2b750f353f50fc99e4d120f875ee9ccb0088ec5a0",
+    "Redundancy10(1).py": "38752e56a4ddceaed7c859f6c9e04a454cf9e247208fe87d34075e997a5a5f0c",
+    "generate_report10.py": "170ad799375cc706bf6b687d75684e0c5782f09424239c949922b8e792f1c648",
+    "graphical_report10.py": "34c1d388a06a32d18eaa2e3f5adc853837b3f797dd209b5e6ea426efa4c47f99"
+  },
+  "pid_scenario": {
+    "diagnostic_v0": {
+      "path": "/workspace/scratch/9db196be1d80/upload/scenari0045.csv",
+      "encoding": "utf-8-sig",
+      "delimiter": ",",
+      "columns": [
+        "index",
+        "UL",
+        "LL",
+        "VAR_INPUT1",
+        "STP",
+        "TC",
+        "TV",
+        "FF",
+        "Closed Loop"
+      ],
+      "data_rows": 1001,
+      "blank_rows": 0,
+      "malformed_rows": [],
+      "empty_cells_by_column": {
+        "index": 0,
+        "UL": 0,
+        "LL": 0,
+        "VAR_INPUT1": 0,
+        "STP": 0,
+        "TC": 0,
+        "TV": 0,
+        "FF": 0,
+        "Closed Loop": 0
+      },
+      "inferred_types": {
+        "index": "numérique",
+        "UL": "numérique",
+        "LL": "numérique",
+        "VAR_INPUT1": "numérique",
+        "STP": "numérique",
+        "TC": "numérique",
+        "TV": "numérique",
+        "FF": "numérique",
+        "Closed Loop": "numérique"
+      },
+      "constant_columns": [
+        "UL",
+        "LL",
+        "STP",
+        "TC",
+        "TV",
+        "FF",
+        "Closed Loop"
+      ],
+      "time": {
+        "column": "index",
+        "numeric": true,
+        "start": 0.0,
+        "end": 20000.0,
+        "strictly_increasing": true,
+        "duplicate_count": 0,
+        "backward_count": 0,
+        "step_values": [
+          20.0
+        ],
+        "regular_step": 20.0
+      },
+      "warnings": []
+    },
+    "row_count": 1001,
+    "column_count": 9,
+    "columns": [
+      "index",
+      "UL",
+      "LL",
+      "VAR_INPUT1",
+      "STP",
+      "TC",
+      "TV",
+      "FF",
+      "Closed Loop"
+    ],
+    "time_start": 0,
+    "time_end": 20000,
+    "step_counts": {
+      "20": 1000
+    },
+    "time_anomaly_examples": [],
+    "changes": {
+      "UL": {
+        "count": 0,
+        "examples": []
+      },
+      "LL": {
+        "count": 0,
+        "examples": []
+      },
+      "VAR_INPUT1": {
+        "count": 1,
+        "examples": [
+          {
+            "data_row": 51,
+            "time": 1000,
+            "before": "0",
+            "after": "10"
+          }
+        ]
+      },
+      "STP": {
+        "count": 0,
+        "examples": []
+      },
+      "TC": {
+        "count": 0,
+        "examples": []
+      },
+      "TV": {
+        "count": 0,
+        "examples": []
+      },
+      "FF": {
+        "count": 0,
+        "examples": []
+      },
+      "Closed Loop": {
+        "count": 0,
+        "examples": []
+      }
+    },
+    "empty_cells": {
+      "index": 0,
+      "UL": 0,
+      "LL": 0,
+      "VAR_INPUT1": 0,
+      "STP": 0,
+      "TC": 0,
+      "TV": 0,
+      "FF": 0,
+      "Closed Loop": 0
+    },
+    "malformed_rows": []
+  },
+  "pid_report": {
+    "diagnostic_v0": {
+      "path": "/workspace/scratch/9db196be1d80/upload/Test_PID_P_AS_scenari0045.csv",
+      "encoding": "utf-8-sig",
+      "delimiter": ",",
+      "columns": [
+        "index",
+        "UL",
+        "LL",
+        "VAR_INPUT1",
+        "STP",
+        "TC",
+        "TV",
+        "FF",
+        "Closed Loop",
+        "init",
+        "output",
+        "PID_P",
+        "PID_I",
+        "PID_D",
+        "pv",
+        "eps",
+        "ula",
+        "lla"
+      ],
+      "data_rows": 1001,
+      "blank_rows": 0,
+      "malformed_rows": [],
+      "empty_cells_by_column": {
+        "index": 0,
+        "UL": 0,
+        "LL": 0,
+        "VAR_INPUT1": 0,
+        "STP": 0,
+        "TC": 0,
+        "TV": 0,
+        "FF": 0,
+        "Closed Loop": 0,
+        "init": 0,
+        "output": 0,
+        "PID_P": 0,
+        "PID_I": 0,
+        "PID_D": 0,
+        "pv": 0,
+        "eps": 0,
+        "ula": 0,
+        "lla": 0
+      },
+      "inferred_types": {
+        "index": "numérique",
+        "UL": "numérique",
+        "LL": "numérique",
+        "VAR_INPUT1": "numérique",
+        "STP": "numérique",
+        "TC": "numérique",
+        "TV": "numérique",
+        "FF": "numérique",
+        "Closed Loop": "numérique",
+        "init": "booléen",
+        "output": "numérique",
+        "PID_P": "numérique",
+        "PID_I": "numérique",
+        "PID_D": "numérique",
+        "pv": "numérique",
+        "eps": "numérique",
+        "ula": "booléen",
+        "lla": "booléen"
+      },
+      "constant_columns": [
+        "UL",
+        "LL",
+        "STP",
+        "TC",
+        "TV",
+        "FF",
+        "Closed Loop",
+        "init",
+        "PID_D",
+        "ula",
+        "lla"
+      ],
+      "time": {
+        "column": "index",
+        "numeric": true,
+        "start": 0.0,
+        "end": 20000.0,
+        "strictly_increasing": true,
+        "duplicate_count": 0,
+        "backward_count": 0,
+        "step_values": [
+          20.0
+        ],
+        "regular_step": 20.0
+      },
+      "warnings": []
+    },
+    "row_count": 1001,
+    "column_count": 18,
+    "columns": [
+      "index",
+      "UL",
+      "LL",
+      "VAR_INPUT1",
+      "STP",
+      "TC",
+      "TV",
+      "FF",
+      "Closed Loop",
+      "init",
+      "output",
+      "PID_P",
+      "PID_I",
+      "PID_D",
+      "pv",
+      "eps",
+      "ula",
+      "lla"
+    ],
+    "time_start": 0,
+    "time_end": 20000,
+    "step_counts": {
+      "20": 1000
+    },
+    "time_anomaly_examples": [],
+    "changes": {
+      "UL": {
+        "count": 0,
+        "examples": []
+      },
+      "LL": {
+        "count": 0,
+        "examples": []
+      },
+      "VAR_INPUT1": {
+        "count": 1,
+        "examples": [
+          {
+            "data_row": 51,
+            "time": 1000,
+            "before": "0",
+            "after": "10"
+          }
+        ]
+      },
+      "STP": {
+        "count": 0,
+        "examples": []
+      },
+      "TC": {
+        "count": 0,
+        "examples": []
+      },
+      "TV": {
+        "count": 0,
+        "examples": []
+      },
+      "FF": {
+        "count": 0,
+        "examples": []
+      },
+      "Closed Loop": {
+        "count": 0,
+        "examples": []
+      },
+      "init": {
+        "count": 0,
+        "examples": []
+      },
+      "output": {
+        "count": 951,
+        "examples": [
+          {
+            "data_row": 51,
+            "time": 1000,
+            "before": "0.0",
+            "after": "15.0"
+          },
+          {
+            "data_row": 52,
+            "time": 1020,
+            "before": "15.0",
+            "after": "15.06"
+          },
+          {
+            "data_row": 53,
+            "time": 1040,
+            "before": "15.06",
+            "after": "15.120000000000001"
+          },
+          {
+            "data_row": 54,
+            "time": 1060,
+            "before": "15.120000000000001",
+            "after": "15.180000000000001"
+          },
+          {
+            "data_row": 55,
+            "time": 1080,
+            "before": "15.180000000000001",
+            "after": "15.240000000000002"
+          },
+          {
+            "data_row": 56,
+            "time": 1100,
+            "before": "15.240000000000002",
+            "after": "15.300000000000002"
+          },
+          {
+            "data_row": 57,
+            "time": 1120,
+            "before": "15.300000000000002",
+            "after": "15.360000000000003"
+          },
+          {
+            "data_row": 58,
+            "time": 1140,
+            "before": "15.360000000000003",
+            "after": "15.420000000000003"
+          }
+        ]
+      },
+      "PID_P": {
+        "count": 926,
+        "examples": [
+          {
+            "data_row": 51,
+            "time": 1000,
+            "before": "0.0",
+            "after": "15.0"
+          },
+          {
+            "data_row": 77,
+            "time": 1520,
+            "before": "15.0",
+            "after": "14.82"
+          },
+          {
+            "data_row": 78,
+            "time": 1540,
+            "before": "14.82",
+            "after": "14.63964"
+          },
+          {
+            "data_row": 79,
+            "time": 1560,
+            "before": "14.63964",
+            "after": "14.45892072"
+          },
+          {
+            "data_row": 80,
+            "time": 1580,
+            "before": "14.45892072",
+            "after": "14.27784287856"
+          },
+          {
+            "data_row": 81,
+            "time": 1600,
+            "before": "14.27784287856",
+            "after": "14.096407192802879"
+          },
+          {
+            "data_row": 82,
+            "time": 1620,
+            "before": "14.096407192802879",
+            "after": "13.914614378417273"
+          },
+          {
+            "data_row": 83,
+            "time": 1640,
+            "before": "13.914614378417273",
+            "after": "13.732465149660438"
+          }
+        ]
+      },
+      "PID_I": {
+        "count": 950,
+        "examples": [
+          {
+            "data_row": 52,
+            "time": 1020,
+            "before": "0.0",
+            "after": "0.06"
+          },
+          {
+            "data_row": 53,
+            "time": 1040,
+            "before": "0.06",
+            "after": "0.1200000000000005"
+          },
+          {
+            "data_row": 54,
+            "time": 1060,
+            "before": "0.1200000000000005",
+            "after": "0.180000000000001"
+          },
+          {
+            "data_row": 55,
+            "time": 1080,
+            "before": "0.180000000000001",
+            "after": "0.2400000000000015"
+          },
+          {
+            "data_row": 56,
+            "time": 1100,
+            "before": "0.2400000000000015",
+            "after": "0.300000000000002"
+          },
+          {
+            "data_row": 57,
+            "time": 1120,
+            "before": "0.300000000000002",
+            "after": "0.3600000000000025"
+          },
+          {
+            "data_row": 58,
+            "time": 1140,
+            "before": "0.3600000000000025",
+            "after": "0.420000000000003"
+          },
+          {
+            "data_row": 59,
+            "time": 1160,
+            "before": "0.420000000000003",
+            "after": "0.4800000000000035"
+          }
+        ]
+      },
+      "PID_D": {
+        "count": 0,
+        "examples": []
+      },
+      "pv": {
+        "count": 926,
+        "examples": [
+          {
+            "data_row": 76,
+            "time": 1500,
+            "before": "0.0",
+            "after": "0.12"
+          },
+          {
+            "data_row": 77,
+            "time": 1520,
+            "before": "0.12",
+            "after": "0.24024"
+          },
+          {
+            "data_row": 78,
+            "time": 1540,
+            "before": "0.24024",
+            "after": "0.36071952"
+          },
+          {
+            "data_row": 79,
+            "time": 1560,
+            "before": "0.36071952",
+            "after": "0.48143808096"
+          },
+          {
+            "data_row": 80,
+            "time": 1580,
+            "before": "0.48143808096",
+            "after": "0.6023952047980801"
+          },
+          {
+            "data_row": 81,
+            "time": 1600,
+            "before": "0.6023952047980801",
+            "after": "0.7235904143884839"
+          },
+          {
+            "data_row": 82,
+            "time": 1620,
+            "before": "0.7235904143884839",
+            "after": "0.845023233559707"
+          },
+          {
+            "data_row": 83,
+            "time": 1640,
+            "before": "0.845023233559707",
+            "after": "0.9666931870925876"
+          }
+        ]
+      },
+      "eps": {
+        "count": 926,
+        "examples": [
+          {
+            "data_row": 51,
+            "time": 1000,
+            "before": "0.0",
+            "after": "10.0"
+          },
+          {
+            "data_row": 77,
+            "time": 1520,
+            "before": "10.0",
+            "after": "9.88"
+          },
+          {
+            "data_row": 78,
+            "time": 1540,
+            "before": "9.88",
+            "after": "9.75976"
+          },
+          {
+            "data_row": 79,
+            "time": 1560,
+            "before": "9.75976",
+            "after": "9.63928048"
+          },
+          {
+            "data_row": 80,
+            "time": 1580,
+            "before": "9.63928048",
+            "after": "9.51856191904"
+          },
+          {
+            "data_row": 81,
+            "time": 1600,
+            "before": "9.51856191904",
+            "after": "9.39760479520192"
+          },
+          {
+            "data_row": 82,
+            "time": 1620,
+            "before": "9.39760479520192",
+            "after": "9.276409585611516"
+          },
+          {
+            "data_row": 83,
+            "time": 1640,
+            "before": "9.276409585611516",
+            "after": "9.154976766440292"
+          }
+        ]
+      },
+      "ula": {
+        "count": 0,
+        "examples": []
+      },
+      "lla": {
+        "count": 0,
+        "examples": []
+      }
+    },
+    "empty_cells": {
+      "index": 0,
+      "UL": 0,
+      "LL": 0,
+      "VAR_INPUT1": 0,
+      "STP": 0,
+      "TC": 0,
+      "TV": 0,
+      "FF": 0,
+      "Closed Loop": 0,
+      "init": 0,
+      "output": 0,
+      "PID_P": 0,
+      "PID_I": 0,
+      "PID_D": 0,
+      "pv": 0,
+      "eps": 0,
+      "ula": 0,
+      "lla": 0
+    },
+    "malformed_rows": []
+  },
+  "pid_comparison": {
+    "reference": "/workspace/scratch/9db196be1d80/upload/scenari0045.csv",
+    "report": "/workspace/scratch/9db196be1d80/upload/Test_PID_P_AS_scenari0045.csv",
+    "same_row_count": true,
+    "reference_rows": 1001,
+    "report_rows": 1001,
+    "shared_columns": [
+      "index",
+      "UL",
+      "LL",
+      "VAR_INPUT1",
+      "STP",
+      "TC",
+      "TV",
+      "FF",
+      "Closed Loop"
+    ],
+    "report_extra_columns": [
+      "init",
+      "output",
+      "PID_P",
+      "PID_I",
+      "PID_D",
+      "pv",
+      "eps",
+      "ula",
+      "lla"
+    ],
+    "shared_column_mismatches": {
+      "index": 0,
+      "UL": 0,
+      "LL": 0,
+      "VAR_INPUT1": 0,
+      "STP": 0,
+      "TC": 0,
+      "TV": 0,
+      "FF": 0,
+      "Closed Loop": 0
+    }
+  },
+  "runs": [
+    {
+      "diagnostic_v0": {
+        "path": "/workspace/scratch/9db196be1d80/outputs/visu_audit_20261023/execution_1/simulation10.csv",
+        "encoding": "utf-8-sig",
+        "delimiter": ",",
+        "columns": [
+          "t_ms",
+          "source",
+          "prod1",
+          "prod2",
+          "prod3",
+          "cons1_state",
+          "cons2_state",
+          "cons1_vote",
+          "cons2_vote",
+          "published",
+          "failure_plc",
+          "pub_output",
+          "start_p1",
+          "start_p2",
+          "start_p3",
+          "start_c1",
+          "start_c2",
+          "start_pub"
+        ],
+        "data_rows": 10001,
+        "blank_rows": 0,
+        "malformed_rows": [],
+        "empty_cells_by_column": {
+          "t_ms": 0,
+          "source": 0,
+          "prod1": 0,
+          "prod2": 0,
+          "prod3": 0,
+          "cons1_state": 0,
+          "cons2_state": 0,
+          "cons1_vote": 0,
+          "cons2_vote": 0,
+          "published": 0,
+          "failure_plc": 0,
+          "pub_output": 16,
+          "start_p1": 0,
+          "start_p2": 0,
+          "start_p3": 0,
+          "start_c1": 0,
+          "start_c2": 0,
+          "start_pub": 0
+        },
+        "inferred_types": {
+          "t_ms": "numérique",
+          "source": "numérique",
+          "prod1": "numérique",
+          "prod2": "numérique",
+          "prod3": "numérique",
+          "cons1_state": "texte",
+          "cons2_state": "texte",
+          "cons1_vote": "numérique",
+          "cons2_vote": "numérique",
+          "published": "numérique",
+          "failure_plc": "numérique",
+          "pub_output": "numérique",
+          "start_p1": "numérique",
+          "start_p2": "numérique",
+          "start_p3": "numérique",
+          "start_c1": "numérique",
+          "start_c2": "numérique",
+          "start_pub": "numérique"
+        },
+        "constant_columns": [
+          "failure_plc"
+        ],
+        "time": {
+          "column": "t_ms",
+          "numeric": true,
+          "start": 0.0,
+          "end": 9999.0,
+          "strictly_increasing": false,
+          "duplicate_count": 2,
+          "backward_count": 0,
+          "step_values": [
+            0.0,
+            1.0,
+            2.0
+          ],
+          "regular_step": null
+        },
+        "warnings": [
+          "La colonne temporelle 't_ms' n'est pas strictement croissante.",
+          "Certaines cellules sont vides."
+        ]
+      },
+      "row_count": 10001,
+      "column_count": 18,
+      "columns": [
+        "t_ms",
+        "source",
+        "prod1",
+        "prod2",
+        "prod3",
+        "cons1_state",
+        "cons2_state",
+        "cons1_vote",
+        "cons2_vote",
+        "published",
+        "failure_plc",
+        "pub_output",
+        "start_p1",
+        "start_p2",
+        "start_p3",
+        "start_c1",
+        "start_c2",
+        "start_pub"
+      ],
+      "time_start": 0,
+      "time_end": 9999,
+      "step_counts": {
+        "1": 9997,
+        "0": 2,
+        "2": 1
+      },
+      "time_anomaly_examples": [
+        {
+          "previous_data_row": 1007,
+          "next_data_row": 1008,
+          "before": 1006,
+          "after": 1006,
+          "step": 0
+        },
+        {
+          "previous_data_row": 4986,
+          "next_data_row": 4987,
+          "before": 4984,
+          "after": 4986,
+          "step": 2
+        },
+        {
+          "previous_data_row": 9816,
+          "next_data_row": 9817,
+          "before": 9815,
+          "after": 9815,
+          "step": 0
+        }
+      ],
+      "changes": {
+        "source": {
+          "count": 19,
+          "examples": [
+            {
+              "data_row": 501,
+              "time": 500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1001,
+              "time": 1000,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1502,
+              "time": 1500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2002,
+              "time": 2000,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2502,
+              "time": 2500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3002,
+              "time": 3000,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3502,
+              "time": 3500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 4002,
+              "time": 4000,
+              "before": "0.0",
+              "after": "1.0"
+            }
+          ]
+        },
+        "prod1": {
+          "count": 20,
+          "examples": [
+            {
+              "data_row": 261,
+              "time": 260,
+              "before": "0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 511,
+              "time": 510,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1011,
+              "time": 1009,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1511,
+              "time": 1509,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2011,
+              "time": 2009,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2511,
+              "time": 2509,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3011,
+              "time": 3009,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3511,
+              "time": 3509,
+              "before": "1.0",
+              "after": "0.0"
+            }
+          ]
+        },
+        "prod2": {
+          "count": 20,
+          "examples": [
+            {
+              "data_row": 46,
+              "time": 45,
+              "before": "0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 516,
+              "time": 515,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1016,
+              "time": 1014,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1516,
+              "time": 1514,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2016,
+              "time": 2014,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2516,
+              "time": 2514,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3016,
+              "time": 3014,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3516,
+              "time": 3514,
+              "before": "1.0",
+              "after": "0.0"
+            }
+          ]
+        },
+        "prod3": {
+          "count": 20,
+          "examples": [
+            {
+              "data_row": 402,
+              "time": 401,
+              "before": "0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 512,
+              "time": 511,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1012,
+              "time": 1010,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1512,
+              "time": 1510,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2012,
+              "time": 2010,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2512,
+              "time": 2510,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3012,
+              "time": 3010,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3512,
+              "time": 3510,
+              "before": "1.0",
+              "after": "0.0"
+            }
+          ]
+        },
+        "cons1_state": {
+          "count": 3,
+          "examples": [
+            {
+              "data_row": 159,
+              "time": 158,
+              "before": "STOP",
+              "after": "INIT"
+            },
+            {
+              "data_row": 618,
+              "time": 617,
+              "before": "INIT",
+              "after": "ACTIVE"
+            },
+            {
+              "data_row": 8064,
+              "time": 8063,
+              "before": "ACTIVE",
+              "after": "FAILED"
+            }
+          ]
+        },
+        "cons2_state": {
+          "count": 3,
+          "examples": [
+            {
+              "data_row": 482,
+              "time": 481,
+              "before": "STOP",
+              "after": "INIT"
+            },
+            {
+              "data_row": 618,
+              "time": 617,
+              "before": "INIT",
+              "after": "STANDBY"
+            },
+            {
+              "data_row": 8064,
+              "time": 8063,
+              "before": "STANDBY",
+              "after": "ACTIVE"
+            }
+          ]
+        },
+        "cons1_vote": {
+          "count": 14,
+          "examples": [
+            {
+              "data_row": 1019,
+              "time": 1017,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1518,
+              "time": 1516,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2018,
+              "time": 2016,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2518,
+              "time": 2516,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3018,
+              "time": 3016,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3519,
+              "time": 3517,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4018,
+              "time": 4016,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 4519,
+              "time": 4517,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "cons2_vote": {
+          "count": 18,
+          "examples": [
+            {
+              "data_row": 1022,
+              "time": 1020,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1523,
+              "time": 1521,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2023,
+              "time": 2021,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2522,
+              "time": 2520,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3022,
+              "time": 3020,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3522,
+              "time": 3520,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4023,
+              "time": 4021,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 4522,
+              "time": 4520,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "published": {
+          "count": 18,
+          "examples": [
+            {
+              "data_row": 1028,
+              "time": 1026,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1528,
+              "time": 1526,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2028,
+              "time": 2026,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2528,
+              "time": 2526,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3028,
+              "time": 3026,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3528,
+              "time": 3526,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4028,
+              "time": 4026,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 4528,
+              "time": 4526,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "failure_plc": {
+          "count": 0,
+          "examples": []
+        },
+        "pub_output": {
+          "count": 19,
+          "examples": [
+            {
+              "data_row": 17,
+              "time": 16,
+              "before": "",
+              "after": "0"
+            },
+            {
+              "data_row": 1037,
+              "time": 1035,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1537,
+              "time": 1535,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2037,
+              "time": 2035,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2537,
+              "time": 2535,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3037,
+              "time": 3035,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3537,
+              "time": 3535,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4037,
+              "time": 4035,
+              "before": "0",
+              "after": "1"
+            }
+          ]
+        },
+        "start_p1": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 250,
+              "time": 249,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 251,
+              "time": 250,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_p2": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 35,
+              "time": 34,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 36,
+              "time": 35,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_p3": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 391,
+              "time": 390,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 392,
+              "time": 391,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_c1": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 147,
+              "time": 146,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 148,
+              "time": 147,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_c2": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 472,
+              "time": 471,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 473,
+              "time": 472,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_pub": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 6,
+              "time": 5,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 7,
+              "time": 6,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      },
+      "empty_cells": {
+        "t_ms": 0,
+        "source": 0,
+        "prod1": 0,
+        "prod2": 0,
+        "prod3": 0,
+        "cons1_state": 0,
+        "cons2_state": 0,
+        "cons1_vote": 0,
+        "cons2_vote": 0,
+        "published": 0,
+        "failure_plc": 0,
+        "pub_output": 16,
+        "start_p1": 0,
+        "start_p2": 0,
+        "start_p3": 0,
+        "start_c1": 0,
+        "start_c2": 0,
+        "start_pub": 0
+      },
+      "malformed_rows": [],
+      "run": 1,
+      "csv_sha256": "cf7d38e5590abd819e01c2a382fef98b4bb16fed4d8022bfa5e0f3a9bab613b2",
+      "figures_constructed_headless": 1,
+      "phases_s": {
+        "phase_prod": {
+          "1": 0.24817604474320748,
+          "2": 0.033632824262635364,
+          "3": 0.3894866750109972
+        },
+        "phase_cons": {
+          "1": 0.14591789863740956,
+          "2": 0.47010605447447984
+        },
+        "phase_pub": 0.004772784486939352,
+        "INIT_TIME": {
+          "1": 0.6052363598850944,
+          "2": 0.6087186677522632
+        }
+      },
+      "logger_samples": 10001,
+      "publisher_actual_events": 999,
+      "failure_flag_final": 0,
+      "consumers_final_states": {
+        "1": "FAILED",
+        "2": "ACTIVE"
+      },
+      "missing_report_columns": [
+        "ov_p1",
+        "ov_p2",
+        "ov_p3",
+        "ov_c1",
+        "ov_c2",
+        "ov_pub"
+      ],
+      "report_call": {
+        "status": "failed",
+        "error_type": "KeyError",
+        "error": "'ov_p1'"
+      }
+    },
+    {
+      "diagnostic_v0": {
+        "path": "/workspace/scratch/9db196be1d80/outputs/visu_audit_20261023/execution_2/simulation10.csv",
+        "encoding": "utf-8-sig",
+        "delimiter": ",",
+        "columns": [
+          "t_ms",
+          "source",
+          "prod1",
+          "prod2",
+          "prod3",
+          "cons1_state",
+          "cons2_state",
+          "cons1_vote",
+          "cons2_vote",
+          "published",
+          "failure_plc",
+          "pub_output",
+          "start_p1",
+          "start_p2",
+          "start_p3",
+          "start_c1",
+          "start_c2",
+          "start_pub"
+        ],
+        "data_rows": 10001,
+        "blank_rows": 0,
+        "malformed_rows": [],
+        "empty_cells_by_column": {
+          "t_ms": 0,
+          "source": 0,
+          "prod1": 0,
+          "prod2": 0,
+          "prod3": 0,
+          "cons1_state": 0,
+          "cons2_state": 0,
+          "cons1_vote": 0,
+          "cons2_vote": 0,
+          "published": 0,
+          "failure_plc": 0,
+          "pub_output": 195,
+          "start_p1": 0,
+          "start_p2": 0,
+          "start_p3": 0,
+          "start_c1": 0,
+          "start_c2": 0,
+          "start_pub": 0
+        },
+        "inferred_types": {
+          "t_ms": "numérique",
+          "source": "numérique",
+          "prod1": "numérique",
+          "prod2": "numérique",
+          "prod3": "numérique",
+          "cons1_state": "texte",
+          "cons2_state": "texte",
+          "cons1_vote": "numérique",
+          "cons2_vote": "numérique",
+          "published": "numérique",
+          "failure_plc": "numérique",
+          "pub_output": "numérique",
+          "start_p1": "numérique",
+          "start_p2": "numérique",
+          "start_p3": "numérique",
+          "start_c1": "numérique",
+          "start_c2": "numérique",
+          "start_pub": "numérique"
+        },
+        "constant_columns": [
+          "failure_plc"
+        ],
+        "time": {
+          "column": "t_ms",
+          "numeric": true,
+          "start": 0.0,
+          "end": 9999.0,
+          "strictly_increasing": false,
+          "duplicate_count": 2,
+          "backward_count": 0,
+          "step_values": [
+            0.0,
+            1.0,
+            2.0
+          ],
+          "regular_step": null
+        },
+        "warnings": [
+          "La colonne temporelle 't_ms' n'est pas strictement croissante.",
+          "Certaines cellules sont vides."
+        ]
+      },
+      "row_count": 10001,
+      "column_count": 18,
+      "columns": [
+        "t_ms",
+        "source",
+        "prod1",
+        "prod2",
+        "prod3",
+        "cons1_state",
+        "cons2_state",
+        "cons1_vote",
+        "cons2_vote",
+        "published",
+        "failure_plc",
+        "pub_output",
+        "start_p1",
+        "start_p2",
+        "start_p3",
+        "start_c1",
+        "start_c2",
+        "start_pub"
+      ],
+      "time_start": 0,
+      "time_end": 9999,
+      "step_counts": {
+        "1": 9997,
+        "0": 2,
+        "2": 1
+      },
+      "time_anomaly_examples": [
+        {
+          "previous_data_row": 1007,
+          "next_data_row": 1008,
+          "before": 1006,
+          "after": 1006,
+          "step": 0
+        },
+        {
+          "previous_data_row": 4986,
+          "next_data_row": 4987,
+          "before": 4984,
+          "after": 4986,
+          "step": 2
+        },
+        {
+          "previous_data_row": 9816,
+          "next_data_row": 9817,
+          "before": 9815,
+          "after": 9815,
+          "step": 0
+        }
+      ],
+      "changes": {
+        "source": {
+          "count": 19,
+          "examples": [
+            {
+              "data_row": 501,
+              "time": 500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1001,
+              "time": 1000,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1502,
+              "time": 1500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2002,
+              "time": 2000,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2502,
+              "time": 2500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3002,
+              "time": 3000,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3502,
+              "time": 3500,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 4002,
+              "time": 4000,
+              "before": "0.0",
+              "after": "1.0"
+            }
+          ]
+        },
+        "prod1": {
+          "count": 20,
+          "examples": [
+            {
+              "data_row": 482,
+              "time": 481,
+              "before": "0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 512,
+              "time": 511,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1012,
+              "time": 1010,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1512,
+              "time": 1510,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2012,
+              "time": 2010,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2512,
+              "time": 2510,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3012,
+              "time": 3010,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3512,
+              "time": 3510,
+              "before": "1.0",
+              "after": "0.0"
+            }
+          ]
+        },
+        "prod2": {
+          "count": 20,
+          "examples": [
+            {
+              "data_row": 499,
+              "time": 498,
+              "before": "0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 509,
+              "time": 508,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1009,
+              "time": 1007,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1509,
+              "time": 1507,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2009,
+              "time": 2007,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2509,
+              "time": 2507,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3019,
+              "time": 3017,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3509,
+              "time": 3507,
+              "before": "1.0",
+              "after": "0.0"
+            }
+          ]
+        },
+        "prod3": {
+          "count": 19,
+          "examples": [
+            {
+              "data_row": 509,
+              "time": 508,
+              "before": "0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 1009,
+              "time": 1007,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 1509,
+              "time": 1507,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 2009,
+              "time": 2007,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 2509,
+              "time": 2507,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 3019,
+              "time": 3017,
+              "before": "0.0",
+              "after": "1.0"
+            },
+            {
+              "data_row": 3509,
+              "time": 3507,
+              "before": "1.0",
+              "after": "0.0"
+            },
+            {
+              "data_row": 4009,
+              "time": 4007,
+              "before": "0.0",
+              "after": "1.0"
+            }
+          ]
+        },
+        "cons1_state": {
+          "count": 3,
+          "examples": [
+            {
+              "data_row": 286,
+              "time": 285,
+              "before": "STOP",
+              "after": "INIT"
+            },
+            {
+              "data_row": 627,
+              "time": 626,
+              "before": "INIT",
+              "after": "ACTIVE"
+            },
+            {
+              "data_row": 8046,
+              "time": 8045,
+              "before": "ACTIVE",
+              "after": "FAILED"
+            }
+          ]
+        },
+        "cons2_state": {
+          "count": 3,
+          "examples": [
+            {
+              "data_row": 307,
+              "time": 306,
+              "before": "STOP",
+              "after": "INIT"
+            },
+            {
+              "data_row": 627,
+              "time": 626,
+              "before": "INIT",
+              "after": "STANDBY"
+            },
+            {
+              "data_row": 8046,
+              "time": 8045,
+              "before": "STANDBY",
+              "after": "ACTIVE"
+            }
+          ]
+        },
+        "cons1_vote": {
+          "count": 14,
+          "examples": [
+            {
+              "data_row": 1027,
+              "time": 1025,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1526,
+              "time": 1524,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2026,
+              "time": 2024,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2527,
+              "time": 2525,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3027,
+              "time": 3025,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3526,
+              "time": 3524,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4028,
+              "time": 4026,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 4526,
+              "time": 4524,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "cons2_vote": {
+          "count": 18,
+          "examples": [
+            {
+              "data_row": 1027,
+              "time": 1025,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1527,
+              "time": 1525,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2026,
+              "time": 2024,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2526,
+              "time": 2524,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3026,
+              "time": 3024,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3526,
+              "time": 3524,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4026,
+              "time": 4024,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 4527,
+              "time": 4525,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "published": {
+          "count": 18,
+          "examples": [
+            {
+              "data_row": 1037,
+              "time": 1035,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1537,
+              "time": 1535,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2037,
+              "time": 2035,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2537,
+              "time": 2535,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3037,
+              "time": 3035,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3537,
+              "time": 3535,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4037,
+              "time": 4035,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 4537,
+              "time": 4535,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "failure_plc": {
+          "count": 0,
+          "examples": []
+        },
+        "pub_output": {
+          "count": 19,
+          "examples": [
+            {
+              "data_row": 196,
+              "time": 195,
+              "before": "",
+              "after": "0"
+            },
+            {
+              "data_row": 1046,
+              "time": 1044,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 1546,
+              "time": 1544,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 2046,
+              "time": 2044,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 2546,
+              "time": 2544,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 3046,
+              "time": 3044,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 3546,
+              "time": 3544,
+              "before": "1",
+              "after": "0"
+            },
+            {
+              "data_row": 4046,
+              "time": 4044,
+              "before": "0",
+              "after": "1"
+            }
+          ]
+        },
+        "start_p1": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 471,
+              "time": 470,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 472,
+              "time": 471,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_p2": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 488,
+              "time": 487,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 489,
+              "time": 488,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_p3": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 498,
+              "time": 497,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 499,
+              "time": 498,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_c1": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 276,
+              "time": 275,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 277,
+              "time": 276,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_c2": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 295,
+              "time": 294,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 296,
+              "time": 295,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        },
+        "start_pub": {
+          "count": 2,
+          "examples": [
+            {
+              "data_row": 185,
+              "time": 184,
+              "before": "0",
+              "after": "1"
+            },
+            {
+              "data_row": 186,
+              "time": 185,
+              "before": "1",
+              "after": "0"
+            }
+          ]
+        }
+      },
+      "empty_cells": {
+        "t_ms": 0,
+        "source": 0,
+        "prod1": 0,
+        "prod2": 0,
+        "prod3": 0,
+        "cons1_state": 0,
+        "cons2_state": 0,
+        "cons1_vote": 0,
+        "cons2_vote": 0,
+        "published": 0,
+        "failure_plc": 0,
+        "pub_output": 195,
+        "start_p1": 0,
+        "start_p2": 0,
+        "start_p3": 0,
+        "start_c1": 0,
+        "start_c2": 0,
+        "start_pub": 0
+      },
+      "malformed_rows": [],
+      "run": 2,
+      "csv_sha256": "c8360eefde1ed4f91b2a87484b122d02de58df8e6b6794b556853da877bb485f",
+      "figures_constructed_headless": 1,
+      "phases_s": {
+        "phase_prod": {
+          "1": 0.4694407511429828,
+          "2": 0.4867222495485392,
+          "3": 0.4964246938980526
+        },
+        "phase_cons": {
+          "1": 0.27438229244875567,
+          "2": 0.29387248294115753
+        },
+        "phase_pub": 0.18393414395422397,
+        "INIT_TIME": {
+          "1": 0.6052363598850944,
+          "2": 0.6087186677522632
+        }
+      },
+      "logger_samples": 10001,
+      "publisher_actual_events": 981,
+      "failure_flag_final": 0,
+      "consumers_final_states": {
+        "1": "FAILED",
+        "2": "ACTIVE"
+      },
+      "missing_report_columns": [
+        "ov_p1",
+        "ov_p2",
+        "ov_p3",
+        "ov_c1",
+        "ov_c2",
+        "ov_pub"
+      ],
+      "report_call": {
+        "status": "failed",
+        "error_type": "KeyError",
+        "error": "'ov_p1'"
+      }
+    }
+  ],
+  "sources_unchanged": true,
+  "runs_differ": true
+}
