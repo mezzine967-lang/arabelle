@@ -15,9 +15,9 @@ class GraphArea(ttk.Frame):
     """Carnet d'onglets d'analyse ; chaque onglet est un ``AnalysisTab``."""
 
     def __init__(self, master, controller) -> None:
+        """Carnet d'onglets ; un changement d'onglet est signalé au contrôleur."""
         # Taille demandée fixe (pas de propagation) : la largeur réclamée par la
         # figure et les barres d'outils ne doit pas imposer la taille de la fenêtre.
-        """Carnet d'onglets ; un changement d'onglet est signalé au contrôleur."""
         super().__init__(master, width=900, height=600)
         self.pack_propagate(False)
         self.controller = controller
