@@ -1,0 +1,11 @@
+# Fins de ligne imposées par type (REQ_COMMON_KH_3005) : cmd.exe attend CRLF, sh attend LF.
+*.bat text eol=crlf
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.csv -text
+*.docx binary
+*.zip binary
+*.pdf binary
+# Scripts de référence reçus : conservés octet pour octet (fins de ligne CRLF d origine).
+data/references_simulation/** -text

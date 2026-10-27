@@ -1,0 +1,245 @@
+"""Tests de l'interface réelle (fenêtre Tk construite par MAIN.build_interface).
+
+Requis : 5100 à 5106 (fenêtre), 5200 à 5203 (arbre), 5300, 5400 à 5408
+(curseurs à la souris et au clavier), 4103 (masquage du TBM), 6002 à 6004
+(rapports), 3002 (MAIN construit l'IHM). Ignorés sans écran (Linux sans
+DISPLAY) : lancer sous un bureau, ou « xvfb-run python -m unittest ... ».
+"""
+import time
+import tkinter as tk
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from helpers import DEMO, EXAMPLES, TempFiles
+from ptbg.config import Settings
+from ptbg.system.activity_log import ActivityLog
+from ptbg.system.compat import display_problem
+from ptbg.system.environment import tkagg_problem
+
+try:
+    _root = tk.Tk()
+    # Écran absent, ou Matplotlib incompatible avec ce Tcl/Tk (l'outil le refuse au démarrage).
+    NO_DISPLAY = display_problem() or tkagg_problem(_root)
+    _root.destroy()
+except tk.TclError as exc:                      # pas d'écran ou Tk absent
+    NO_DISPLAY = str(exc)
+
+
+def pump(root, condition, timeout=30.0):
+    """Fait tourner la boucle Tk jusqu'à ce que la condition soit vraie."""
+    end = time.time() + timeout
+    while time.time() < end:
+        root.update()
+        if condition():
+            return
+        time.sleep(0.01)
+    raise AssertionError("délai dépassé")
+
+
+@unittest.skipIf(NO_DISPLAY, f"pas d'affichage : {NO_DISPLAY}")
+class InterfaceTests(unittest.TestCase):
+    def setUp(self):
+        import MAIN
+        self.files = TempFiles()
+        self.root = tk.Tk()
+        self.root.geometry("1500x950+0+0")
+        self.ctl = MAIN.build_interface(self.root, Settings(), ActivityLog(write_to_disk=False))
+        self.root.update()
+
+    def tearDown(self):
+        self.ctl.shutdown()
+        self.files.cleanup()
+
+    def load(self, *paths):
+        self.ctl._load([Path(p) for p in paths])
+        pump(self.root, lambda: self.ctl.task is None)
+        return self.ctl.workspace.files()
+
+    def test_main_window_layout(self):
+        """REQ 5100, 5102, 5103, 5104, 5106, 3002 : menus, arbre à gauche, graphique à droite, barre d'état."""
+        menu = self.root.nametowidget(self.root["menu"])
+        labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)]
+        self.assertEqual(labels, ["Fichier", "Affichage", "Base de temps", "Outils", "Rapport", "Information"])
+        panes = [str(p) for p in self.ctl.paned.panes()]
+        self.assertEqual(panes, [str(self.ctl.tree), str(self.ctl.graph)])
+        self.assertGreater(self.ctl.graph.winfo_width(), self.ctl.tree.winfo_width())
+        self.assertEqual(len(self.ctl.graph.tabs), 1)
+        status_texts = [w.cget("text") for w in self.ctl.status.winfo_children() if isinstance(w, tk.Widget)
+                        and "text" in w.keys()]
+        self.assertTrue(any(t.startswith("Utilisateur") for t in status_texts))
+        self.assertTrue(any(t.startswith("VISU PTBG") for t in status_texts))
+
+    def test_tree_levels_and_types(self):
+        """REQ 5200, 5201, 5202, 5203 : paquet > fichiers > base de temps + variables typées."""
+        a, b = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv", DEMO / "PLC_A_10ms_pretrig.csv")
+        tree = self.ctl.tree.tree
+        package = tree.get_children("")[0]
+        self.assertEqual(len(tree.get_children(package)), 2)
+        self.assertTrue(tree.exists(f"time:{a.id}"))
+        self.assertEqual(tree.item(f"var:{a.id}:init", "values")[0], "Bool")
+        self.assertEqual(tree.item(f"var:{a.id}:output", "values")[0], "Float")
+        self.assertTrue(tree.exists(f"group:{b.id}:DI"))
+        self.ctl.tree.filter_text.set("PID")
+        self.assertFalse(tree.exists(f"var:{a.id}:init"))
+        self.assertTrue(tree.exists(f"var:{a.id}:PID_P"))
+
+    def test_curves_cursors_mouse_and_keyboard(self):
+        """REQ 5400, 5401, 5403, 5404, 5405 : curseurs par axe, double, global, flèches clavier."""
+        from matplotlib.backend_bases import KeyEvent, MouseEvent
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "output", False), (source.id, "pv", False)], 0)
+        tab.add_curves([(source.id, "init", False)], 0)                 # Bool -> axe logique
+        self.assertEqual(len(tab.state.axles[1].curves), 1)
+        tab.set_cursor_mode("double")
+        axle = tab.axle()
+        self.assertIsNotNone(axle.t1)
+        self.assertIsNotNone(axle.t2)                                   # REQ 5403 : posés d'office
+        self.root.update()
+        ax = tab.renderer.axes[0]
+        x_px, y_px = ax.transData.transform((5.0, 5.0))
+        x1_px = ax.transData.transform((axle.t1, 0))[0]
+        press = MouseEvent("button_press_event", tab.canvas, x1_px, y_px, button=1)
+        tab.canvas.callbacks.process("button_press_event", press)
+        move = MouseEvent("motion_notify_event", tab.canvas, x_px, y_px, button=1)
+        tab.canvas.callbacks.process("motion_notify_event", move)
+        self.root.update()
+        tab.canvas.callbacks.process("button_release_event",
+                                     MouseEvent("button_release_event", tab.canvas, x_px, y_px, button=1))
+        self.assertAlmostEqual(axle.t1, 5.0, delta=0.1)                 # C1 glissé à 5 s
+        tab.set_cursor_mode("single")
+        tab.canvas.callbacks.process("key_press_event", KeyEvent("key_press_event", tab.canvas, "right"))
+        cycles = axle.t1 / 0.02
+        self.assertAlmostEqual(cycles, round(cycles), places=6)         # échantillon réel suivant
+        rows = tab.panel.table.get_children()
+        self.assertGreaterEqual(len(rows), 2)                           # REQ 5402 : toutes les courbes
+        tab.global_cursor.set(True)
+        tab._toggle_global()
+        global_lines = [line for a in tab.renderer.axes + [tab.renderer.tbm_plot] for line in a.lines
+                        if line.get_linestyle() == "--" and line.get_color() == "#2e7d32"]
+        self.assertGreaterEqual(len(global_lines), 3)                   # REQ 5405 : sur tous les axes
+
+    def test_tracking_mode(self):
+        """REQ 5402 : le curseur suit la souris sans clic."""
+        from matplotlib.backend_bases import MouseEvent
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "output", False)], 0)
+        tab.tracking.set(True)
+        tab._toggle_tracking()
+        self.root.update()
+        ax = tab.renderer.axes[0]
+        x_px, y_px = ax.transData.transform((12.0, 1.0))
+        tab.canvas.callbacks.process("motion_notify_event",
+                                     MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
+        self.root.update()
+        self.assertAlmostEqual(tab.axle().t1, 12.0, delta=0.1)
+
+    def test_drag_and_drop_to_axle(self):
+        from ptbg.gui.tree_panel import TreeRef
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        self.root.update()
+        ax = tab.renderer.axes[1]
+        widget = tab.canvas.get_tk_widget()
+        x_px, y_px = ax.bbox.x0 + 50, ax.bbox.y0 + 10
+        self.ctl.drop_tree_items([TreeRef("var", source.id, "ula")],
+                                 int(widget.winfo_rootx() + x_px),
+                                 int(widget.winfo_rooty() + widget.winfo_height() - y_px))
+        self.assertEqual(tab.state.axles[1].curves[0].name, "ula")
+
+    def test_monitor_hide_rules(self):
+        """REQ 4103 : refus si alerte, accepté si base de temps conforme."""
+        good, bad = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv", EXAMPLES / "simulation10_execution1.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(good.id, "output", False)], 0)
+        tab.toggle_monitor()
+        self.assertFalse(tab.state.tbm_visible)
+        tab.toggle_monitor()
+        tab.add_curves([(bad.id, "published", False)], 1)
+        with mock.patch("ptbg.gui.analysis_tab.messagebox.showwarning") as warning:
+            tab.toggle_monitor()
+        warning.assert_called_once()
+        self.assertTrue(tab.state.tbm_visible)
+
+    def test_horizontal_cursor_only_on_float(self):
+        """REQ 5406 : refusé sur un axe logique."""
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "init", False)], 1)
+        with mock.patch("ptbg.gui.app.messagebox.showwarning") as warning:
+            self.ctl.horizontal_cursor()
+        warning.assert_called_once()
+        tab.add_curves([(source.id, "output", False)], 0)
+        self.assertTrue(tab.float_curve_selected())
+
+    def test_xy_tab_and_point_pick(self):
+        """REQ 5408 : nuage X/Y et désignation d'un point."""
+        from matplotlib.backend_bases import MouseEvent
+        from ptbg.core.arrangement import CurveRef
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.new_tab("XY")
+        axle = tab.state.axles[2]
+        axle.xy_x, axle.xy_y = CurveRef(source.id, "pv"), CurveRef(source.id, "output")
+        tab.redraw()
+        self.root.update()
+        ax = tab.renderer.axes[2]
+        x_px, y_px = ax.transData.transform((5.0, 10.0))
+        tab.canvas.callbacks.process("button_press_event",
+                                     MouseEvent("button_press_event", tab.canvas, x_px, y_px, button=1))
+        self.assertIsNotNone(axle.xy_t)
+
+    def test_reports_and_project(self):
+        """REQ 6003 / 6004 et projet : rapport auto, pas à pas, enregistrement, réouverture."""
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "output", False)], 0)
+        auto_pdf = self.files.path / "auto.pdf"
+        with mock.patch("ptbg.gui.app.filedialog.asksaveasfilename", return_value=str(auto_pdf)), \
+                mock.patch("ptbg.gui.app.messagebox.askyesno", return_value=False):
+            self.ctl.automatic_report()
+        self.assertTrue(auto_pdf.read_bytes().startswith(b"%PDF"))
+        with mock.patch("ptbg.gui.app.simpledialog.askstring", return_value="Vue 1"):
+            self.ctl.add_report_page()
+            tab.set_cursor_mode("single")
+            self.ctl.add_report_page()
+        self.assertEqual([p.tab.comment for p in self.ctl.report_pages], ["Vue 1", "Vue 1"])
+        self.assertEqual(self.ctl.report_pages[0].tab.axles[0].cursor_mode, "none")   # capture figée
+        project = self.files.path / "essai.ptbg.json"
+        with mock.patch("ptbg.gui.app.filedialog.asksaveasfilename", return_value=str(project)):
+            self.ctl.save_project()
+        self.assertEqual(len(self.ctl.project_hash), 64)
+        with mock.patch("ptbg.gui.app.filedialog.askopenfilename", return_value=str(project)), \
+                mock.patch("ptbg.gui.app.messagebox.askyesno", return_value=True):
+            self.ctl.open_project()
+            pump(self.root, lambda: self.ctl.task is None and self.ctl.graph.tabs)
+        self.assertEqual(len(self.ctl.report_pages), 2)
+        self.assertEqual(self.ctl.graph.tabs[0].state.axles[0].curves[0].name, "output")
+
+    def test_information_windows_and_tree_toggle(self):
+        """REQ 5105 (arbre masquable) ; REQ 5101 (version, historique, sources, aide)."""
+        for action in (self.ctl.show_version, self.ctl.show_history, self.ctl.show_sources,
+                       self.ctl.show_help, self.ctl.show_log, self.ctl.show_traceability):
+            action()
+        windows = [w for w in self.root.winfo_children() if isinstance(w, tk.Toplevel)]
+        self.assertEqual(len(windows), 6)
+        self.ctl.toggle_tree()
+        self.assertEqual([str(p) for p in self.ctl.paned.panes()], [str(self.ctl.graph)])
+        self.ctl.toggle_tree()
+        self.assertEqual(len(self.ctl.paned.panes()), 2)
+
+    def test_absolute_time_mode(self):
+        """REQ 4107 : axe absolu refusé sans origine, accepté pour l'horodatage hh:mm:ss."""
+        self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        with mock.patch("ptbg.gui.app.messagebox.showwarning") as warning:
+            self.ctl.set_time_mode("absolute")
+        warning.assert_called_once()
+        self.ctl.workspace.remove_file(self.ctl.workspace.files()[0])
+        self.load(DEMO / "PLC_C_heure_ns.csv")
+        self.ctl.set_time_mode("absolute")
+        self.assertTrue(self.ctl.workspace.timeline().is_absolute)
+
+
+if __name__ == "__main__":
+    unittest.main()

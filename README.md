@@ -1,91 +1,89 @@
-# Arabelle — VISU PTBG 1.0.0
+# VISU PTBG 2.0.0 — analyseur graphique de perturbographie
 
-Application de diagnostic et de visualisation des CSV de PLC. Les sources
-modifiables sont dans `visu_ptbg/`. L'archive et le document Word reçus restent
-conservés comme références ; il n'est plus nécessaire d'extraire le ZIP.
+Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
+Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
+**NCS/00/I/COMMON----/ES/010 Rev. A** (`docs/specification/`).
 
-## Installer et démarrer
+Il lit un ou plusieurs CSV (un par PLC), **contrôle la base de temps** de chacun
+(période, stabilité, croissance continue, trous, déphasage, changements de fréquence),
+l'affiche dans un **Time Base Monitor**, et offre l'analyse graphique des signaux Bool,
+Float et groupes binaires : onglets à modèles de disposition, curseurs simple / double /
+global / horizontal conditionné / X/Y, traitement conditionnel, rapports **PDF**
+automatique et pas à pas.
 
-Installer Python **3.11 ou 3.12** avec Tkinter. Sous Windows, inclure Tcl/Tk
-dans l'installation Python ; sous Linux, installer le module Tkinter de
-l'interpréteur utilisé. Aucun compte ni service distant requis.
+![Fenêtre principale](docs/captures/01_vue_principale.png)
 
-Dans un terminal ouvert dans le dossier du dépôt :
+## Démarrer
 
-```sh
-python -m venv .venv
+| Poste | Démarrage |
+|---|---|
+| **Windows 11 + Spyder 6** | ouvrir `MAIN.py` puis **F5**. Rien à installer : numpy et matplotlib de Spyder suffisent |
+| **SLES 15 SP7** | `sudo zypper install python311 python311-tk python311-pip`, puis `install/installer_sles.sh` (une fois) et `install/lancer_sles.sh` |
+| Windows sans Spyder | Python 3.11 64 bits (python.org, avec Tcl/Tk), puis `install\installer_windows.bat` et `install\lancer_windows.bat` |
+| Terminal | `python MAIN.py [fichiers.csv ...]` |
+
+Pour essayer : ouvrir le dossier `data/demo/` (Fichier > Ouvrir un dossier de CSV) :
+trois PLC (10 ms avec pré-déclenchement, 20 ms déphasé, horodatage hh:mm:ss.ns) et un
+fichier non conforme. Les CSV reçus sont dans `data/exemples/`.
+
+Exemple de rapport PDF produit par l'outil : [docs/exemples/rapport_exemple_demo.pdf](docs/exemples/rapport_exemple_demo.pdf).
+Autres captures : [nuage X/Y](docs/captures/02_nuage_xy.png),
+[diagnostic d'un fichier](docs/captures/03_diagnostic.png),
+[configuration de la base de temps](docs/captures/04_configuration_base_de_temps.png),
+[axe absolu passant minuit](docs/captures/05_axe_absolu_minuit.png).
+
+Mode d'emploi complet : **[docs/GUIDE_UTILISATEUR.md](docs/GUIDE_UTILISATEUR.md)**
+(aussi dans l'outil : Information > Fichier d'aide, F1).
+
+## Dépendances
+
+Python **3.11** (référence ; vérifié de 3.10 à 3.14), Tkinter (fourni avec Python),
+**numpy** et **matplotlib** — rien d'autre. Versions figées dans `requirements.txt`,
+identiques pour Windows et SLES de Python 3.11 à 3.14. Inventaire complet, licences,
+versions de Python supportées et **impact d'une montée de version** :
+[docs/DEPENDANCES.md](docs/DEPENDANCES.md). Compatibilité entre systèmes :
+[docs/COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md).
+
+Contrôler un poste : `python tools/audit_environnement.py` (versions présentes / figées).
+
+## Organisation du code
+
+```
+MAIN.py            construit l'interface, rien d'autre (REQ 3002)
+ptbg/core/         traitements sans interface : CSV, base de temps, curseurs, X/Y…
+ptbg/plotting/     dessin commun écran et PDF, Time Base Monitor
+ptbg/report/       rapport PDF
+ptbg/gui/          interface Tkinter : contrôleur, arbre, onglets, dialogues
+ptbg/system/       compatibilité Windows / SLES, environnement, journal
+tests/             90 tests automatisés (dont l'interface réelle)
+tools/             audit d'environnement, traçabilité des requis, données de démo
+install/           installation et lancement Windows / SLES
+docs/              guide, architecture, dépendances, compatibilité, traçabilité
 ```
 
-Activer l'environnement : `.venv\Scripts\activate` sous Windows,
-ou `source .venv/bin/activate` sous Linux. Puis :
+Pour reprendre le code : **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-```sh
-python -m pip install -r requirements.txt
-python lancer.py
+## Requis
+
+Les 64 lignes de la spécification sont tracées dans
+**[docs/TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md)** (réalisation, code, test,
+statut). Les interprétations à faire valider (énoncés vides, ambigus ou commentés) sont
+dans **[docs/POINTS_OUVERTS.md](docs/POINTS_OUVERTS.md)**.
+
+```
+python tools/verifier_tracabilite.py     # chaque requis du Word : matrice + code + test
 ```
 
-Dans Spyder, choisir ce même interpréteur et exécuter `visu_ptbg/MAIN.py`.
-Sous Linux, une session graphique est nécessaire pour ouvrir la fenêtre.
-Les versions figées sont celles du développement Linux ; la qualification
-sur Windows 11 et SLES 15 SP7 reste distincte.
+## Tests
 
-## Utiliser
-
-1. Ajouter un CSV, plusieurs fichiers ou un dossier. La première colonne est
-   toujours la base de temps. Chaque CSV conserve son profil et son diagnostic.
-2. Renseigner l'unité native, le pas attendu et la tolérance, puis **Analyser
-   ce fichier**. Ces réglages ne convertissent ni ne corrigent les timestamps.
-3. Dans **Courbe**, choisir la variable et son type. Auto conserve les nombres
-   comme Float ; pour un Bool 0/1, choisir explicitement Bool. Le choix est
-   mémorisé par colonne et contenu du CSV pendant la session.
-4. Afficher, superposer des signaux du même type et du même CSV, ou créer
-   plusieurs onglets avec les modèles à un ou deux panneaux.
-5. **Groupe Bool…** réunit 2 à 8 colonnes sur des pistes séparées, chacune
-   étiquetée 0/1. Les points sont mesurés ; aucun maintien d'état n'est supposé.
-6. Activer un curseur et **Suivi souris** pour lire au déplacement.
-   C1/C2 donnent deux lectures indépendantes. Le curseur global relie les
-   panneaux du même CSV. Désactiver le zoom/pan avant de lire les curseurs.
-7. Sur un panneau Float, **Condition Bool…** choisit une colonne du même CSV.
-   Un clic horizontal lit la valeur analogique autorisée la plus proche de
-   l'ordonnée visée, uniquement si le Bool est vrai sur la **même ligne**.
-   Les Bool absents/invalides et valeurs analogiques absentes sont exclus.
-   Les doublons temporels ne fusionnent pas les lignes. **Retirer la condition
-   Bool** rétablit la lecture sans filtre. Aucun échantillon n'est interpolé.
-8. **Nuage X/Y…** affiche les couples valides de deux colonnes sur la même ligne.
-9. Le menu **Rapport** exporte l'onglet actif ou compose des captures successives.
-   Le Time Base Monitor figure dans le PDF même masqué à l'écran.
-   Le rendu PDF utilise un processus séparé ; **Annuler le calcul** écarte
-   le résultat avant publication. Les fichiers existants sont préservés.
-
-Les croix orange restent réservées aux mesures encadrant des cellules
-vides du signal : jamais un simple saut de temps ni une valeur invalide.
-
-## Vérifier
-
-Depuis `visu_ptbg/`, avec le même interpréteur :
-
-```sh
-python verifier_robustesse.py
-python -m unittest discover -s tests_integration -v
-python -m unittest discover -s tests_gui -v
+```
+python -m unittest discover -s tests -v
 ```
 
-La dernière suite exige un écran (ou Xvfb sous Linux). Elle ouvre de vraies
-fenêtres Tkinter et teste les commandes de l'interface. Elle ne remplace pas
-la réception humaine sur les systèmes cibles. Les deux premières suites
-fonctionnent sans écran. En cloud, utiliser des dossiers accessibles en écriture
-pour `MPLCONFIGDIR` et `XDG_STATE_HOME` si nécessaire.
+Les tests d'interface ouvrent de vraies fenêtres ; ils sont ignorés sans écran (sous
+Linux sans bureau : `xvfb-run python -m unittest discover -s tests`).
 
-## Couverture et limites
+## Historique
 
-Le bilan actuel et les preuves sont dans
-[docs/VALIDATION_V100.md](visu_ptbg/docs/VALIDATION_V100.md) et la
-[matrice des 64 requis](visu_ptbg/docs/MATRICE_REQUIS_V100.json).
-
-Sans référence commune entre PLC, le logiciel ne fabrique pas de temps absolu,
-de recalage ou de déphasage inter-PLC. Les horloges restent indépendantes.
-Le requis 5500 est vide ; le maximum « xxxMo » n'est pas défini.
-Les garde-fous sont 50 MiB par CSV et 500 000 points graphiques.
-Python 3.6 n'est pas pris en charge. Aucun exécutable Windows/SLES n'est livré.
-Les captures et préparations de figures restent dans le fil graphique Tk ;
-un rendu très volumineux peut encore ralentir la fenêtre.
+[CHANGELOG.md](CHANGELOG.md). La version 2.0.0 remplace le prototype 1.0.0, archivé
+dans `archive/`.
