@@ -189,6 +189,42 @@ class RenderAndReportTests(unittest.TestCase):
         self.assertIn("Δt = 2 s", text)
         self.assertIn("output = 15", text)
 
+    def test_axes_are_gridded_and_lane_names_stay_inside(self):
+        """REQ 5104 / 2200 : axes quadrillés (grille principale et sous-graduations en
+        pointillés) ; les noms des pistes logiques restent dans le cadre de l'axe quand
+        on déplace la vue (ils ne débordent plus sur l'axe voisin)."""
+        from matplotlib.ticker import AutoMinorLocator
+        tab = TabState.from_template("AL", "Grille")
+        tab.axles[0].curves.append(CurveRef(self.ok.id, "output"))
+        tab.axles[1].curves.append(CurveRef(self.ok.id, "init"))
+        figure, renderer = self._render(tab)
+        for ax in renderer.axes:
+            self.assertIsInstance(ax.xaxis.get_minor_locator(), AutoMinorLocator)
+            self.assertTrue(any(tick.gridline.get_visible() for tick in ax.xaxis.get_minor_ticks()))
+        lanes = [text for text in renderer.axes[1].texts if "init" in text.get_text()]
+        self.assertTrue(lanes and all(text.get_clip_on() for text in lanes))
+
+    def test_report_page_layout_like_project_test_reports(self):
+        """REQ 6001 / 6005 : en-tête à chasse fixe, identification à gauche avec tous les
+        champs de REQ 6005, bilan de la page à droite ; légende des courbes à droite,
+        hors du graphique, comme les rapports de test du projet."""
+        from ptbg.report.pdf_report import _draw_header
+        tab = TabState.from_template("1A", "Rapport")
+        tab.axles[0].curves.append(CurveRef(self.ok.id, "output"))
+        _, renderer = self._render(tab, for_print=True)
+        ax = renderer.axes[0]
+        self.assertGreater(ax.get_legend().get_window_extent().x0, ax.get_window_extent().x1)
+        self.assertEqual(ax.title.get_text(), "Axe 1")                       # titre centré
+        page = Figure()
+        FigureCanvasAgg(page)
+        header = build_header(self.settings, self.ws, [ReportPage(tab, "relative", None)], None, "")
+        _draw_header(page, header, ["Page 1/2", "Base de temps : OK"])
+        text = texts_of(page)
+        for label in ("Outil", "Émetteur", "Date", "Projet", "Unité", "Référence", "Empreinte projet",
+                      "Source(s)", "NPI-NCS", "Tranche 1", self.ok.name, "Page 1/2"):
+            self.assertIn(label, text)
+        self.assertTrue(all(item.get_fontfamily()[0] == "DejaVu Sans Mono" for item in page.texts))
+
     def test_pdf_automatic_and_step_by_step(self):
         """REQ 6000, 6001, 6002, 6005 : PDF, en-tête complet, pages dans l'ordre + traçabilité."""
         tab = TabState.from_template("AL", "Vue")

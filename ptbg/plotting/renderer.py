@@ -21,7 +21,7 @@ demandée par REQ_COMMON_KH_5405.
 from __future__ import annotations
 
 import numpy as np
-from matplotlib import style
+from matplotlib import rc_context, style
 from matplotlib.transforms import blended_transform_factory
 
 from ptbg.core.arrangement import AxleState, TabState
@@ -33,8 +33,8 @@ from ptbg.core.sampling import DisplayCurve, break_at, missing_markers, sample_a
 from ptbg.core.signals import SignalType, short_label
 from ptbg.core.xy import point_at_time
 from ptbg.plotting import monitor
-from ptbg.plotting.styles import (ACTIVE_AXLE_COLOR, CURSOR_COLORS, FONT_NORMAL, FONT_SMALL,
-                                  SEVERITY_COLORS, curve_color)
+from ptbg.plotting.styles import (ACTIVE_AXLE_COLOR, CURSOR_COLORS, FONT_NORMAL, FONT_SMALL, REPORT_FONT,
+                                  SEVERITY_COLORS, apply_grid, curve_color)
 from ptbg.plotting.time_axis import apply_time_axis, axis_title
 
 LANE_STEP = 1.25        # espacement vertical des pistes logiques
@@ -98,6 +98,7 @@ class TabRenderer:
         self._digital_axles: set = set()    # axes dessinés en pistes logiques
         self._cursor_artists: list = []
         self._h_cache: dict = {}
+        self._legend_outside = False        # légende de l'axe en cours de dessin hors du graphique
 
     # ------------------------------------------------------------------ build
     def sources_in_tab(self):
@@ -109,8 +110,9 @@ class TabRenderer:
 
         Le contexte de style protège le rendu d'un style global modifié dans la
         console (Spyder, ``plt.style.use``…) sans toucher aux réglages de l'utilisateur.
+        Le rapport utilise une police à chasse fixe, comme les rapports de test du projet.
         """
-        with style.context("default"):
+        with style.context("default"), rc_context({"font.family": REPORT_FONT} if self.for_print else {}):
             self._draw_all()
 
     def _draw_all(self) -> None:
@@ -129,10 +131,13 @@ class TabRenderer:
             ratios.append(0.12 * total * (1 + 0.5 * len(sources)))
         grid = self.container.add_gridspec(
             len(ratios), tpl.ncols, height_ratios=ratios, width_ratios=list(tpl.col_ratios),
-            left=0.075, right=0.985, top=0.965, bottom=0.075, hspace=HSPACE, wspace=0.22)
+            left=0.075, right=0.84 if self.for_print else 0.985, top=0.965, bottom=0.075,
+            hspace=HSPACE, wspace=0.22)
         master = None
         for index, (slot, axle) in enumerate(zip(tpl.slots, self.tab.axles)):
             spec = grid[slot.row:slot.row + slot.rowspan, slot.col:slot.col + slot.colspan]
+            # Rapport : légende hors du graphique seulement à droite de la dernière colonne.
+            self._legend_outside = self.for_print and slot.col + slot.colspan == tpl.ncols
             if slot.kind == "time":
                 ax = self.container.add_subplot(spec, sharex=master)
                 master = master or ax
@@ -201,14 +206,18 @@ class TabRenderer:
             master.set_xlim(lo - pad, hi + pad)
 
     def _style_axle(self, index: int, ax) -> None:
-        """Grille, titre « Axe n » et cadre bleu de l'axe actif."""
-        ax.grid(True, alpha=0.3)
+        """Quadrillage, titre « Axe n » (centré dans le rapport) et cadre bleu de l'axe actif."""
+        apply_grid(ax)
         ax.tick_params(labelsize=FONT_SMALL)
-        ax.set_title(f"Axe {index + 1}", loc="left", fontsize=FONT_NORMAL, pad=3)
+        ax.set_title(f"Axe {index + 1}", loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
         if not self.for_print and index == self.active_axle:
             for spine in ax.spines.values():
                 spine.set_edgecolor(ACTIVE_AXLE_COLOR)
                 spine.set_linewidth(2.0)
+
+    def _title_side(self) -> str:
+        """Titre d'axe centré dans le rapport (comme les rapports de test), à gauche à l'écran."""
+        return "center" if self.for_print else "left"
 
     def _axle_failed(self, ax, exc: Exception) -> None:
         """Axe impossible à dessiner : il est vidé et l'erreur y est écrite (écran et PDF)."""
@@ -240,7 +249,8 @@ class TabRenderer:
             ax.set_ylim(*axle.ylim)
         if not self.timeline.is_absolute and any(c.source.conversion.pretrig_samples for c in curves):
             ax.axvline(0.0, color="#555555", ls=":", lw=1.0)
-            ax.text(0.0, 0.02, " déclenchement (t = 0)", transform=blended_transform_factory(ax.transData, ax.transAxes),
+            ax.text(0.0, 0.02, " déclenchement (t = 0)", clip_on=True,
+                    transform=blended_transform_factory(ax.transData, ax.transAxes),
                     fontsize=FONT_SMALL - 1, color="#555555")
 
     def _register(self, ax, x, y, **style):
@@ -256,14 +266,24 @@ class TabRenderer:
             selected = position == min(axle.selected, len(curves) - 1)
             x = self.timeline.x(curve.source)
             xb, yb = break_at(x, curve.values, curve.source.gap_starts())
+            # Rapport : nom du fichier à la ligne, la légende tient dans la marge de droite.
+            label = curve.label.replace(" [", "\n[") if self.for_print else curve.label
             self._register(ax, xb, yb, color=color, lw=1.8 if selected else 1.0,
-                           label=("► " if selected else "") + curve.label)
+                           label=("► " if selected else "") + label)
             if curve.signal is not None:
                 marks = missing_markers(x, curve.values, curve.signal.missing)[:MAX_MARKERS]
                 if marks.size:
                     ax.plot(x[marks], curve.values[marks], "x", color=color, ms=7, mew=1.6)
         _bound_axes(ax, None, _representable_limits([curve.values for curve in curves]))
-        ax.legend(loc="best", fontsize=FONT_SMALL, framealpha=0.85)
+        self._legend(ax)
+
+    def _legend(self, ax) -> None:
+        """Légende : dans l'axe à l'écran ; dans le rapport, à droite hors des courbes
+        (axes de la dernière colonne de la disposition)."""
+        if self._legend_outside:
+            ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0, fontsize=FONT_SMALL)
+        else:
+            ax.legend(loc="best", fontsize=FONT_SMALL, framealpha=0.85)
 
     def _draw_digital(self, index, ax, axle, curves: list[CurveData]) -> None:
         """Pistes logiques empilées de haut en bas, étiquetées à gauche."""
@@ -292,9 +312,10 @@ class TabRenderer:
                     ax.plot(x[marks], y[marks], "x", color=color, ms=6, mew=1.4)
                 self._lanes[(index, position)] = (base, scale)
                 # Nom de la piste DANS l'axe : les noms longs ne sont pas tronqués.
+                # Découpé au cadre de l'axe : un nom ne déborde pas quand on déplace la vue.
                 ax.text(0.003, base + LANE_HEIGHT + 0.05, ("► " if selected else "") + name,
                         transform=blended_transform_factory(ax.transAxes, ax.transData),
-                        fontsize=FONT_SMALL, color=color, va="bottom", ha="left",
+                        fontsize=FONT_SMALL, color=color, va="bottom", ha="left", clip_on=True,
                         bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.5))
                 ticks += [base, base + LANE_HEIGHT]
                 lane += 1
@@ -309,7 +330,7 @@ class TabRenderer:
         data = xy_data(axle, self.workspace, self.timeline)
         if data is None:
             self._placeholder(ax, "Nuage X/Y : Outils > Nuage X/Y…")
-            ax.set_title(f"Axe {index + 1} — nuage X/Y", loc="left", fontsize=FONT_NORMAL, pad=3)
+            ax.set_title(f"Axe {index + 1} — nuage X/Y", loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
             return
         step = max(1, data.n // MAX_XY_POINTS)
         ax.plot(data.x[::step], data.y[::step], ".", ms=2.5, color=curve_color(0), alpha=0.7)
@@ -318,10 +339,11 @@ class TabRenderer:
             span = np.array([data.x.min(), data.x.max()])
             ax.plot(span, data.slope * span + data.intercept, "--", color="#555555", lw=1.0,
                     label=f"régression (r = {data.r:.4f})")
-            ax.legend(loc="best", fontsize=FONT_SMALL)
+            self._legend(ax)
+        apply_grid(ax, minor_y=True)
         ax.set_xlabel(f"X : {axle.xy_x.name}", fontsize=FONT_SMALL)
         ax.set_ylabel(f"Y : {axle.xy_y.name}", fontsize=FONT_SMALL)
-        ax.set_title(f"Axe {index + 1} — X/Y : {data.describe()}", loc="left", fontsize=FONT_SMALL, pad=3)
+        ax.set_title(f"Axe {index + 1} — X/Y : {data.describe()}", loc=self._title_side(), fontsize=FONT_SMALL, pad=3)
         if axle.ylim:
             ax.set_ylim(*axle.ylim)
 

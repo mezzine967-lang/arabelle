@@ -1,4 +1,4 @@
-# Architecture de VISU PTBG 2.3.0 — pour reprendre le code
+# Architecture de VISU PTBG 2.4.0 — pour reprendre le code
 
 ## 1. Vue d'ensemble
 

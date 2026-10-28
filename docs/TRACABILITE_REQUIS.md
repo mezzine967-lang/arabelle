@@ -1,4 +1,4 @@
-# Matrice de traçabilité des requis — VISU PTBG 2.3.0
+# Matrice de traçabilité des requis — VISU PTBG 2.4.0
 
 Document de référence : **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026),
 fichier `docs/specification/NCS00ICOMMON----ES010_RevA.docx`.
@@ -44,7 +44,7 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
-| REQ_COMMON_KH_2200 | Signal binaire | Type Bool (true/false ou 0/1), tracé en escalier sur piste logique | `core/signals.py`, `plotting/renderer.py` | `test_csv_reader.test_auto_types` | Implémenté et testé |
+| REQ_COMMON_KH_2200 | Signal binaire | Type Bool (true/false ou 0/1), tracé en escalier sur piste logique | `core/signals.py`, `plotting/renderer.py` | `test_csv_reader.test_auto_types`, `test_package_report.test_axes_are_gridded_and_lane_names_stay_inside` | Implémenté et testé |
 | REQ_COMMON_KH_2201 (1re ligne) | Signal analogique : float | Type Float, tracé continu, lu au plus proche échantillon | `core/signals.py` | `test_csv_reader.test_auto_types` | Implémenté et testé |
 | REQ_COMMON_KH_2201 (2e ligne) | Signal groupe binaire | Groupe de Bool (détecté pour `NOM[i]`/`NOM.i` ou créé par l'utilisateur), pistes regroupées et mot binaire lu au curseur | `core/signals.py` (`BinaryGroup`), `core/curves.py` | `test_csv_reader.test_indexed_binary_groups`, `test_gui.test_tree_levels_and_types` | Implémenté — interprétation à valider (codage du groupe) |
 
@@ -72,7 +72,7 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 | REQ_COMMON_KH_3001 | Compatible Python 3.6 au moins | Lu comme « 3.6 minimum » : code vérifié de 3.10 à 3.14, référence 3.11 (décision du relecteur : Python 3.11 sur SLES 15) | `version.py` (`MIN_PYTHON`) | `test_architecture.test_minimal_python_syntax` | Implémenté — interprétation à valider (3.6 strict exclu) |
 | REQ_COMMON_KH_3002 | MAIN.py dédié à la génération de l'IHM | MAIN.py n'importe que l'IHM et ne contient que `build_interface` et `main` | `MAIN.py` | `test_architecture.test_main_only_builds_the_gui` | Implémenté et testé |
 | REQ_COMMON_KH_3003 | Actions externalisées dans des sous-scripts ou classes | Contrôleur `gui/app.py`, traitements dans `core/`, dessin `plotting/`, rapport `report/` ; `core/` sans Tk | `ptbg/` | `test_architecture.test_processing_is_externalized_and_gui_free` | Implémenté et testé |
-| REQ_COMMON_KH_3004 | Paquets documentés et alignés sur la version du noyau Python | `requirements.txt` figé et commenté, docs/DEPENDANCES.md (versions, licences, Python supportés, wheels, impacts de montée de version), relevé au démarrage | `system/environment.py`, `requirements.txt` | `test_architecture.test_third_party_libraries_are_documented_and_pinned` | Implémenté et testé |
+| REQ_COMMON_KH_3004 | Paquets documentés et alignés sur la version du noyau Python | `requirements.txt` figé et commenté, docs/DEPENDANCES.md (versions, licences, Python supportés, wheels, impacts de montée de version), relevé au démarrage | `system/environment.py`, `requirements.txt` | `test_architecture.test_third_party_libraries_are_documented_and_pinned`, `test_architecture.test_windows_11_is_named_from_its_build_number` | Implémenté et testé |
 | REQ_COMMON_KH_3005 | Mécanisme de compatibilité entre OS documenté | Différences d'OS centralisées dans `system/compat.py` ; docs/COMPATIBILITE_OS.md | `system/compat.py` | `test_architecture.test_os_specific_code_is_centralized` | Implémenté et testé |
 | REQ_COMMON_KH_3006 | Code source commenté | Docstring par module, classe et fonction non triviale ; requis cités dans le code | tout `ptbg/` | `test_architecture.test_sources_are_commented` | Implémenté et testé |
 | REQ_COMMON_KH_3007 | Aucune fonction inutile | Contrôle automatique : toute fonction définie est appelée ; analyse `vulture` | tout `ptbg/` | `test_architecture.test_no_unused_functions` | Implémenté et testé |
@@ -100,7 +100,7 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 | REQ_COMMON_KH_5103 | Zone gauche = arbre des données | Arbre à gauche | `MAIN.py`, `gui/tree_panel.py` | `test_gui.test_main_window_layout` | Implémenté et testé |
 | REQ_COMMON_KH_5104 | Zone droite principale et plus large | Zone graphique à droite, seule à s'étirer | `MAIN.py`, `gui/graph_area.py` | `test_gui.test_main_window_layout` | Implémenté et testé |
 | REQ_COMMON_KH_5105 | Arbre masquable | Bouton « Masquer », barre d'accès rapide, menu Affichage, F9 | `gui/app.py` (`toggle_tree`) | `test_gui.test_information_windows_and_tree_toggle` | Implémenté et testé |
-| REQ_COMMON_KH_5106 | Plusieurs onglets pour différentes dispositions | Onglets créés depuis un modèle, renommables, fermables | `gui/graph_area.py` | `test_gui.test_xy_tab_and_point_pick` | Implémenté et testé |
+| REQ_COMMON_KH_5106 | Plusieurs onglets pour différentes dispositions | Onglets créés depuis un modèle, renommables, fermables (croix du titre, clic molette, clic droit, Ctrl+W) | `gui/graph_area.py` | `test_gui.test_xy_tab_and_point_pick`, `test_gui.test_tabs_close_with_their_cross` | Implémenté et testé |
 
 ## 4.2 Arbre des données
 
@@ -142,11 +142,11 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
 | REQ_COMMON_KH_6000 | Générer un rapport PDF | Matplotlib `PdfPages`, écriture atomique | `report/pdf_report.py` | `test_package_report.test_pdf_automatic_and_step_by_step` | Implémenté et testé |
-| REQ_COMMON_KH_6001 | Modèle avec en-tête et zone graphique | En-tête + zone graphique (même rendu qu'à l'écran) + tableau des lectures | `report/pdf_report.py` | `test_package_report.test_pdf_automatic_and_step_by_step` | Implémenté et testé |
+| REQ_COMMON_KH_6001 | Modèle avec en-tête et zone graphique | En-tête + zone graphique (même rendu qu'à l'écran) + tableau des lectures | `report/pdf_report.py` | `test_package_report.test_pdf_automatic_and_step_by_step`, `test_package_report.test_report_page_layout_like_project_test_reports` | Implémenté et testé |
 | REQ_COMMON_KH_6002 | Automatique ou pas à pas | Menu Rapport : automatique / pas à pas | `gui/app.py` | `test_gui.test_reports_and_project` | Implémenté et testé |
 | REQ_COMMON_KH_6003 | Automatique = édition unique de l'onglet actif | Une page de l'onglet actif + traçabilité | `gui/app.py` (`automatic_report`) | `test_gui.test_reports_and_project` | Implémenté et testé |
 | REQ_COMMON_KH_6004 | Pas à pas = génération séquentielle selon l'onglet actif (vue globale, analyse, curseurs, nuage X/Y…) | Captures figées successives (zoom, curseurs, X/Y, condition, commentaire), ordonnables | `gui/app.py` (`add_report_page`), `gui/dialogs/report_dialogs.py` (`PagesWindow`) | `test_gui.test_reports_and_project` | Implémenté et testé |
-| REQ_COMMON_KH_6005 | En-tête : version, émetteur, date, fichiers sources, projet et unité, référence ou empreinte du projet | Tous ces champs ; SHA-256 des sources et du fichier projet ; annexe de traçabilité | `report/pdf_report.py` (`build_header`) | `test_package_report.test_pdf_automatic_and_step_by_step` | Implémenté — interprétation à valider (fichier projet .ptbg.json) |
+| REQ_COMMON_KH_6005 | En-tête : version, émetteur, date, fichiers sources, projet et unité, référence ou empreinte du projet | Tous ces champs ; SHA-256 des sources et du fichier projet ; annexe de traçabilité | `report/pdf_report.py` (`build_header`) | `test_package_report.test_pdf_automatic_and_step_by_step`, `test_package_report.test_report_page_layout_like_project_test_reports` | Implémenté — interprétation à valider (fichier projet .ptbg.json) |
 
 ## Synthèse
 

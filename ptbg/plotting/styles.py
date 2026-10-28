@@ -5,6 +5,8 @@ sur fond blanc à l'écran comme à l'impression.
 """
 from __future__ import annotations
 
+from matplotlib.ticker import AutoMinorLocator
+
 from ptbg.core.diagnostics import Severity
 from ptbg.core.time_base import EventKind
 
@@ -34,6 +36,18 @@ CURSOR_COLORS = {"C1": "#c62828", "C2": "#6a1b9a", "Global": "#2e7d32", "H": "#e
 ACTIVE_AXLE_COLOR = "#1565c0"
 FONT_SMALL = 7
 FONT_NORMAL = 8
+REPORT_FONT = "DejaVu Sans Mono"   # police à chasse fixe des rapports (fournie avec Matplotlib)
+
+
+def apply_grid(ax, minor_y: bool = False) -> None:
+    """Quadrillage des axes, à l'écran comme dans le rapport : grille principale
+    continue et sous-graduations en pointillés sur l'axe des abscisses (et des
+    ordonnées si ``minor_y``), comme les rapports de test du projet."""
+    ax.xaxis.set_minor_locator(AutoMinorLocator())
+    if minor_y:
+        ax.yaxis.set_minor_locator(AutoMinorLocator())
+    ax.grid(True, which="major", color="#b0b0b0", lw=0.8)
+    ax.grid(True, which="minor", axis="both" if minor_y else "x", color="#d0d0d0", lw=0.6, ls="--")
 
 
 def curve_color(position: int) -> str:

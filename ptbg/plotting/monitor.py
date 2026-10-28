@@ -19,7 +19,7 @@ from ptbg.core.data_package import SourceFile, Timeline
 from ptbg.core.diagnostics import Severity, worst
 from ptbg.core.time_base import EventKind, ms
 from ptbg.core.time_parser import format_absolute
-from ptbg.plotting.styles import CURVE_COLORS, EVENT_STYLE, FONT_SMALL, SEVERITY_COLORS
+from ptbg.plotting.styles import CURVE_COLORS, EVENT_STYLE, FONT_SMALL, SEVERITY_COLORS, apply_grid
 
 TITLE = "Time Base Monitor"
 
@@ -91,7 +91,7 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
                      textcoords="offset points", va="top", ha="left",
                      fontsize=FONT_SMALL - 0.5, family="DejaVu Sans Mono")
     plot_ax.tick_params(labelsize=FONT_SMALL)
-    plot_ax.grid(True, alpha=0.3)
+    apply_grid(plot_ax)
     for spine in plot_ax.spines.values():
         spine.set_edgecolor(color)
     loaded = [s for s in sources if s.is_loaded and s.analysis.dt_values.size]

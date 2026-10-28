@@ -137,7 +137,16 @@ def _os_description() -> str:
             return f"{info.get('PRETTY_NAME', 'Linux')} — noyau {platform.release()}"
         except OSError:
             pass
-    return f"{platform.system()} {platform.release()} ({platform.version()})"
+    release = platform.release()
+    if platform.system() == "Windows" and release == "10":
+        # Windows 11 garde le noyau 10.0 : seul le numéro de build (≥ 22000) le
+        # distingue. Python < 3.12 renvoie « 10 » dans les deux cas.
+        try:
+            if int(platform.version().split(".")[2]) >= 22000:
+                release = "11"
+        except (IndexError, ValueError):
+            pass
+    return f"{platform.system()} {release} ({platform.version()})"
 
 
 def _tk_version() -> str:

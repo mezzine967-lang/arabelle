@@ -7,7 +7,7 @@ ajouter une entrée dans ``CHANGELOG.md``.
 """
 
 TOOL_NAME = "VISU PTBG"
-TOOL_VERSION = "2.3.0"
+TOOL_VERSION = "2.4.0"
 TOOL_DATE = "2026-10-28"
 
 # Document de référence des requis implémentés.
@@ -19,5 +19,5 @@ MIN_PYTHON = (3, 10)
 
 
 def full_name() -> str:
-    """Retourne « VISU PTBG 2.3.0 », utilisé dans les titres et rapports."""
+    """Retourne « VISU PTBG 2.4.0 », utilisé dans les titres et rapports."""
     return f"{TOOL_NAME} {TOOL_VERSION}"

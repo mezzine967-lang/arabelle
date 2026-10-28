@@ -3,6 +3,25 @@
 Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
 Chaque version incrémente `ptbg/version.py` et ajoute une entrée ici.
 
+## 2.4.0 — 2026-10-28 — rapports au format des rapports de test, onglets fermables
+
+Retours d'utilisation au poste :
+
+- **Onglets** : chaque onglet porte une croix « × » de fermeture ; clic molette sur le
+  titre = fermer ; clic droit = renommer / fermer (en plus de Ctrl+W et du menu Affichage).
+- **Pistes logiques** : les noms des pistes restent dans le cadre de l'axe quand on déplace
+  la vue (ils débordaient sur l'axe voisin).
+- **Quadrillage** des axes (écran et rapport) : grille principale continue et
+  sous-graduations en pointillés sur l'axe du temps (et les deux axes du nuage X/Y).
+- **Rapport PDF** au format des rapports de test du projet : police à chasse fixe, en-tête
+  en deux blocs (identification à gauche, avec tous les champs de REQ 6005 ; bilan de la
+  page à droite : page, fichiers, courbes, lectures, statut de la base de temps), titres
+  d'axe centrés, légendes à droite hors des courbes (axes de la dernière colonne).
+- **Environnement** : un poste Windows 11 était annoncé « Windows 10 » sous Python 3.11
+  (Windows 11 garde le noyau 10.0) ; le nom est déduit du numéro de build (≥ 22000).
+- 136 tests (nouveaux : croix des onglets, quadrillage et noms de pistes, mise en page du
+  rapport, nom de Windows 11).
+
 ## 2.3.0 — 2026-10-28 — statuts plus prudents, horodatages aberrants visibles
 
 Suite à une relecture critique du récapitulatif :

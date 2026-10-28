@@ -1,4 +1,4 @@
-# Guide d'utilisation — VISU PTBG 2.3.0
+# Guide d'utilisation — VISU PTBG 2.4.0
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier
@@ -133,6 +133,9 @@ analogique + logique, grille 2 × 2, temporel + nuage X/Y. Les axes temporels d'
 partagent le même temps : zoom et déplacement (loupe et croix de la barre d'outils, maison
 = vue complète) s'appliquent à tous.
 
+Fermer un onglet : croix **×** de son titre, clic molette sur le titre, clic droit sur le
+titre (renommer / fermer) ou Ctrl+W. S'il n'en reste aucun, un onglet vide est recréé.
+
 Un axe porte soit des courbes **analogiques** (Float), soit des **pistes logiques** (Bool,
 Texte, groupes binaires). Une variable de l'autre famille est placée automatiquement sur
 le premier axe compatible.
@@ -180,8 +183,11 @@ condition est vraie. Copier ou exporter en CSV.
   nuage X/Y, condition) avec un commentaire ; recommencer après chaque réglage ;
   **Gérer les pages…** pour ordonner, commenter, supprimer, puis **Générer le PDF**.
 
-Chaque page comporte l'en-tête (version de l'outil, émetteur, date, fichiers sources et
-SHA-256, projet et unité, référence et empreinte du projet), la zone graphique avec le
+Chaque page, au format des rapports de test du projet (police à chasse fixe, axes
+quadrillés, légendes à droite), comporte l'en-tête — à gauche : version de l'outil,
+émetteur, date, projet et unité, référence et empreinte du projet, fichiers sources et
+SHA-256 ; à droite : page, nombre de fichiers, de courbes, de lectures et statut de la base
+de temps —, le titre de la capture, la zone graphique avec le
 **Time Base Monitor** (ou, s'il a été masqué, l'indication de conformité de la base de
 temps) et le tableau des lectures de curseurs. Une dernière page de **traçabilité** reprend
 empreintes complètes, diagnostics de base de temps et environnement d'exécution.

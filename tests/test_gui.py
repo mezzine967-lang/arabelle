@@ -139,6 +139,7 @@ class InterfaceTests(unittest.TestCase):
         self.assertAlmostEqual(tab.axle().t1, 12.0, delta=0.1)
         # REQ 4105 : seuls les curseurs sont redessinés, sur le rendu figé du reste.
         self.assertIsNotNone(tab._background)
+        ax = tab.renderer.axes[0]            # un redimensionnement a pu redessiner l'onglet
         x_px, y_px = ax.transData.transform((14.0, 1.0))
         tab.canvas.callbacks.process("motion_notify_event",
                                      MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
@@ -197,6 +198,26 @@ class InterfaceTests(unittest.TestCase):
         warning.assert_called_once()
         tab.add_curves([(source.id, "output", False)], 0)
         self.assertTrue(tab.float_curve_selected())
+
+    def test_tabs_close_with_their_cross(self):
+        """REQ 5106 : chaque onglet se ferme par la croix de son titre (ou clic molette,
+        clic droit, Ctrl+W) ; il reste toujours au moins un onglet."""
+        from types import SimpleNamespace
+        graph = self.ctl.graph
+        first = graph.tabs[0]
+        self.ctl.new_tab("2A")
+        self.root.update()
+        notebook = graph.notebook
+        crosses = [(x, y) for y in range(2, 34, 2) for x in range(0, notebook.winfo_width(), 2)
+                   if "close" in notebook.identify(x, y) and notebook.index(f"@{x},{y}") == 1]
+        self.assertTrue(crosses, "croix de fermeture absente du 2e onglet")
+        event = SimpleNamespace(x=crosses[0][0], y=crosses[0][1])
+        graph._on_press(event)
+        graph._on_release(event)
+        self.assertEqual(graph.tabs, [first])
+        self.ctl.close_tab(first)
+        self.assertEqual(len(graph.tabs), 1)                  # un onglet vide est recréé
+        self.assertIsNot(graph.tabs[0], first)
 
     def test_xy_tab_and_point_pick(self):
         """REQ 5408 : nuage X/Y et désignation d'un point."""

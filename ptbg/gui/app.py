@@ -397,9 +397,10 @@ class Application:
         self.notify(f"Nouvel onglet « {tab.state.title} ».")
         return tab
 
-    def close_tab(self) -> None:
-        """Ferme l'onglet actif ; un onglet vide est recréé s'il n'en reste aucun."""
-        tab = self.graph.active_tab()
+    def close_tab(self, tab=None) -> None:
+        """Ferme un onglet (l'onglet actif par défaut) ; un onglet vide est recréé
+        s'il n'en reste aucun."""
+        tab = tab or self.graph.active_tab()
         if tab is not None:
             self.graph.close_tab(tab)
         if not self.graph.tabs:

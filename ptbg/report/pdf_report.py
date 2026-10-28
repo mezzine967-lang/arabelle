@@ -30,14 +30,16 @@ from pathlib import Path
 from matplotlib import style
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
+from matplotlib.lines import Line2D
 
 from ptbg.config import Settings
 from ptbg.core.data_package import Timeline, Workspace
 from ptbg.core.multi_source import compare_sources
 from ptbg.core.project import ReportPage
 from ptbg.core.readings import HEADER as READING_HEADER, compute_readings
+from ptbg.plotting.monitor import monitor_status
 from ptbg.plotting.renderer import TabRenderer
+from ptbg.plotting.styles import REPORT_FONT
 from ptbg.system.environment import collect_environment
 from ptbg.version import SPECIFICATION, full_name
 
@@ -74,27 +76,21 @@ def build_header(settings: Settings, workspace: Workspace, pages: list[ReportPag
                         [(s.name, s.sha256 or "illisible") for s in files])
 
 
-def _draw_header(fig: Figure, header: ReportHeader, page_number: int, page_count: int) -> None:
-    """Bandeau d'en-tête en haut de page (texte sélectionnable dans le PDF)."""
-    ax = fig.add_axes([0.03, 0.865, 0.94, 0.12])
-    ax.set_axis_off()
-    ax.add_patch(_frame(ax))
-    cells = [
-        (0.01, 0.80, f"Outil : {header.tool}"), (0.30, 0.80, f"Émetteur : {header.issuer}"),
-        (0.55, 0.80, f"Date : {header.date}"), (0.88, 0.80, f"Page {page_number}/{page_count}"),
-        (0.01, 0.52, f"Projet : {header.project_name}"), (0.30, 0.52, f"Unité : {header.project_unit}"),
-        (0.55, 0.52, f"Référence : {header.project_reference}"),
-        (0.01, 0.24, f"Empreinte du projet (SHA-256) : {header.project_hash}"),
-    ]
-    for x, y, text in cells:
-        ax.text(x, y, text, transform=ax.transAxes, fontsize=7.5, va="center")
-    sources = " ; ".join(f"{name} ({digest[:16]}…)" for name, digest in header.sources) or "aucune"
-    ax.text(0.01, -0.02, textwrap.shorten(f"Source(s) : {sources}", 240), transform=ax.transAxes,
-            fontsize=7, va="center")
-
-
-def _frame(ax):
-    return Rectangle((0, -0.15), 1, 1.12, transform=ax.transAxes, fill=False, lw=0.8, ec="#1565c0")
+def _draw_header(fig: Figure, header: ReportHeader, summary: list[str]) -> None:
+    """En-tête en deux blocs de texte à chasse fixe (texte sélectionnable dans le PDF),
+    sur le modèle des rapports de test du projet : identification à gauche (REQ 6005),
+    bilan de la page à droite."""
+    sources = [f"{name} (SHA-256 {digest[:16]}…)" for name, digest in header.sources] or ["aucune"]
+    left = [("Outil", header.tool), ("Émetteur", header.issuer), ("Date", header.date),
+            ("Projet", header.project_name), ("Unité", header.project_unit),
+            ("Référence", header.project_reference), ("Empreinte projet", header.project_hash),
+            ("Source(s)", textwrap.shorten(" ; ".join(sources), 150))]
+    width = max(len(label) for label, _ in left)
+    fig.text(0.03, 0.975, "\n".join(f"{label:<{width}} : {value}" for label, value in left),
+             va="top", ha="left", fontsize=7, family=REPORT_FONT, linespacing=1.25)
+    fig.text(0.97, 0.975, "\n".join(summary), va="top", ha="right",
+             fontsize=7, family=REPORT_FONT, linespacing=1.25)
+    fig.add_artist(Line2D([0.03, 0.97], [0.858, 0.858], color="#555555", lw=0.6))
 
 
 def _draw_readings(fig: Figure, rows, bottom: float, height: float) -> None:
@@ -117,15 +113,20 @@ def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspac
                  settings: Settings, number: int, count: int) -> list:
     """Une page : en-tête, titre, zone graphique, lectures, pied de page."""
     fig = Figure(figsize=PAGE_SIZE, dpi=100)
-    _draw_header(fig, header, number, count)
     loaded = workspace.loaded_files()
     timeline = Timeline(page.time_mode, page.ref_ns,
                         all(s.conversion.date_known for s in loaded) if loaded else True)
-    title = f"{page.tab.title} — capture du {page.captured_at}"
-    fig.text(0.03, 0.835, title, fontsize=10, fontweight="bold")
-    if page.tab.comment:
-        fig.text(0.03, 0.815, textwrap.shorten(page.tab.comment, 220), fontsize=7.5, style="italic")
     rows = compute_readings(page.tab, workspace, timeline)
+    files = [s for s in (workspace.find(fid) for fid in page.tab.file_ids()) if s is not None]
+    curves = sum(len(axle.curves) for axle in page.tab.axles)
+    _draw_header(fig, header, [f"Page {number}/{count}", f"Fichiers sources : {len(files)}",
+                               f"Courbes : {curves}", f"Lectures de curseurs : {len(rows)}",
+                               f"Base de temps : {monitor_status(files).label if files else '—'}"])
+    title = f"{page.tab.title} — capture du {page.captured_at}"
+    fig.text(0.5, 0.835, title, fontsize=10, fontweight="bold", ha="center", family=REPORT_FONT)
+    if page.tab.comment:
+        fig.text(0.5, 0.815, textwrap.shorten(page.tab.comment, 220), fontsize=7.5, style="italic",
+                 ha="center", family=REPORT_FONT)
     table_height = 0.0 if not rows else min(0.035 + 0.018 * min(len(rows), MAX_READING_ROWS + 1), 0.30)
     graph_bottom = 0.04 + table_height
     # Une sous-figure n'utilise que les RATIOS de sa grille (pas top/bottom) :
@@ -136,7 +137,8 @@ def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspac
                 height_in=PAGE_SIZE[1] * (0.80 - graph_bottom)).draw()
     if rows:
         _draw_readings(fig, rows, 0.035, table_height)
-    fig.text(0.5, 0.012, f"{header.tool} — {SPECIFICATION}", ha="center", fontsize=6.5, color="#555555")
+    fig.text(0.5, 0.012, f"{header.tool} — {SPECIFICATION}", ha="center", fontsize=6.5, color="#555555",
+             family=REPORT_FONT)
     pdf.savefig(fig)
     return rows[MAX_READING_ROWS:]
 
@@ -145,10 +147,12 @@ def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, pag
                   extra_rows: list, number: int, count: int) -> None:
     """Page de traçabilité : empreintes, diagnostics de base de temps, environnement."""
     fig = Figure(figsize=PAGE_SIZE, dpi=100)
-    _draw_header(fig, header, number, count)
     lines = ["TRAÇABILITÉ DES SOURCES ET DE LA BASE DE TEMPS", ""]
     names = {name for name, _ in header.sources}
     files = [s for s in workspace.files() if s.name in names]
+    _draw_header(fig, header, [f"Page {number}/{count}", "Annexe de traçabilité",
+                               f"Fichiers sources : {len(files)}",
+                               f"Base de temps : {monitor_status(files).label if files else '—'}"])
     for source in files:
         lines.append(f"■ {source.name} — {source.path}")
         lines.append(f"   SHA-256 : {source.sha256} ; taille : {source.table.size_bytes if source.table else 0} octets ; "
