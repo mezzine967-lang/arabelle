@@ -52,6 +52,11 @@ séries abîmés générés au hasard, avec numpy 2.4 et numpy 1.24.
   fichiers PTBG, ou sur un fichier de synthèse de N Mo (`--generer N`), pour fixer la
   taille maximale (REQ 2310) sur les postes cibles ; mémoire lue par
   `system/compat.py` (`process_memory_mb`).
+- Récapitulatif Excel des requis : `docs/recapitulatif/Recapitulatif_requis_VISU_PTBG_2.2.0.xlsx`
+  (synthèse par statut et par section, 64 lignes de requis avec énoncé du Word, commentaire
+  de Sébastien, réalisation, programmes et tests, réponses aux 4 commentaires, 17 points
+  ouverts avec colonne de réponse, 45 fichiers de programme, 131 tests). Matrice : REQ 5404
+  cite explicitement son code et ses tests ; REQ 2303 cite `_locate_header` (ancien nom corrigé).
 - COMPATIBILITE_OS.md : encodage et fins de ligne décrits comme en 2.1.0 (lecture
   signalée des fichiers non UTF-8, lecture ligne par ligne) ; banc ajouté à l'essai.
 - 131 tests (11 nouveaux : coupures de blocs, colonnes mixtes, conversions en bloc,

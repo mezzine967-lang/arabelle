@@ -72,6 +72,8 @@ Les 64 lignes de la spécification sont tracées dans
 statut) : 49 implémentées et testées, 12 implémentées selon une interprétation à valider,
 1 proposition (énoncé vide), 2 à qualifier sur cible ou sur volumes réels. Les
 interprétations à faire valider sont dans **[docs/POINTS_OUVERTS.md](docs/POINTS_OUVERTS.md)**.
+Récapitulatif Excel (requis, réalisation, programmes, tests, commentaires de la relecture) :
+[docs/recapitulatif/](docs/recapitulatif/Recapitulatif_requis_VISU_PTBG_2.2.0.xlsx).
 
 Robustesse : un fichier abîmé (ligne tronquée ou en trop, guillemet non fermé, octets
 nuls, en-tête absent ou répété, encodage non UTF-8, horodatage aberrant…) est lu sans
