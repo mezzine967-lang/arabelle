@@ -57,6 +57,7 @@ class AnalysisTab(ttk.Frame):
         self._pending_motion = None
         self._resize_job = None
         self._refresh_job = None
+        self._background = None            # rendu figé sans curseurs (mise à jour rapide)
         self._build_toolbar()
         self._build_body()
 
@@ -122,7 +123,8 @@ class AnalysisTab(ttk.Frame):
                        "zoom/déplacement").pack(
             fill="x")
         for name, handler in (("button_press_event", self._on_press), ("motion_notify_event", self._on_motion),
-                              ("button_release_event", self._on_release), ("key_press_event", self._on_key)):
+                              ("button_release_event", self._on_release), ("key_press_event", self._on_key),
+                              ("draw_event", self._on_draw)):
             self.canvas.mpl_connect(name, handler)
         self.canvas.get_tk_widget().bind("<Configure>", self._on_resize, add=True)
 
@@ -147,18 +149,40 @@ class AnalysisTab(ttk.Frame):
         if master is not None:
             master.callbacks.connect("xlim_changed", self._on_xlim_changed)
         self.toolbar.update()               # repère « origine » de la barre = vue actuelle
-        self.canvas.draw_idle()
+        self._full_draw()
         self.tbm_button.configure(text="Masquer le TBM" if self.state.tbm_visible else "Afficher le TBM")
         self._sync_toolbar()
         self.refresh_readings()
 
     def update_cursors(self) -> None:
-        """Mise à jour légère : curseurs et lectures seulement."""
+        """Mise à jour légère : curseurs et lectures seulement.
+
+        Les curseurs sont redessinés seuls sur le rendu figé du reste de la figure
+        (« blitting ») : un mouvement de souris ne redessine ni les courbes, ni
+        les axes, ni le TBM (fluidité avec de gros fichiers, REQ 4105)."""
         if self.renderer is None:
             return
         self.renderer.draw_cursors()
-        self.canvas.draw_idle()
+        if self._background is not None:
+            self.canvas.restore_region(self._background)
+            self.renderer.draw_cursor_artists()
+            self.canvas.blit(self.figure.bbox)
+        else:
+            self.canvas.draw_idle()
         self.refresh_readings()
+
+    def _full_draw(self) -> None:
+        """Redessin complet différé ; le rendu figé des curseurs devient périmé."""
+        self._background = None
+        self.canvas.draw_idle()
+
+    def _on_draw(self, event) -> None:
+        """Après chaque dessin complet à l'écran : mémorise le rendu sans curseurs,
+        puis y pose les curseurs (affichés avec le reste de la figure)."""
+        if self.renderer is None or event.canvas is not self.canvas or self.canvas.is_saving():
+            return
+        self._background = self.canvas.copy_from_bbox(self.figure.bbox)
+        self.renderer.draw_cursor_artists()
 
     def refresh_readings(self) -> None:
         """Recalcule le panneau de lecture à droite (REQ 5402)."""
@@ -176,10 +200,11 @@ class AnalysisTab(ttk.Frame):
         self._refresh_job = None
         if self.renderer is not None:
             self.renderer.refresh_decimation()
-            self.canvas.draw_idle()
+            self._full_draw()
 
     def _on_resize(self, _event) -> None:
         """Redimensionnement : redessin complet différé (évite les redessins en rafale)."""
+        self._background = None                 # rendu figé d'une autre taille
         if self._resize_job is not None:
             self.after_cancel(self._resize_job)
         self._resize_job = self.after(400, self._after_resize)
@@ -206,7 +231,7 @@ class AnalysisTab(ttk.Frame):
                 for spine in ax.spines.values():
                     spine.set_edgecolor(ACTIVE_AXLE_COLOR if position == index else "black")
                     spine.set_linewidth(2.0 if position == index else 0.8)
-            self.canvas.draw_idle()
+            self._full_draw()
         self._sync_toolbar()
         self.controller.on_tab_changed()
 
@@ -481,12 +506,12 @@ class AnalysisTab(ttk.Frame):
         curve = resolve(axle.selected_curve(), self.controller.workspace) if axle.selected_curve() else None
         if curve is None:
             return
-        x = self.controller.workspace.timeline().x(curve.source)
+        grid = self.controller.workspace.timeline().grid(curve.source)
         direction = 1 if event.key == "right" else -1
         if self.state.global_cursor and self.state.t_global is not None:
-            self.state.t_global = step_index(x, self.state.t_global, direction)
+            self.state.t_global = step_index(grid, self.state.t_global, direction)
         elif axle.cursor_mode in ("single", "double") and axle.t1 is not None:
-            axle.t1 = step_index(x, axle.t1, direction)
+            axle.t1 = step_index(grid, axle.t1, direction)
         self.update_cursors()
 
     def dispose(self) -> None:

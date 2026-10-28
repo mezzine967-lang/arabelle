@@ -1,11 +1,15 @@
-"""Formats de temps : REQ_COMMON_KH_2304 à 2307, 4107 (origine absolue), pretrig."""
+"""Formats de temps : REQ_COMMON_KH_2304 à 2307, 4107 (origine absolue), pretrig, 4105 (vitesse)."""
+import random
 import unittest
+from datetime import date
 
 import numpy as np
 
 import helpers  # noqa: F401  (chemin du projet)
-from ptbg.core.time_parser import (TimeBaseSettings, TimeFormat, convert_time_column, detect_format,
-                                   format_absolute, parse_absolute, unit_from_name)
+from ptbg.core.time_parser import (NS_PER_S, TimeBaseSettings, TimeFormat, _clock_of_day_ns, _parse_datetime_text,
+                                   _time_of_day_ns, convert_time_column, detect_format, format_absolute,
+                                   parse_absolute, unit_from_name)
+from ptbg.core.vector_parse import days_from_civil
 
 
 class TimeParserTests(unittest.TestCase):
@@ -31,6 +35,64 @@ class TimeParserTests(unittest.TestCase):
         np.testing.assert_allclose(result.seconds, [-0.04, -0.02, 0.0, 0.02])
         self.assertEqual(result.pretrig_samples, 2)
         self.assertIsNone(result.origin_ns)
+
+    def test_column_and_line_by_line_conversions_agree(self):
+        """REQ 4105 / 2306 : la conversion de toute la colonne d'un coup donne exactement les
+        instants de l'analyse ligne par ligne, écritures atypiques et fautives comprises."""
+        rng = random.Random(2306)
+        clocks = []
+        for _ in range(3000):
+            h, m, s = rng.randrange(24), rng.randrange(60), rng.randrange(60)
+            fraction = rng.choice(["", ".5", ".123456789", ":250", ".123.456", ".123.456.789",
+                                   ".1234567890", ".12.3", ".123:456"])
+            text = rng.choice([f"{h:02d}", f"{h}"]) + f":{m:02d}:{s:02d}{fraction}"
+            clocks.append(rng.choice([text, text, text, f" {text}", text.replace(":", ".", 1), "25:00:00", ""]))
+        clock, valid = _clock_of_day_ns(clocks)
+        self.assertEqual([int(v) if ok else None for v, ok in zip(clock, valid)],
+                         [_time_of_day_ns(text) for text in clocks])
+        dates = []
+        for _ in range(3000):
+            y, mo, d = rng.choice([2026, 2024, 1500, 2500, 0]), rng.randint(1, 13), rng.randint(1, 31)
+            clock_text = f"{rng.randrange(24):02d}:{rng.randrange(60):02d}:{rng.randrange(60):02d}"
+            clock_text += rng.choice(["", ".5", ".123456789", ".1234567890"])
+            dates.append(rng.choice([f"{y:04d}-{mo:02d}-{d:02d}T{clock_text}", f"{y:04d}-{mo:02d}-{d:02d} {clock_text}Z",
+                                     f"{d:02d}/{mo:02d}/{y:04d} {clock_text}", f" {y:04d}-{mo:02d}-{d:02d} {clock_text}"]))
+        result = convert_time_column(dates, "date", TimeBaseSettings(fmt=TimeFormat.DATETIME))
+        exact = []
+        for text in dates:
+            try:
+                exact.append(_parse_datetime_text(text.strip()))
+            except ValueError:
+                exact.append(None)
+        first = next(value for value in exact if value is not None)
+        self.assertEqual(result.origin_ns, first)
+        expected = [np.nan if value is None else (value - first) / NS_PER_S for value in exact]
+        np.testing.assert_array_equal(result.seconds, expected)
+
+    def test_calendar_days_match_python_dates(self):
+        """Jours calendaires calculés en bloc = ``datetime.date`` (années bissextiles comprises)."""
+        rng = np.random.default_rng(5)
+        years, months, days = rng.integers(0, 10000, 5000), rng.integers(0, 14, 5000), rng.integers(0, 32, 5000)
+        count, valid = days_from_civil(years, months, days)
+        for y, m, d, n, ok in zip(years.tolist(), months.tolist(), days.tolist(), count.tolist(), valid.tolist()):
+            try:
+                expected = (date(y, m, d) - date(1970, 1, 1)).days
+            except ValueError:
+                expected = None
+            self.assertEqual(n if ok else None, expected, (y, m, d))
+
+    def test_big_integer_counter_with_odd_rows(self):
+        """REQ 2307 : compteur en ns depuis 1970 converti en entiers exacts, y compris une
+        valeur au-delà de 64 bits ; une écriture refusée par la règle reste illisible."""
+        raw = [str(1_700_000_000_000_000_000 + 10_000_000 * i) for i in range(100)]
+        raw[5] = " 1700000000050000000 "
+        raw[7] = "99999999999999999999999"
+        conversion = convert_time_column(raw, "t_ns", TimeBaseSettings())
+        self.assertAlmostEqual(conversion.seconds[5], 0.05, places=12)
+        self.assertAlmostEqual(conversion.seconds[99], 0.99, places=12)
+        self.assertEqual(conversion.seconds[7], float(99999999999999999999999 - 1_700_000_000_000_000_000) * 1e-9)
+        raw[3] = "1_700_000_000_030_000_000"                    # int() l'accepte, la règle non
+        self.assertTrue(np.isnan(convert_time_column(raw, "t_ns", TimeBaseSettings()).seconds[3]))
 
     def test_counter_with_absolute_origin(self):
         """REQ 4107 : origine absolue saisie = instant du compteur 0."""

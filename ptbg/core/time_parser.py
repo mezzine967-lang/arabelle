@@ -15,10 +15,16 @@ pré-déclenchement) ; t = 0 est alors l'instant de déclenchement et l'origine
 absolue saisie par l'utilisateur est la date-heure de ce déclenchement.
 
 Précision : les heures et dates sont décodées en nanosecondes ENTIÈRES (entiers
-Python, sans arrondi) puis converties en secondes relatives à la 1re mesure,
-ce qui garde une résolution meilleure que la nanoseconde sur plusieurs jours
-en flottant 64 bits. Les dates sont « naïves » : aucun fuseau horaire ni
-changement d'heure n'est appliqué, l'heure affichée est celle du fichier.
+64 bits ou entiers Python, sans arrondi) puis converties en secondes relatives
+à la 1re mesure, ce qui garde une résolution meilleure que la nanoseconde sur
+plusieurs jours en flottant 64 bits. Les dates sont « naïves » : aucun fuseau
+horaire ni changement d'heure n'est appliqué, l'heure affichée est celle du fichier.
+
+Vitesse (REQ_COMMON_KH_4105) : les écritures usuelles de largeur fixe
+(``CLOCK_TEMPLATES``, ``DATETIME_TEMPLATES``) sont décodées pour toute la
+colonne d'un coup (``vector_parse``) ; toute autre écriture (espaces, heure
+« 7:05:00 » au milieu de « 10:05:00 », fraction « .123:456 »…) est reprise
+ligne par ligne par l'expression régulière : le résultat est identique.
 """
 from __future__ import annotations
 
@@ -30,9 +36,14 @@ from enum import Enum
 import numpy as np
 
 from ptbg.core.diagnostics import Issue, Severity
+from ptbg.core.vector_parse import days_from_civil, match_templates, parse_numbers
 
 NS_PER_S = 1_000_000_000
 DAY_NS = 86_400 * NS_PER_S
+HALF_DAY_NS = DAY_NS // 2
+# Dates décodées en entiers 64 bits : ± 50 000 jours autour de 1970 (1833 à 2106)
+# gardent toute différence entre deux dates représentable sans dépassement.
+SAFE_DAYS = 50_000
 
 
 class TimeFormat(Enum):
@@ -63,6 +74,18 @@ _FR_DATETIME_RE = re.compile(
 _DATE_ONLY_RES = (re.compile(r"^(\d{4})-(\d{2})-(\d{2})$"), re.compile(r"^(\d{2})/(\d{2})/(\d{4})$"))
 _UNIT_IN_NAME_RE = re.compile(
     r"(?:^|[^a-zµ])(ns|us|µs|ms|s|sec|min|h)(?:$|[^a-z])", re.IGNORECASE)
+
+# Écritures de largeur fixe décodées d'un coup (voir vector_parse.match_templates) :
+# heure sur 1 ou 2 chiffres, fraction « .f » ou « :f » de 1 à 9 chiffres, ou
+# groupes de 3 chiffres « .mmm.uuu[.nnn] » (REQ 2306).
+_HOURS = ("hh", "h")
+_CLOCK_FRACTIONS = ([""] + [separator + "f" * digits for separator in ".:" for digits in range(1, 10)]
+                    + [".fff.fff", ".fff.fff.fff"])
+CLOCK_TEMPLATES = [hours + ":mm:ss" + fraction for hours in _HOURS for fraction in _CLOCK_FRACTIONS]
+_DATETIME_CLOCKS = [hours + ":mm:ss" + fraction for hours in _HOURS
+                    for fraction in [""] + ["." + "f" * digits for digits in range(1, 10)]]
+DATETIME_TEMPLATES = (["YYYY-MM-DD~" + clock + zone for clock in _DATETIME_CLOCKS for zone in ("", "Z")]
+                      + ["DD/MM/YYYY~" + clock for clock in _DATETIME_CLOCKS])
 
 DETECTION_SAMPLE = 200
 
@@ -242,20 +265,10 @@ def format_absolute(epoch_ns: int, digits: int = 6, with_date: bool = True) -> s
 
 # -------------------------------------------------------------- conversions
 def _parse_numbers(raw: list[str]) -> np.ndarray:
-    """Textes -> float64, NaN pour les valeurs illisibles (vectorisé si possible)."""
-    try:
-        values = np.array(raw, dtype=np.float64)
-    except ValueError:
-        values = np.array([_safe_float(text) for text in raw], dtype=np.float64)
+    """Textes -> float64, NaN pour les valeurs illisibles ou non finies."""
+    values, _ = parse_numbers(raw)
     values[~np.isfinite(values)] = np.nan
     return values
-
-
-def _safe_float(text: str) -> float:
-    try:
-        return float(text)
-    except ValueError:
-        return np.nan
 
 
 def _convert_counter(raw, name, settings, default_unit) -> TimeConversion:
@@ -303,47 +316,98 @@ def _convert_counter(raw, name, settings, default_unit) -> TimeConversion:
 
 
 def _relative_big_integers(raw: list[str]) -> tuple[np.ndarray, int]:
-    """Entiers exacts relatifs au 1er entier valide (évite la perte de précision)."""
-    integers = [int(text) if _INTEGER_RE.match(text.strip()) else None for text in raw]
-    reference = next((value for value in integers if value is not None), 0)
-    return (np.array([np.nan if value is None else float(value - reference) for value in integers]),
-            reference)
+    """Entiers exacts relatifs au 1er entier valide (évite la perte de précision).
+
+    Conversion en entiers 64 bits pour toute la colonne ; un texte qui n'est pas
+    un entier simple (« 1_000 », « 12.5 »…) ou qui dépasse 64 bits est repris par
+    l'expression régulière et un entier Python exact."""
+    ints, converted = (np.zeros(len(raw), dtype=np.int64), np.zeros(len(raw), dtype=bool))
+    if not any("_" in text for text in raw):            # int() accepte « 1_000 », pas la règle
+        ints, converted = parse_numbers(raw, np.int64)
+    exact: dict[int, int | None] = {}                    # position -> entier Python (repris)
+    big = converted & (np.abs(ints) > 2 ** 62)            # écart à la référence non garanti sur 64 bits
+    for position in np.flatnonzero(~converted | big).tolist():
+        text = raw[position].strip()
+        exact[position] = int(text) if _INTEGER_RE.match(text) else None
+    converted &= ~big
+    first_fast = int(np.argmax(converted)) if converted.any() else len(raw)
+    first_slow = next((p for p in sorted(exact) if exact[p] is not None), len(raw))
+    if first_fast == len(raw) and first_slow == len(raw):
+        return np.full(len(raw), np.nan), 0
+    reference = int(ints[first_fast]) if first_fast < first_slow else exact[first_slow]
+    values = np.full(len(raw), np.nan)
+    if converted.any() and abs(reference) <= 2 ** 62:
+        values[converted] = (ints[converted] - reference).astype(np.float64)
+    else:
+        exact.update((p, int(ints[p])) for p in np.flatnonzero(converted).tolist())
+    for position, value in exact.items():
+        if value is not None:
+            values[position] = float(value - reference)
+    return values, reference
+
+
+def _clock_of_day_ns(raw: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """Nanosecondes depuis minuit de chaque texte et validité (REQ 2306)."""
+    matched, fields = match_templates(raw, CLOCK_TEMPLATES)
+    clock = ((fields["h"] * 60 + fields["m"]) * 60 + fields["s"]) * NS_PER_S + fields["f"]
+    valid = (matched >= 0) & (fields["h"] < 24) & (fields["m"] < 60) & (fields["s"] < 60)
+    for position in np.flatnonzero(~valid).tolist():      # autre écriture : ligne par ligne
+        value = _time_of_day_ns(raw[position])
+        if value is not None:
+            clock[position], valid[position] = value, True
+    return clock, valid
+
+
+def _day_offsets(clock: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, int]:
+    """Jour (0, 1, 2…) de chaque mesure et nombre de passages de minuit.
+
+    Sur la suite des heures lisibles : un recul de plus de 12 h est un passage
+    de minuit, sauf pour une heure ISOLÉE aberrante, c'est-à-dire écartée de
+    plus de 12 h de sa voisine précédente (vers l'avant ou vers l'arrière),
+    dont la mesure suivante revient à moins de 12 h en arrière de cette
+    voisine précédente (ex. « 00:00:00 » au milieu d'un essai à 18 h, ou
+    « 23:59:59 » au milieu d'un essai à 00 h 10). Une telle heure ne change
+    pas de jour : elle reste un horodatage aberrant, signalé par l'analyse de
+    la base de temps, et ne décale pas tout le reste du fichier."""
+    days = np.zeros(clock.size, dtype=np.int64)
+    index = np.flatnonzero(valid)
+    if index.size < 2:
+        return days, 0
+    c = clock[index]
+    step = np.diff(c)                                    # step[k - 1] : arrivée sur c[k]
+    backward = np.concatenate(([False], step < -HALF_DAY_NS))
+    forward = np.concatenate(([False], step > HALF_DAY_NS))
+    returns = np.zeros(c.size, dtype=bool)               # la mesure suivante revient près de la précédente
+    returns[1:-1] = c[2:] >= c[:-2] - HALF_DAY_NS
+    leaves_back = np.zeros(c.size, dtype=bool)           # la mesure suivante repart en arrière de > 12 h
+    leaves_back[:-1] = step < -HALF_DAY_NS
+    candidate = returns & (backward | (forward & leaves_back))
+    # Deux candidates consécutives : la seconde a été jugée par rapport à la
+    # première, écartée ; elle n'est donc pas aberrante (une sur deux dans une suite).
+    positions = np.arange(c.size)
+    run_start = candidate & ~np.concatenate(([False], candidate[:-1]))
+    since_start = positions - np.maximum.accumulate(np.where(run_start, positions, 0))
+    aberrant = candidate & (since_start % 2 == 0)
+    after_aberrant = np.concatenate(([False], aberrant[:-1]))
+    crossing = backward & ~aberrant & ~after_aberrant
+    days[index] = np.cumsum(crossing)
+    return days, int(np.count_nonzero(crossing))
 
 
 def _convert_time_of_day(raw, name, settings) -> TimeConversion:
-    """REQ_COMMON_KH_2306 : hh:mm:ss.fraction (jusqu'à la ns), passage de minuit géré.
-
-    Un recul de plus de 12 h est un passage de minuit seulement si la mesure
-    SUIVANTE est elle aussi du côté du nouveau jour : une heure isolée
-    aberrante (ex. « 00:00:00 » au milieu d'un essai à 18 h) reste un retour
-    arrière signalé et ne décale pas d'un jour tout le reste du fichier."""
+    """REQ_COMMON_KH_2306 : hh:mm:ss.fraction (jusqu'à la ns), passage de minuit géré
+    (règle détaillée dans ``_day_offsets``)."""
     issues = []
-    of_day = [_time_of_day_ns(text) for text in raw]
-    following = [None] * len(of_day)            # heure valide suivante (anticipation)
-    upcoming = None
-    for position in range(len(of_day) - 1, -1, -1):
-        following[position] = upcoming
-        if of_day[position] is not None:
-            upcoming = of_day[position]
-    nanoseconds: list[int | None] = []
-    day_offset, previous, rollovers = 0, None, 0
-    for position, clock in enumerate(of_day):
-        if clock is None:
-            nanoseconds.append(None)
-            continue
-        if previous is not None and clock < previous - DAY_NS // 2:
-            nxt = following[position]
-            if nxt is None or nxt < previous - DAY_NS // 2:
-                day_offset += DAY_NS
-                rollovers += 1
-                previous = clock
-        else:
-            previous = clock
-        nanoseconds.append(clock + day_offset)
+    clock, valid = _clock_of_day_ns(raw)
+    days, rollovers = _day_offsets(clock, valid)
     if rollovers:
         issues.append(Issue(Severity.INFO, f"{rollovers} passage(s) de minuit pris en compte.",
                             requirement="REQ_COMMON_KH_2306"))
-    seconds, first = _relative_seconds(nanoseconds)
+    if rollovers <= SAFE_DAYS:
+        seconds, first = _relative_seconds(clock + days * DAY_NS, valid)
+    else:                                       # fichier pathologique : entiers Python exacts
+        exact = {p: int(clock[p]) + int(days[p]) * DAY_NS for p in np.flatnonzero(valid).tolist()}
+        seconds, first = _relative_seconds(clock, np.zeros(len(raw), dtype=bool), exact)
     date_ns = parse_absolute(settings.origin) if settings.origin else None
     date_known = date_ns is not None
     origin_ns = None if first is None else (date_ns or 0) + first
@@ -369,25 +433,53 @@ def _time_of_day_ns(text: str) -> int | None:
 
 def _convert_datetime(raw, name) -> TimeConversion:
     """Date et heure complètes (ISO 8601 ou JJ/MM/AAAA) : déjà absolues."""
-    nanoseconds = []
-    for text in raw:
+    matched, fields = match_templates(raw, DATETIME_TEMPLATES)
+    days, date_ok = days_from_civil(fields["Y"], fields["M"], fields["D"])
+    fast = ((matched >= 0) & date_ok & (np.abs(days) <= SAFE_DAYS)
+            & (fields["h"] < 24) & (fields["m"] < 60) & (fields["s"] < 60))
+    nanoseconds = np.zeros(len(raw), dtype=np.int64)
+    nanoseconds[fast] = (days[fast] * DAY_NS
+                         + ((fields["h"][fast] * 60 + fields["m"][fast]) * 60 + fields["s"][fast]) * NS_PER_S
+                         + fields["f"][fast])
+    exact = {}                                        # autres écritures et dates lointaines : une à une
+    for position in np.flatnonzero(~fast).tolist():
         try:
-            nanoseconds.append(_parse_datetime_text(text.strip()))
+            value = _parse_datetime_text(raw[position].strip())
         except ValueError:
-            nanoseconds.append(None)
-    seconds, first = _relative_seconds(nanoseconds)
+            value = None
+        if value is not None:
+            exact[position] = value
+    seconds, first = _relative_seconds(nanoseconds, fast, exact)
     return TimeConversion(TimeFormat.DATETIME, None, False, seconds, ~np.isfinite(seconds),
                           first, first is not None,
                           f"Date-heure « {name} » -> s depuis la 1re mesure", [])
 
 
-def _relative_seconds(nanoseconds: list[int | None]) -> tuple[np.ndarray, int | None]:
-    """Nanosecondes entières -> secondes flottantes relatives à la 1re valeur."""
-    first = next((value for value in nanoseconds if value is not None), None)
-    if first is None:
-        return np.full(len(nanoseconds), np.nan), None
-    seconds = np.array([np.nan if value is None else (value - first) / NS_PER_S
-                        for value in nanoseconds], dtype=np.float64)
+def _relative_seconds(nanoseconds: np.ndarray, valid: np.ndarray,
+                      exact: dict[int, int] | None = None) -> tuple[np.ndarray, int | None]:
+    """Nanosecondes entières -> secondes flottantes relatives à la 1re valeur.
+
+    ``nanoseconds`` (entiers 64 bits) vaut pour les positions ``valid`` ;
+    ``exact`` donne en entiers Python les instants des autres positions lisibles.
+    Les écarts sont calculés en entiers exacts, puis convertis en secondes."""
+    exact = dict(exact or {})
+    seconds = np.full(len(valid), np.nan)
+    first_fast = int(np.argmax(valid)) if valid.any() else len(valid)
+    first_exact = min(exact, default=len(valid))
+    if first_fast == len(valid) and first_exact == len(valid):
+        return seconds, None
+    first = int(nanoseconds[first_fast]) if first_fast < first_exact else exact[first_exact]
+    if abs(first) <= 2 ** 62:                     # écart garanti sur 64 bits (|instants| ≤ 2^62)
+        rows = np.flatnonzero(valid)
+        offsets = nanoseconds[rows] - first
+        seconds[rows] = offsets / NS_PER_S
+        # Au-delà de 2^53 ns (104 jours), la division en flottants arrondirait deux
+        # fois : ces écarts sont divisés en entiers Python (arrondi unique, exact).
+        exact.update((p, int(nanoseconds[p])) for p in rows[np.abs(offsets) > 2 ** 53].tolist())
+    else:
+        exact.update((p, int(nanoseconds[p])) for p in np.flatnonzero(valid).tolist())
+    for position, value in exact.items():
+        seconds[position] = (value - first) / NS_PER_S
     return seconds, first
 
 

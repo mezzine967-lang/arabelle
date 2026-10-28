@@ -1,4 +1,4 @@
-# VISU PTBG 2.1.0 — analyseur graphique de perturbographie
+# VISU PTBG 2.2.0 — analyseur graphique de perturbographie
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
 Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
@@ -45,6 +45,8 @@ versions de Python supportées et **impact d'une montée de version** :
 [docs/COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md).
 
 Contrôler un poste : `python tools/audit_environnement.py` (versions présentes / figées).
+Mesurer les performances sur de vrais fichiers PTBG : `python tools/banc_performance.py fichiers.csv`
+(ou `--generer 500` pour un fichier de synthèse de 500 Mo).
 
 ## Organisation du code
 
@@ -55,8 +57,8 @@ ptbg/plotting/     dessin commun écran et PDF, Time Base Monitor
 ptbg/report/       rapport PDF
 ptbg/gui/          interface Tkinter : contrôleur, arbre, onglets, dialogues
 ptbg/system/       compatibilité Windows / SLES, environnement, journal
-tests/             120 tests automatisés (dont l'interface réelle et la robustesse)
-tools/             audit d'environnement, traçabilité des requis, données de démo
+tests/             131 tests automatisés (dont l'interface réelle et la robustesse)
+tools/             audit d'environnement, banc de performance, traçabilité, données de démo
 install/           installation et lancement Windows / SLES
 docs/              guide, architecture, dépendances, compatibilité, traçabilité
 ```
@@ -75,6 +77,10 @@ Robustesse : un fichier abîmé (ligne tronquée ou en trop, guillemet non ferm�
 nuls, en-tête absent ou répété, encodage non UTF-8, horodatage aberrant…) est lu sans
 exception, sans perte silencieuse ni valeur inventée ; chaque anomalie est citée avec sa
 ligne (guide, § 2 ; `tests/test_robustesse.py`).
+
+Performances (banc Linux, Python 3.11) : 1 million de lignes × 21 colonnes (115 à 157 Mo)
+lues et analysées en 5 à 7 s, en arrière-plan ; curseurs fluides (moins de 30 ms par
+mouvement) sur des courbes d'un million de points. Détail : [CHANGELOG.md](CHANGELOG.md).
 
 ```
 python tools/verifier_tracabilite.py     # chaque requis du Word : matrice + code + test

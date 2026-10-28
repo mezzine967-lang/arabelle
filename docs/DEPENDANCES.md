@@ -65,14 +65,15 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 | `re` | formats de temps, unités dans les en-têtes, groupes binaires `NOM[i]` |
 | `math` | valeurs finies, graduations de l'axe des temps |
 | `datetime` | dates absolues, horloge de la barre d'état, journal |
-| `dataclasses`, `enum`, `typing`, `collections`, `itertools`, `copy` | structures de données |
+| `dataclasses`, `enum`, `typing`, `collections`, `itertools`, `copy` | structures de données ; `itertools` (`chain`, `repeat`) pour la lecture par blocs |
 | `threading`, `queue`, `traceback` | lecture et analyse en arrière-plan (REQ 4105) |
 | `pathlib`, `os` | chemins portables, renommage atomique du PDF, chemins relatifs du projet |
 | `uuid` | identifiants des fichiers et paquets |
 | `textwrap` | mise en page des textes du PDF |
 | `getpass` | nom de l'utilisateur (barre d'état, émetteur du rapport) |
 | `platform`, `struct`, `sys`, `importlib` (`importlib.metadata`) | relevé de l'environnement (REQ 3004) |
-| `subprocess`, `ctypes` | ouverture du PDF (xdg-open sous Linux), écran haute résolution sous Windows |
+| `subprocess`, `ctypes` | ouverture du PDF (xdg-open sous Linux), écran haute résolution et mémoire du processus sous Windows |
+| `resource` | mémoire maximale du processus sous Linux (banc de performance) ; module propre à Unix, importé seulement hors Windows (`system/compat.py`) |
 
 ### 3 bis. Composants système
 
@@ -86,7 +87,27 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 ## 4. Campagne de compatibilité exécutée (Linux x86-64)
 
 Suite complète (`python -m unittest discover -s tests`, IHM réelle sous Xvfb incluse),
-chaque ligne dans un environnement virtuel neuf :
+chaque ligne dans un environnement virtuel neuf.
+
+**Version 2.2.0 (131 tests)** — la mise à jour rapide des curseurs (blitting) a été
+vérifiée avec Tk 8.6 « partagé » (famille Windows / Spyder / SLES) et Tk 9.0, image
+identique au pixel près à un rendu complet :
+
+| Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
+|---|---|---|---|---|---|---|
+| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 131 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
+| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 131 tests : OK | référence `requirements.txt` |
+| py311-mpl39-tk9 | 3.11.15 | 9.0.3 | 1.26.4 | 3.9.4 | 131 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
+| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 131 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
+| py312-old-tk86 | 3.12.3 | 8.6.14 | 1.26.4 | 3.8.4 | 131 tests : OK | idem, bibliothèques anciennes |
+| py313-ref-tk9 | 3.13.14 | 9.0.3 | 2.4.6 | 3.10.9 | 131 tests : OK |  |
+| py314-latest-tk9 | 3.14.6 | 9.0.3 | 2.5.4 | 3.11.2 | 131 tests : OK | versions les plus récentes |
+
+Les conversions accélérées de la 2.2.0 ont en outre été comparées résultat par résultat
+à celles de la 2.1.0 (plus de 10 000 fichiers et séries abîmés générés au hasard) avec
+numpy 2.4.6 et numpy 1.24.4 : aucune différence.
+
+**Version 2.1.0 (120 tests)** :
 
 <!-- RESULTATS_MATRICE -->
 | Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |

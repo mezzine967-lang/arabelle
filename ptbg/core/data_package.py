@@ -27,7 +27,7 @@ from ptbg.config import Settings
 from ptbg.core.csv_reader import KIND_EMPTY, KIND_NONFINITE, CsvReadError, CsvTable, ReadCancelled, read_csv
 from ptbg.core.diagnostics import Issue, Severity, worst
 from ptbg.core.signals import BinaryGroup, SignalData, SignalType, detect_indexed_groups, interpret
-from ptbg.core.sampling import is_sorted
+from ptbg.core.sampling import TimeGrid
 from ptbg.core.time_base import DT_MISSING, TimeBaseAnalysis, analyze
 from ptbg.core.time_parser import NS_PER_S, TimeBaseSettings, TimeConversion, convert_time_column, format_absolute
 
@@ -46,7 +46,7 @@ class SourceFile:
     groups: dict[str, BinaryGroup] = field(default_factory=dict)
     revision: int = 0          # incrémenté à chaque changement (invalide les caches)
     _signals: dict[str, SignalData] = field(default_factory=dict, repr=False)
-    _x_cache: tuple | None = field(default=None, repr=False)   # (clé, abscisses, triées ?)
+    _x_cache: tuple | None = field(default=None, repr=False)   # (clé, TimeGrid des abscisses)
     _data_issues: tuple | None = field(default=None, repr=False)  # (révision, constats)
 
     # ------------------------------------------------------------ identité
@@ -248,22 +248,19 @@ class Timeline:
         return self.mode == "absolute" and self.ref_ns is not None
 
     def x(self, source: SourceFile) -> np.ndarray:
-        """Abscisses (s) des échantillons d'un fichier sur cet axe (mises en cache
-        tant que le fichier et l'axe ne changent pas : lecture fluide des curseurs)."""
-        return self._cached(source)[0]
+        """Abscisses (s) des échantillons d'un fichier sur cet axe."""
+        return self.grid(source).x
 
-    def x_sorted(self, source: SourceFile) -> bool:
-        """Vrai si les abscisses du fichier sont croissantes (dichotomie possible)."""
-        return self._cached(source)[1]
-
-    def _cached(self, source: SourceFile) -> tuple[np.ndarray, bool]:
+    def grid(self, source: SourceFile) -> TimeGrid:
+        """Abscisses préparées pour les curseurs, mises en cache tant que le
+        fichier et l'axe ne changent pas : lecture fluide des curseurs."""
         key = (source.revision, self.mode, self.ref_ns)
         if source._x_cache is None or source._x_cache[0] != key:
             seconds = source.display_seconds()
             if self.is_absolute and source.conversion.origin_ns is not None:
                 seconds = seconds + (source.conversion.origin_ns - self.ref_ns) / NS_PER_S
-            source._x_cache = (key, seconds, is_sorted(seconds))
-        return source._x_cache[1], source._x_cache[2]
+            source._x_cache = (key, TimeGrid(seconds))
+        return source._x_cache[1]
 
     def format(self, x: float, digits: int = 6) -> str:
         """Instant lisible pour les curseurs, le panneau de lecture et le PDF."""

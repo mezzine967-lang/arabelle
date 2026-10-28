@@ -24,8 +24,9 @@ Aucun autre module ne teste le système d'exploitation (contrôle automatique :
 | Écran haute résolution | mise à l'échelle 125 / 150 % | résolution du serveur X | `enable_high_dpi()` (Windows) avant la création de la fenêtre |
 | Absence d'écran | — | lancement sans session graphique | `display_problem()` : message clair (DISPLAY vide, utiliser le bureau ou `ssh -X`) |
 | Ouverture du PDF | `os.startfile` | `xdg-open` | `open_with_default_application()` ; un échec est journalisé, jamais bloquant |
-| Encodage des CSV | UTF-8 imposé (REQ 2302) | idem | ouverture explicite `utf-8-sig`, jamais l'encodage local du système |
-| Fins de ligne CSV | CRLF | LF | module `csv` avec `newline=""` : les deux sont acceptées |
+| Encodage des CSV | UTF-8 attendu (REQ 2302) | idem | décodage explicite UTF-8 (BOM toléré), jamais l'encodage local du système ; un fichier Windows-1252 ou UTF-16 est lu mais marqué en ERREUR (non-conformité citée avec sa ligne) |
+| Fins de ligne CSV | CRLF | LF | flux texte avec `newline=None` : CRLF, LF et CR acceptés, même mélangés dans un fichier |
+| Mémoire du processus (banc de performance) | `GetProcessMemoryInfo` (psapi, via `ctypes`) | `/proc/self/statm` et `resource.getrusage` | `process_memory_mb()` ; renvoie « inconnue » plutôt qu'une erreur |
 | Polices des graphiques | — | — | DejaVu Sans, fournie avec matplotlib : rendu et PDF identiques |
 | Caractères spéciaux de l'IHM | — | Tk 8.6 sous X11 ne gère pas les émojis | icônes dessinées pixel par pixel ; aucun émoji |
 | Travail en arrière-plan | `multiprocessing` peu fiable sous Spyder | — | fils `threading` + file `queue` (`gui/tasks.py`) |
@@ -84,3 +85,7 @@ de chaque Python 3.11 à 3.14 ont été vérifiées disponibles.
 8. Sous SLES : refaire l'essai via `ssh -X` si le Service Unit est utilisé à distance.
 9. Lancer `python -m unittest discover -s tests -v` (aucun échec attendu) et archiver
    la sortie avec celle de `python tools/audit_environnement.py`.
+10. Performances (REQ 2310, 4105) : `python tools/banc_performance.py` sur quelques vrais
+    fichiers PTBG (les plus gros disponibles), puis `python tools/banc_performance.py
+    --generer 500` (fichier de synthèse de 500 Mo) ; archiver la sortie (durées, débit,
+    mémoire). La taille maximale retenue doit laisser une marge de mémoire sur le poste.

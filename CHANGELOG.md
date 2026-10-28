@@ -3,6 +3,63 @@
 Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
 Chaque version incrémente `ptbg/version.py` et ajoute une entrée ici.
 
+## 2.2.0 — 2026-10-28 — performances sur gros fichiers
+
+Modifications ciblées des modules existants ; aucune règle métier changée sauf la
+correction de minuit ci-dessous. Résultats vérifiés IDENTIQUES à la 2.1.0 (tables lues,
+constats, instants, analyses) par comparaison automatique sur plus de 10 000 fichiers et
+séries abîmés générés au hasard, avec numpy 2.4 et numpy 1.24.
+
+**Lecture CSV** (`core/csv_reader.py`, nouveau `core/vector_parse.py`)
+- Lecture par blocs : les lignes ordinaires d'un bloc sont découpées d'un coup ; les
+  lignes particulières (vides, commentaires, guillemets, octets nuls, en-tête répété,
+  largeur différente) passent toujours une à une par les mêmes règles qu'avant.
+- Colonnes non entièrement numériques (true/false, états, cases vides) converties sans
+  boucle par cellule : chaque texte distinct est classé une fois, et dans une colonne de
+  nombres les quelques cellules fautives sont isolées par dichotomie.
+- Mémoire : les valeurs lues ne sont plus recopiées par variable (tableaux partagés,
+  rendus non modifiables) ; blocs libérés au fil de l'assemblage.
+- Repère (banc Linux, Python 3.11) : 1 million de lignes × 21 colonnes lues et analysées
+  en 4,7 s (115 Mo, Bool 0/1), 7,0 s (150 Mo, Bool true/false) et 6,7 s (157 Mo, heure
+  hh:mm:ss.ns), contre 7,8 s, 12,0 s et 13,1 s en 2.1.0 ; fichier de 500 Mo
+  (3,66 millions de lignes) : 32 s et 1,6 Go au lieu de 61 s et 2,2 Go ; mémoire après
+  chargement réduite d'environ 20 %.
+
+**Base de temps** (`core/time_parser.py`, `core/time_base.py`)
+- Heures « hh:mm:ss.fraction », dates-heures et grands compteurs (ns depuis 1970)
+  convertis pour toute la colonne d'un coup ; toute écriture atypique est reprise ligne
+  par ligne par l'expression régulière (résultat identique, entiers exacts).
+- Changements de fréquence cherchés dans une fenêtre croissante : 80 000 changements
+  analysés en 6 s au lieu de plusieurs minutes (REQ 4105).
+- **Correction** (REQ 2306) : une heure isolée aberrante VERS L'AVANT (« 23:59:59 » au
+  milieu d'un essai à 0 h 10) faisait compter un faux passage de minuit et décalait tout
+  le reste du fichier d'un jour. Elle est maintenant traitée comme « 00:00:00 » au milieu
+  d'un essai à 18 h : horodatage aberrant signalé, sans décalage.
+
+**Affichage** (`core/sampling.py`, `plotting/renderer.py`, `gui/analysis_tab.py`)
+- Curseurs redessinés seuls sur le rendu figé du reste de la figure (« blitting ») :
+  suivi souris environ 20 ms au lieu de 240 ms, flèches environ 25 ms au lieu de 250 ms
+  (1 million de points, 8 courbes et un nuage X/Y ; Tk 8.6 et Tk 9). Image identique au
+  pixel près ; PDF inchangé.
+- Abscisses des curseurs et ordre des courbes préparés une fois (et non à chaque
+  mouvement ou zoom) ; nuage X/Y gardé en cache tant que ses courbes ne changent pas.
+- Croix des cellules vides : calcul linéaire (300 000 suites de cellules vides en moins
+  d'une seconde au lieu de plusieurs minutes, fenêtre figée).
+- Type Texte forcé sur une colonne de nombres : libellés calculés par valeur distincte.
+
+**Outils et documentation**
+- `tools/banc_performance.py` : mesure lecture / base de temps / mémoire sur de vrais
+  fichiers PTBG, ou sur un fichier de synthèse de N Mo (`--generer N`), pour fixer la
+  taille maximale (REQ 2310) sur les postes cibles ; mémoire lue par
+  `system/compat.py` (`process_memory_mb`).
+- COMPATIBILITE_OS.md : encodage et fins de ligne décrits comme en 2.1.0 (lecture
+  signalée des fichiers non UTF-8, lecture ligne par ligne) ; banc ajouté à l'essai.
+- 131 tests (11 nouveaux : coupures de blocs, colonnes mixtes, conversions en bloc,
+  dates calendaires, grands entiers, heure aberrante vers l'avant, changements de
+  fréquence, croix, nuage X/Y en cache, blitting) ; campagne de 7 combinaisons Python
+  3.10 à 3.14, numpy 1.24 à 2.5, matplotlib 3.6 à 3.11, Tk 8.6 et 9 : toutes OK
+  (DEPENDANCES.md § 4).
+
 ## 2.1.0 — 2026-10-28 — robustesse de la lecture et de la base de temps
 
 Banc de 130 fichiers abîmés (et 40 corruptions aléatoires dans la suite de tests) :

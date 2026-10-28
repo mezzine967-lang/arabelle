@@ -37,23 +37,40 @@ def is_sorted(x: np.ndarray) -> bool:
     return bool(finite.size < 2 or np.all(np.diff(finite) >= -ORDER_TOLERANCE_S))
 
 
-def sample_at(x: np.ndarray, values: np.ndarray, position: float, hold: bool,
-              sorted_x: bool | None = None) -> Sample | None:
+class TimeGrid:
+    """Abscisses des échantillons d'un fichier, préparées UNE fois pour les
+    curseurs et non à chaque mouvement de souris (REQ 4105) : abscisses
+    finies, leurs positions et leur ordre. Les données ne sont pas modifiées."""
+
+    def __init__(self, x: np.ndarray) -> None:
+        """Repère les abscisses finies et vérifie leur ordre."""
+        self.x = x
+        valid = np.isfinite(x)
+        self.positions = None if valid.all() else np.flatnonzero(valid)   # None : toutes finies
+        self.finite = x if self.positions is None else x[self.positions]
+        self.ordered = is_sorted(self.finite)
+        self._steps: np.ndarray | None = None
+
+    @property
+    def steps(self) -> np.ndarray:
+        """Abscisses finies triées (flèches clavier), calculées au premier besoin."""
+        if self._steps is None:
+            self._steps = np.sort(self.finite)
+        return self._steps
+
+
+def sample_at(grid: TimeGrid, values: np.ndarray, position: float, hold: bool) -> Sample | None:
     """Échantillon lu à l'abscisse ``position`` (voir règle du module).
 
-    ``sorted_x`` évite de retester l'ordre à chaque mouvement de souris (le
-    rendu le calcule une fois par courbe). Les abscisses non croissantes
-    (doublons, retours arrière) restent lisibles par une recherche directe,
-    plus lente mais exacte.
+    Abscisses croissantes : recherche dichotomique. Les abscisses non
+    croissantes (doublons, retours arrière) restent lisibles par une recherche
+    directe, plus lente mais exacte.
     """
+    x = grid.x
     if x.size == 0 or not np.isfinite(position):
         return None
-    if sorted_x is None:
-        sorted_x = is_sorted(x)
-    valid = np.isfinite(x)
-    if sorted_x:
-        candidates = None if valid.all() else np.flatnonzero(valid)
-        xs = x if candidates is None else x[candidates]
+    if grid.ordered:
+        xs = grid.finite
         if xs.size == 0:
             return None
         right = int(np.searchsorted(xs, position, side="right"))
@@ -64,8 +81,9 @@ def sample_at(x: np.ndarray, values: np.ndarray, position: float, hold: bool,
         else:
             lo, hi = max(right - 1, 0), min(right, xs.size - 1)
             k = lo if abs(xs[lo] - position) <= abs(xs[hi] - position) else hi
-        pick = k if candidates is None else int(candidates[k])
+        pick = k if grid.positions is None else int(grid.positions[k])
     else:
+        valid = np.isfinite(x)
         if hold:
             distance = np.where(valid & (x <= position), position - x, np.inf)
         else:
@@ -76,9 +94,9 @@ def sample_at(x: np.ndarray, values: np.ndarray, position: float, hold: bool,
     return Sample(int(pick), float(x[pick]), float(values[pick]))
 
 
-def step_index(x: np.ndarray, position: float, direction: int) -> float | None:
+def step_index(grid: TimeGrid, position: float, direction: int) -> float | None:
     """Abscisse de l'échantillon suivant (+1) ou précédent (-1) : flèches clavier."""
-    finite = np.sort(x[np.isfinite(x)])
+    finite = grid.steps
     if finite.size == 0:
         return None
     if direction > 0:
@@ -110,59 +128,70 @@ def missing_markers(x: np.ndarray, values: np.ndarray, missing: np.ndarray) -> n
     edges = np.flatnonzero(np.diff(padded))
     run_starts, run_ends = edges[0::2], edges[1::2]   # [début, fin exclue)
     known_index = np.flatnonzero(known)
-    markers = []
-    for start, end in zip(run_starts, run_ends):
-        before = known_index[known_index < start]
-        after = known_index[known_index >= end]
-        if before.size:
-            markers.append(before[-1])
-        if after.size:
-            markers.append(after[0])
-    return np.unique(np.array(markers, dtype=np.int64))
+    # Dichotomie pour toutes les suites d'un coup (et non une recherche par suite :
+    # des milliers de cellules vides restent instantanées, REQ 4105).
+    before = np.searchsorted(known_index, run_starts) - 1      # dernier connu avant la suite
+    after = np.searchsorted(known_index, run_ends)             # premier connu après la suite
+    markers = np.concatenate((known_index[before[before >= 0]], known_index[after[after < known_index.size]]))
+    return np.unique(markers.astype(np.int64))
 
 
-def decimate(x: np.ndarray, y: np.ndarray, x_min: float, x_max: float,
-             max_points: int) -> tuple[np.ndarray, np.ndarray]:
-    """Réduit une courbe pour l'affichage en conservant min et max par paquet.
+class DisplayCurve:
+    """Courbe complète conservée pour l'affichage ; ``window`` en extrait les
+    points à dessiner pour le zoom courant. L'ordre des abscisses n'est analysé
+    qu'une fois, et non à chaque zoom ou déplacement (fluidité, REQ 4105)."""
 
-    Les pics et les transitions logiques restent visibles, les NaN (ruptures)
-    sont conservés. Les données d'origine ne sont pas modifiées : le curseur lit
-    toujours les vrais échantillons.
-    """
-    if x.size <= max_points:
-        return x, y
-    if is_sorted(x):
-        # Abscisses rendues monotones (NaN des ruptures neutralisés) pour la dichotomie.
-        monotone = np.maximum.accumulate(np.where(np.isnan(x), -np.inf, x))
-        lo = max(int(np.searchsorted(monotone, x_min, side="left")) - 1, 0)
-        hi = min(int(np.searchsorted(monotone, x_max, side="right")) + 1, x.size)
-        x, y = x[lo:hi], y[lo:hi]
-    else:
-        # Temps non monotone (retours arrière réels) : fenêtre par masque.
-        keep = np.isnan(x) | ((x >= x_min) & (x <= x_max))
-        x, y = x[keep], y[keep]
-    if x.size <= max_points:
-        return x, y
-    buckets = max(max_points // 2, 1)
-    size = int(np.ceil(x.size / buckets))
-    pad = buckets * size - x.size
-    xp = np.concatenate((x, np.full(pad, np.nan)))
-    yp = np.concatenate((y, np.full(pad, np.nan))).reshape(buckets, size)
-    nan_rows = np.isnan(yp)
-    lo_idx = np.argmin(np.where(nan_rows, np.inf, yp), axis=1)
-    hi_idx = np.argmax(np.where(nan_rows, -np.inf, yp), axis=1)
-    first = np.minimum(lo_idx, hi_idx)
-    second = np.maximum(lo_idx, hi_idx)
-    base = np.arange(buckets) * size
-    picks = np.stack((base + first, base + second), axis=1).ravel()
-    out_x, out_y = xp[picks], yp.ravel()[picks]
-    # Un paquet contenant une rupture la conserve (NaN après ses extrêmes).
-    gap_rows = np.flatnonzero(nan_rows.any(axis=1) & ~nan_rows.all(axis=1))
-    if gap_rows.size:
-        insert_at = (gap_rows + 1) * 2
-        out_x = np.insert(out_x, insert_at, np.nan)
-        out_y = np.insert(out_y, insert_at, np.nan)
-    return out_x, out_y
+    def __init__(self, x: np.ndarray, y: np.ndarray) -> None:
+        """Mémorise la courbe ; l'analyse de l'ordre est faite au premier zoom utile."""
+        self.x, self.y = x, y
+        self._monotone: np.ndarray | None = None
+        self._checked = False
+
+    def window(self, x_min: float, x_max: float, max_points: int) -> tuple[np.ndarray, np.ndarray]:
+        """Réduit la courbe pour l'affichage en conservant min et max par paquet.
+
+        Les pics et les transitions logiques restent visibles, les NaN (ruptures)
+        sont conservés. Les données d'origine ne sont pas modifiées : le curseur lit
+        toujours les vrais échantillons.
+        """
+        x, y = self.x, self.y
+        if x.size <= max_points:
+            return x, y
+        if not self._checked:
+            self._checked = True
+            if is_sorted(x):
+                # Abscisses rendues monotones (NaN des ruptures neutralisés) pour la dichotomie.
+                self._monotone = np.maximum.accumulate(np.where(np.isnan(x), -np.inf, x))
+        if self._monotone is not None:
+            lo = max(int(np.searchsorted(self._monotone, x_min, side="left")) - 1, 0)
+            hi = min(int(np.searchsorted(self._monotone, x_max, side="right")) + 1, x.size)
+            x, y = x[lo:hi], y[lo:hi]
+        else:
+            # Temps non monotone (retours arrière réels) : fenêtre par masque.
+            keep = np.isnan(x) | ((x >= x_min) & (x <= x_max))
+            x, y = x[keep], y[keep]
+        if x.size <= max_points:
+            return x, y
+        buckets = max(max_points // 2, 1)
+        size = int(np.ceil(x.size / buckets))
+        pad = buckets * size - x.size
+        xp = np.concatenate((x, np.full(pad, np.nan)))
+        yp = np.concatenate((y, np.full(pad, np.nan))).reshape(buckets, size)
+        nan_rows = np.isnan(yp)
+        lo_idx = np.argmin(np.where(nan_rows, np.inf, yp), axis=1)
+        hi_idx = np.argmax(np.where(nan_rows, -np.inf, yp), axis=1)
+        first = np.minimum(lo_idx, hi_idx)
+        second = np.maximum(lo_idx, hi_idx)
+        base = np.arange(buckets) * size
+        picks = np.stack((base + first, base + second), axis=1).ravel()
+        out_x, out_y = xp[picks], yp.ravel()[picks]
+        # Un paquet contenant une rupture la conserve (NaN après ses extrêmes).
+        gap_rows = np.flatnonzero(nan_rows.any(axis=1) & ~nan_rows.all(axis=1))
+        if gap_rows.size:
+            insert_at = (gap_rows + 1) * 2
+            out_x = np.insert(out_x, insert_at, np.nan)
+            out_y = np.insert(out_y, insert_at, np.nan)
+        return out_x, out_y
 
 
 @dataclass(frozen=True)

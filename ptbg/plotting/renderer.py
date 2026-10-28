@@ -29,7 +29,7 @@ from ptbg.core.curves import CurveData, resolve
 from ptbg.core.data_package import Timeline, Workspace
 from ptbg.core.readings import cursor_positions, horizontal_crossings, xy_data
 from ptbg.core.conditional import evaluate, true_intervals
-from ptbg.core.sampling import break_at, decimate, missing_markers, sample_at
+from ptbg.core.sampling import DisplayCurve, break_at, missing_markers, sample_at
 from ptbg.core.signals import SignalType, short_label
 from ptbg.core.xy import point_at_time
 from ptbg.plotting import monitor
@@ -93,7 +93,7 @@ class TabRenderer:
         self.active_axle = active_axle
         self.axes: list = []                # un axe Matplotlib par axe du modèle
         self.tbm_plot = None
-        self._lines: list = []              # (axe, ligne, x complet, y complet)
+        self._lines: list = []              # (axe, ligne, DisplayCurve : courbe complète)
         self._lanes: dict = {}              # (axe, courbe) -> (base, échelle) des pistes
         self._digital_axles: set = set()    # axes dessinés en pistes logiques
         self._cursor_artists: list = []
@@ -157,7 +157,7 @@ class TabRenderer:
             text_ax = self.container.add_subplot(band[0])
             self.tbm_plot = self.container.add_subplot(band[1], sharex=master)
             for line, x, y in monitor.draw_monitor(text_ax, self.tbm_plot, sources, self.timeline):
-                self._lines.append((self.tbm_plot, line, x, y))
+                self._lines.append((self.tbm_plot, line, DisplayCurve(x, y)))
             apply_time_axis(self.tbm_plot, self.timeline, True)
             self.tbm_plot.set_xlabel(axis_title(self.timeline), fontsize=FONT_SMALL)
         elif with_note:
@@ -179,11 +179,18 @@ class TabRenderer:
 
     def _fit_time_range(self, master) -> None:
         """Vue initiale : toute la durée des courbes affichées."""
-        finite = [x[np.isfinite(x)] for _, _, x, _ in self._lines]
-        finite = [values for values in finite if values.size]
-        if finite:
-            lo = min(float(values.min()) for values in finite)
-            hi = max(float(values.max()) for values in finite)
+        bounds = []
+        for _, _, curve in self._lines:
+            # Min / max sans copier les abscisses (NaN ignorés) ; ±inf : abscisses finies seules.
+            lo, hi = (np.fmin.reduce(curve.x), np.fmax.reduce(curve.x)) if curve.x.size else (np.nan, np.nan)
+            if not (np.isfinite(lo) and np.isfinite(hi)):
+                finite = curve.x[np.isfinite(curve.x)]
+                lo, hi = (finite.min(), finite.max()) if finite.size else (np.nan, np.nan)
+            if np.isfinite(lo):
+                bounds.append((float(lo), float(hi)))
+        if bounds:
+            lo = min(low for low, _ in bounds)
+            hi = max(high for _, high in bounds)
             pad = (hi - lo) * 0.01 or 1.0
             master.set_xlim(lo - pad, hi + pad)
 
@@ -233,7 +240,7 @@ class TabRenderer:
     def _register(self, ax, x, y, **style):
         """Trace une courbe (réduite pour l'affichage) et la mémorise pour le zoom."""
         line, = ax.plot(x[:2], y[:2], **style)
-        self._lines.append((ax, line, x, y))
+        self._lines.append((ax, line, DisplayCurve(x, y)))
         return line
 
     def _draw_analog(self, index, ax, axle, curves: list[CurveData]) -> None:
@@ -316,9 +323,9 @@ class TabRenderer:
     def refresh_decimation(self) -> None:
         """Recalcule les points affichés pour le zoom courant (appelé après
         chaque zoom/déplacement) ; les petits nombres de points sont marqués."""
-        for ax, line, x, y in self._lines:
+        for ax, line, curve in self._lines:
             lo, hi = ax.get_xlim()
-            xd, yd = decimate(x, y, lo, hi, self.max_points)
+            xd, yd = curve.window(lo, hi, self.max_points)
             line.set_data(xd, yd)
             visible = np.count_nonzero((xd >= lo) & (xd <= hi))
             line.set_marker("o" if visible < 120 else "")
@@ -352,9 +359,18 @@ class TabRenderer:
             self._keep(self.tbm_plot.axvline(self.tab.t_global, color=CURSOR_COLORS["Global"], ls="--", lw=1.1))
 
     def _keep(self, artist):
-        """Mémorise un élément de curseur pour l'effacer au prochain redessin."""
+        """Mémorise un élément de curseur pour l'effacer au prochain redessin. À
+        l'écran il est « animé » : redessiné seul, sans le reste de la figure
+        (``draw_cursor_artists``) ; dans le PDF il est dessiné normalement."""
+        if not self.for_print:
+            artist.set_animated(True)
         self._cursor_artists.append(artist)
         return artist
+
+    def draw_cursor_artists(self) -> None:
+        """Dessine les seuls curseurs sur le rendu déjà présent (écran)."""
+        for artist in self._cursor_artists:
+            self.container.figure.draw_artist(artist)
 
     def _draw_vertical_cursors(self, index: int, ax, axle: AxleState) -> None:
         """Curseurs global, C1, C2 : ligne, instant, valeur de la courbe sélectionnée, Δt."""
@@ -365,8 +381,7 @@ class TabRenderer:
             self._keep(ax.axvline(position, color=color, lw=1.2, ls="--" if label == "Global" else "-"))
             text = f"{label}  {self.timeline.format(position)}"
             if curve is not None:
-                x = self.timeline.x(curve.source)
-                sample = sample_at(x, curve.values, position, curve.hold, self.timeline.x_sorted(curve.source))
+                sample = sample_at(self.timeline.grid(curve.source), curve.values, position, curve.hold)
                 if sample is not None:
                     text += f"\n{curve.ref.name} = {curve.format_at(sample.index)}"
                     y_mark = self._display_y(index, axle, curve, sample.value)

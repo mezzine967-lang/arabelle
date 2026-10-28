@@ -201,21 +201,31 @@ def _split_frequency_segments(dt: np.ndarray, period: float, tol_frac: float,
     consécutifs sont tous hors raster ET cohérents entre eux (écart relatif
     ≤ tolérance). Renvoie des triplets (début, fin exclue, période) en indices
     de Δt.
+
+    Le changement suivant est cherché dans une fenêtre qui s'agrandit (× 4)
+    tant qu'elle n'en contient pas : le coût reste proportionnel à la longueur
+    du fichier, même avec des milliers de changements (REQ 4105). Une suite
+    vue en entier dans la fenêtre est la même que dans tout le fichier : le
+    résultat est identique à une recherche sur toute la fin du fichier.
     """
     segments = []
     start, current, first = 0, period, True
     while start < dt.size:
-        rest = dt[start:]
-        change = None
-        if rest.size >= max(min_run, 2):
-            abnormal = (np.abs(rest - current) > tol_frac * current) & (rest > 0)
-            steady = np.abs(np.diff(rest)) <= tol_frac * np.maximum(rest[:-1], rest[1:])
-            linked = abnormal[:-1] & abnormal[1:] & steady
-            starts = _run_starts(linked, min_run - 1)
-            if not first:
-                starts = starts[starts >= 1]   # garantit la progression de la boucle
-            if starts.size:
-                change = int(starts[0])
+        change, window = None, max(64, 8 * min_run)
+        while True:
+            rest = dt[start:start + window]
+            if rest.size >= max(min_run, 2):
+                abnormal = (np.abs(rest - current) > tol_frac * current) & (rest > 0)
+                steady = np.abs(np.diff(rest)) <= tol_frac * np.maximum(rest[:-1], rest[1:])
+                linked = abnormal[:-1] & abnormal[1:] & steady
+                starts = _run_starts(linked, min_run - 1)
+                if not first:
+                    starts = starts[starts >= 1]   # garantit la progression de la boucle
+                if starts.size:
+                    change = int(starts[0])
+            if change is not None or start + window >= dt.size:
+                break
+            window *= 4
         if change is None:
             segments.append((start, dt.size, current))
             break

@@ -24,7 +24,7 @@ n'est pas encore *qualifié* compatible.
 | 13 | REQ_COMMON_KH_5401 « cross value » | Valeur interpolée ou échantillon ? | **Échantillon réel**, jamais interpolé : le plus proche pour un Float ; pour un Bool, **règle métier ajoutée** : l'état maintenu (échantillon précédent), cohérente avec le tracé en escalier ; instant et ligne CSV de l'échantillon affichés. | `core/sampling.py` |
 | 14 | REQ_COMMON_KH_2301 / 2302 / 2303 | Faut-il refuser ou tolérer un fichier non conforme ? | Séparateur ≠ virgule : fichier **refusé** avec diagnostic (les autres restent chargés). Encodage ≠ UTF-8 (fichier Windows-1252, UTF-16, octet corrompu) : fichier **lu** mais marqué en **ERREUR** avec la 1re ligne fautive, pour ne pas perdre les mesures. Métadonnées, lignes « # », lignes mal formées : **tolérées, signalées et listées**. | `core/csv_reader.py` |
 | 15 | REQ_COMMON_KH_6005 « Project Name & Unit », « Project file reference or Hash » | Origine de ces champs ? Le fichier projet est-il prévu ? | Saisis dans Rapport > En-tête ; référence = texte libre + nom du fichier projet ; empreinte = SHA-256 du fichier projet enregistré ; SHA-256 de chaque CSV source. Le **fichier projet `.ptbg.json` est une proposition** (non décrit dans la spécification). | `report/pdf_report.py`, `core/project.py` |
-| 16 | REQ_COMMON_KH_4105 / 2301 / 2308 — fichiers abîmés | Que faire d'une ligne incomplète, d'un en-tête absent ou répété, d'un horodatage aberrant ? | Une ligne au mauvais nombre de champs est **rejetée et listée** (jamais complétée : sa dernière valeur pourrait être tronquée). Sans en-tête, la 1re ligne de mesures est gardée (colonnes Colonne_1…). Un en-tête répété (fichiers concaténés) est ignoré. Un horodatage isolé à plus de **10 périodes** de ses deux voisins (qui se suivent normalement) est déclaré **aberrant** : ERREUR, exclu du raster et des courbes, au lieu d'un faux retour arrière suivi d'un faux trou. Valeur de 10 périodes arbitraire. | `core/csv_reader.py`, `core/time_base.py` (`OUTLIER_JUMP`) |
+| 16 | REQ_COMMON_KH_4105 / 2301 / 2308 — fichiers abîmés | Que faire d'une ligne incomplète, d'un en-tête absent ou répété, d'un horodatage aberrant ? | Une ligne au mauvais nombre de champs est **rejetée et listée** (jamais complétée : sa dernière valeur pourrait être tronquée). Sans en-tête, la 1re ligne de mesures est gardée (colonnes Colonne_1…). Un en-tête répété (fichiers concaténés) est ignoré. Un horodatage isolé à plus de **10 périodes** de ses deux voisins (qui se suivent normalement) est déclaré **aberrant** : ERREUR, exclu du raster et des courbes, au lieu d'un faux retour arrière suivi d'un faux trou. Valeur de 10 périodes arbitraire. Pour une heure hh:mm:ss, une valeur isolée à plus de 12 h de ses voisins, vers l'arrière **ou vers l'avant** (2.2.0), n'est jamais comptée comme un passage de minuit. | `core/csv_reader.py`, `core/time_base.py` (`OUTLIER_JUMP`), `core/time_parser.py` (`_day_offsets`) |
 | 17 | REQ_COMMON_KH_5500 (énoncé **vide**) | Le requis peut-il être déclaré satisfait ? | **Non** : la fonction de statistiques conditionnelles (n° 12) est une proposition ; le requis reste à rédiger. | — |
 
 ## Qualification restant à consigner
@@ -33,6 +33,10 @@ n'est pas encore *qualifié* compatible.
   (procédure de 15 minutes : COMPATIBILITE_OS.md § 5) avec les versions réellement
   présentes, relevées par `python tools/audit_environnement.py`.
 - Essai de performance sur les volumes réels de PTBG (taille, nombre de colonnes, de
-  fichiers) pour confirmer la valeur de REQ 2310. Repère mesuré sur le banc Linux
-  (Python 3.11) : 97 Mo, 1 000 000 lignes × 21 colonnes lus et analysés en 11 s environ,
-  en arrière-plan avec barre d'avancement.
+  fichiers) pour confirmer la valeur de REQ 2310, avec `python tools/banc_performance.py`
+  (vrais fichiers, puis `--generer 500`). Repère mesuré sur le banc Linux (Python 3.11,
+  version 2.2.0) : 1 000 000 lignes × 21 colonnes lues et analysées en 4,7 s (115 Mo),
+  7,0 s (150 Mo, Bool true/false) et 6,7 s (157 Mo, heure hh:mm:ss.ns), en arrière-plan
+  avec barre d'avancement (11 à 13 s en 2.1.0) ; 500 Mo (3,66 millions de lignes) en 32 s
+  avec 1,6 Go de mémoire. Ces chiffres viennent d'une machine virtuelle aux allocations
+  mémoire lentes : seul l'essai sur les postes cibles fait foi.

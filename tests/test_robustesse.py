@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 
 from helpers import TempFiles
 from ptbg.config import Settings
+from ptbg.core import csv_reader
 from ptbg.core.arrangement import CurveRef, TabState
 from ptbg.core.csv_reader import CsvReadError, read_csv
 from ptbg.core.data_package import Workspace, load_source
@@ -156,6 +157,33 @@ class CsvRobustnessTests(unittest.TestCase):
         self.assertTrue(any(i.requirement == "REQ_COMMON_KH_2302" and i.severity is Severity.ERROR
                             for i in table.issues))
 
+    def test_block_boundaries_never_change_the_result(self):
+        """REQ 4105 : lecture par blocs ; un fichier abîmé lu avec des blocs de 7 caractères
+        (coupures au milieu des lignes, des guillemets, des octets nuls…) donne exactement
+        la même table qu'en un seul bloc, avec les mêmes constats."""
+        rows = good_rows(300).splitlines(keepends=True)
+        rows[10] = '100,"0.5,1,ARRET\n'                # guillemet non fermé : rejetée
+        rows[20] = "\n"                                 # vide
+        rows[30] = "# commentaire\n"
+        rows[40] = HEADER                                # en-tête répété
+        rows[50] = "500,0.1,1\n"                        # champ manquant : rejetée
+        rows[60] = " 600,0.2,0,ARRET\n"                 # espace en tête : gardée
+        rows[70] = "700,0.3,1,ARRET,,\n"                # virgules finales : gardée
+        rows[80] = "800,\x00,1,A\n"                     # octet nul : rejetée
+        rows[90] = ",,,\n"                              # aucune donnée
+        path = self.files.write("blocs.csv", HEADER + "".join(rows) + "3000,0.9,1,MARCHE")
+        reference = read_csv(path)
+        self.assertEqual(reference.n_samples, 294)
+        for size in (7, 64, 1000):
+            with self.subTest(block=size), mock.patch.object(csv_reader, "BLOCK_CHARS", size):
+                table = read_csv(path)
+                self.assertEqual(table.time_raw, reference.time_raw)
+                np.testing.assert_array_equal(table.line_numbers, reference.line_numbers)
+                self.assertEqual(messages(table), messages(reference))
+                for column, expected in zip(table.columns, reference.columns):
+                    np.testing.assert_array_equal(column.values, expected.values)
+                    np.testing.assert_array_equal(column.kinds, expected.kinds)
+
     def test_semicolon_with_decimal_comma_rejected(self):
         """REQ 2301 : même quand la virgule décimale donne autant de virgules que de « ; »."""
         with self.assertRaises(CsvReadError) as ctx:
@@ -216,6 +244,18 @@ class ValueAndTimeRobustnessTests(unittest.TestCase):
         real = [f"23:59:59.{i:02d}0" if i < 100 else f"00:00:00.{i - 100:02d}0" for i in range(200)]
         crossing = convert_time_column(real, "heure", TimeBaseSettings())
         self.assertAlmostEqual(crossing.seconds[150] - crossing.seconds[50], 1.0, places=9)
+
+    def test_isolated_forward_clock_value_does_not_shift_the_rest_by_a_day(self):
+        """REQ 2306 : « 23:59:59 » isolé au milieu d'un essai à 00 h 10 n'est pas un passage de
+        minuit (jusqu'à la 2.1.0, la mesure suivante décalait tout le reste du fichier d'un jour)."""
+        raw = [f"00:10:{i * 0.01:012.9f}" for i in range(200)]
+        raw[100] = "23:59:59.000000000"
+        conversion = convert_time_column(raw, "heure", TimeBaseSettings())
+        self.assertAlmostEqual(conversion.seconds[199], 1.99, places=9)
+        self.assertNotIn("minuit", " ".join(i.message for i in conversion.issues))
+        result = analyze(conversion.seconds)
+        self.assertEqual(list(result.excluded), [100])            # signalé, exclu des courbes
+        self.assertEqual(result.event_counts[EventKind.OUTLIER], 1)
 
     def test_isolated_aberrant_timestamp_is_one_error_not_a_fake_gap(self):
         t = np.arange(200) * 0.01

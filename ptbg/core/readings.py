@@ -27,6 +27,9 @@ from ptbg.core.xy import build_xy, point_at_time
 HEADER = ("Axe", "Curseur", "Courbe", "Instant lu", "Valeur", "Ligne CSV")
 MAX_LISTED_CROSSINGS = 5
 
+# Nuages X/Y déjà formés : (fichier, révision, courbe) × 2 + axe des temps -> XYData.
+_XY_CACHE: dict = {}
+
 
 @dataclass(frozen=True)
 class ReadingRow:
@@ -57,15 +60,25 @@ def cursor_positions(tab: TabState, axle: AxleState) -> list[tuple[str, float]]:
 
 
 def xy_data(axle: AxleState, workspace: Workspace, timeline: Timeline):
-    """Nuage X/Y d'un axe, ou None s'il n'est pas configuré."""
+    """Nuage X/Y d'un axe, ou None s'il n'est pas configuré.
+
+    Le nuage est mis en cache tant que ses deux courbes et l'axe des temps ne
+    changent pas : il n'est pas reconstruit à chaque mouvement de souris
+    (plusieurs dixièmes de seconde pour un million de points, REQ 4105)."""
     if axle.xy_x is None or axle.xy_y is None:
         return None
     cx, cy = resolve(axle.xy_x, workspace), resolve(axle.xy_y, workspace)
     if cx is None or cy is None:
         return None
-    same = cx.source is cy.source
-    max_gap = 0.5 * max(cx.source.analysis.period_used_s, cy.source.analysis.period_used_s)
-    return build_xy(timeline.x(cx.source), cx.values, timeline.x(cy.source), cy.values, same, max_gap)
+    key = tuple((curve.source.id, curve.source.revision, curve.ref.name, curve.ref.is_group) for curve in (cx, cy))
+    key += (timeline,)
+    if key not in _XY_CACHE:
+        if len(_XY_CACHE) > 16:
+            _XY_CACHE.clear()
+        same = cx.source is cy.source
+        max_gap = 0.5 * max(cx.source.analysis.period_used_s, cy.source.analysis.period_used_s)
+        _XY_CACHE[key] = build_xy(timeline.x(cx.source), cx.values, timeline.x(cy.source), cy.values, same, max_gap)
+    return _XY_CACHE[key]
 
 
 def horizontal_crossings(axle: AxleState, workspace: Workspace, timeline: Timeline):
@@ -97,8 +110,7 @@ def compute_readings(tab: TabState, workspace: Workspace, timeline: Timeline,
                 curve = resolve(ref, workspace)
                 if curve is None:
                     continue
-                x = timeline.x(curve.source)
-                sample = sample_at(x, curve.values, position, curve.hold, timeline.x_sorted(curve.source))
+                sample = sample_at(timeline.grid(curve.source), curve.values, position, curve.hold)
                 if sample is None:
                     rows.append(ReadingRow(name, label, curve.label, timeline.format(position),
                                            "hors plage", "—"))
@@ -122,10 +134,9 @@ def _delta_rows(name, axle, workspace, timeline) -> list[ReadingRow]:
         curve = resolve(ref, workspace)
         if curve is None or curve.signal_type is not SignalType.FLOAT:
             continue
-        x = timeline.x(curve.source)
-        ordered = timeline.x_sorted(curve.source)
-        s1 = sample_at(x, curve.values, axle.t1, False, ordered)
-        s2 = sample_at(x, curve.values, axle.t2, False, ordered)
+        grid = timeline.grid(curve.source)
+        s1 = sample_at(grid, curve.values, axle.t1, False)
+        s2 = sample_at(grid, curve.values, axle.t2, False)
         if s1 and s2 and np.isfinite(s1.value) and np.isfinite(s2.value):
             rows.append(ReadingRow(name, "Δ", curve.label, f"{s2.x - s1.x:.9g} s",
                                    f"ΔV = {s2.value - s1.value:.6g}", ""))

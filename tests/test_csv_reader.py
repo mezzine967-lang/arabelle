@@ -6,10 +6,12 @@ import numpy as np
 
 from helpers import EXAMPLES, TempFiles, counter_csv
 from ptbg.config import Settings
-from ptbg.core.csv_reader import KIND_EMPTY, CsvReadError, ReadCancelled, read_csv
+from ptbg.core.csv_reader import (KIND_BOOL, KIND_EMPTY, KIND_NONFINITE, KIND_NUMBER, KIND_TEXT, CsvReadError,
+                                  ReadCancelled, read_csv)
 from ptbg.core.data_package import load_source
 from ptbg.core.diagnostics import Severity
 from ptbg.core.signals import SignalType, auto_type, detect_indexed_groups, interpret
+from ptbg.core.vector_parse import parse_numbers
 
 
 class CsvFormatTests(unittest.TestCase):
@@ -113,6 +115,45 @@ class CsvFormatTests(unittest.TestCase):
         self.assertEqual(table.n_samples, n)
         self.assertGreater(len(steps), 3)
         self.assertLessEqual(max(steps), 1.0)
+
+    def test_mixed_columns_converted_like_cell_by_cell(self):
+        """REQ 4105 : colonnes mixtes converties par blocs avec le classement d'une cellule
+        à la fois : nombres + quelques cases vides ou textes (recherche des cellules
+        fautives), true/false et états (chaque texte distinct classé une fois)."""
+        n = 30_000
+        analog = [f"{i * 0.001:.3f}" for i in range(n)]
+        analog[7], analog[12_345], analog[29_999] = "", "ERREUR", "nan"
+        states = ["RUN" if i % 3 == 0 else "STOP" for i in range(n)]
+        states[5] = "1"
+        flags = ["true" if i % 2 else "False" for i in range(n)]
+        flags[9] = ""
+        table = read_csv(self.files.write("mixte.csv", counter_csv(range(0, 10 * n, 10),
+                                                                   {"a": analog, "s": states, "f": flags})))
+        a, s, f = table.columns
+        self.assertEqual((a.kinds[7], a.kinds[12_345], a.kinds[29_999]), (KIND_EMPTY, KIND_TEXT, KIND_NONFINITE))
+        self.assertEqual(a.count(KIND_NUMBER), n - 3)
+        self.assertEqual(a.values[100], 0.1)
+        self.assertEqual(a.categories, ["ERREUR"])
+        self.assertEqual(s.categories, ["RUN", "STOP"])                     # ordre d'apparition
+        self.assertEqual((s.kinds[5], s.values[5]), (KIND_NUMBER, 1.0))
+        self.assertEqual(s.codes[1], 1)
+        self.assertEqual(f.count(KIND_BOOL), n - 1)
+        self.assertEqual((f.values[0], f.values[1], f.kinds[9]), (0.0, 1.0, KIND_EMPTY))
+        with self.assertRaises(ValueError):                                 # valeurs lues : jamais modifiées
+            a.values[0] = 1.0
+
+    def test_parse_numbers_isolates_bad_cells(self):
+        """Conversion en bloc : les cellules refusées sont repérées une à une, les autres
+        valent ce que donnerait ``float()`` ou ``int()``."""
+        texts = [str(i) for i in range(1000)]
+        texts[3], texts[500], texts[999] = "", "abc", " 7 "
+        values, converted = parse_numbers(texts)
+        self.assertEqual(list(np.flatnonzero(~converted)), [3, 500])
+        self.assertEqual((values[2], values[999]), (2.0, 7.0))
+        self.assertTrue(np.isnan(values[3]))
+        ints, ok = parse_numbers(["1", "2.5", str(2 ** 70), "-4"], np.int64)
+        self.assertEqual(list(ok), [True, False, False, True])
+        self.assertEqual((ints[0], ints[3]), (1, -4))
 
     def test_unreadable_file_isolated(self):
         """REQ 4105 / 2105 : un fichier malade est conservé avec son diagnostic."""

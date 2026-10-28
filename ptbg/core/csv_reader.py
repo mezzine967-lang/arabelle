@@ -47,6 +47,7 @@ import hashlib
 import io
 import math
 from dataclasses import dataclass, field
+from itertools import chain, repeat
 from pathlib import Path
 from typing import Callable
 
@@ -54,12 +55,13 @@ import numpy as np
 
 from ptbg.core.diagnostics import Issue, Severity
 from ptbg.core.time_parser import looks_like_time
+from ptbg.core.vector_parse import parse_numbers
 
 # Nature d'une cellule (tableau int8 ``kinds`` de chaque colonne).
 # KIND_NONFINITE : nombre écrit « nan », « inf »… (valeur absente, pas un texte).
 KIND_EMPTY, KIND_NUMBER, KIND_BOOL, KIND_TEXT, KIND_NONFINITE = 0, 1, 2, 3, 4
 
-CHUNK_ROWS = 20_000        # lignes converties en numpy par bloc
+BLOCK_CHARS = 1 << 19      # caractères lus et convertis par bloc (512 Ki, ≈ 5 000 lignes)
 SNIFF_ROWS = 50            # lignes examinées pour repérer l'en-tête
 SEPARATOR_SAMPLE = 30      # lignes examinées pour contrôler le séparateur
 MAX_DETAILED_ISSUES = 20   # au-delà, les lignes rejetées sont résumées
@@ -147,12 +149,12 @@ class _ColumnBuilder:
         self.has_one = False
 
     def add(self, cells) -> None:
-        """Convertit un bloc. Chemin rapide numpy, sinon cellule par cellule."""
+        """Convertit un bloc. Chemin rapide numpy, sinon ``_convert_mixed``."""
         codes = None
         try:
             values = np.array(cells, dtype=np.float64)
         except ValueError:
-            values, kinds, codes = self._convert_slowly(cells)
+            values, kinds, codes = self._convert_mixed(cells)
         else:
             finite = np.isfinite(values)
             kinds = np.where(finite, KIND_NUMBER, KIND_NONFINITE).astype(np.int8)
@@ -167,38 +169,53 @@ class _ColumnBuilder:
         self.kind_chunks.append(kinds)
         self.code_chunks.append(codes)
 
-    def _convert_slowly(self, cells):
-        """Classe chaque cellule : vide, booléen (true/false), nombre, non fini, texte."""
-        values, kinds, codes = [], [], []
-        has_text = False
-        for cell in cells:
-            text = cell.strip()
-            value, kind, code = math.nan, KIND_EMPTY, -1
-            if text:
-                lowered = text.lower()
-                if lowered == "true":
-                    value, kind = 1.0, KIND_BOOL
-                elif lowered == "false":
-                    value, kind = 0.0, KIND_BOOL
-                else:
-                    try:
-                        number = float(text)
-                    except ValueError:
-                        kind, has_text = KIND_TEXT, True
-                        code = self.categories.setdefault(text, len(self.categories))
-                    else:
-                        if math.isfinite(number):
-                            value, kind = number, KIND_NUMBER
-                        else:
-                            kind = KIND_NONFINITE
-            values.append(value)
-            kinds.append(kind)
-            codes.append(code)
-        return (np.array(values, dtype=np.float64), np.array(kinds, dtype=np.int8),
-                np.array(codes, dtype=np.int32) if has_text else None)
+    def _classify(self, cell: str) -> tuple[float, int, int]:
+        """Classe UNE cellule : vide, booléen (true/false), nombre, non fini, texte.
+        Renvoie (valeur, nature, code du texte libre ou -1)."""
+        text = cell.strip()
+        if not text:
+            return math.nan, KIND_EMPTY, -1
+        lowered = text.lower()
+        if lowered == "true":
+            return 1.0, KIND_BOOL, -1
+        if lowered == "false":
+            return 0.0, KIND_BOOL, -1
+        try:
+            number = float(text)
+        except ValueError:
+            return math.nan, KIND_TEXT, self.categories.setdefault(text, len(self.categories))
+        return (number, KIND_NUMBER, -1) if math.isfinite(number) else (math.nan, KIND_NONFINITE, -1)
+
+    def _convert_mixed(self, cells):
+        """Bloc qui n'est pas entièrement numérique : même classement que
+        ``_classify`` cellule par cellule, mais sans boucle sur chaque cellule.
+
+        - peu de textes distincts (« true »/« false », « STOP »/« RUN », 0/1 avec
+          des cases vides) : chaque texte distinct est classé une fois ;
+        - sinon (nombres avec quelques cellules vides ou textes) : conversion
+          numpy des nombres et classement des seules cellules restantes."""
+        distinct = dict.fromkeys(cells)          # ordre d'apparition (codes des textes)
+        if len(distinct) <= max(64, len(cells) // 8):
+            table = [self._classify(cell) for cell in distinct]
+            for position, cell in enumerate(distinct):
+                distinct[cell] = position
+            lookup = np.fromiter(map(distinct.__getitem__, cells), dtype=np.int64, count=len(cells))
+            values = np.array([entry[0] for entry in table], dtype=np.float64)[lookup]
+            kinds = np.array([entry[1] for entry in table], dtype=np.int8)[lookup]
+            codes = np.array([entry[2] for entry in table], dtype=np.int32)[lookup]
+        else:
+            values, converted = parse_numbers(cells)
+            finite = np.isfinite(values)
+            kinds = np.where(finite, KIND_NUMBER, KIND_NONFINITE).astype(np.int8)
+            values[~finite] = np.nan
+            codes = np.full(len(cells), -1, dtype=np.int32)
+            for position in np.flatnonzero(~converted).tolist():
+                values[position], kinds[position], codes[position] = self._classify(cells[position])
+        return values, kinds, (codes if (kinds == KIND_TEXT).any() else None)
 
     def finish(self) -> RawColumn:
-        """Assemble les blocs convertis en une colonne complète."""
+        """Assemble les blocs convertis en une colonne complète. Les blocs sont
+        libérés au fur et à mesure : la mémoire n'est pas doublée en fin de lecture."""
         values = _concat(self.value_chunks, np.float64)
         kinds = _concat(self.kind_chunks, np.int8)
         codes = None
@@ -206,6 +223,8 @@ class _ColumnBuilder:
             codes = np.concatenate([
                 chunk if chunk is not None else np.full(len(v), -1, dtype=np.int32)
                 for chunk, v in zip(self.code_chunks, self.value_chunks)])
+        self.value_chunks, self.kind_chunks, self.code_chunks = [], [], []
+        values.flags.writeable = False          # valeurs lues : jamais modifiées ensuite
         return RawColumn(self.name, self.index, values, kinds, codes,
                          [_printable(text) for text in self.categories], self.binary,
                          self.has_zero, self.has_one)
@@ -274,7 +293,8 @@ def _digest(path: Path, cancel=None) -> tuple[str, bool]:
             if cancel is not None and cancel.is_set():
                 raise ReadCancelled()
             digest.update(block)
-            if utf8:
+            # Bloc ASCII sans caractère entamé au bloc précédent : UTF-8 valide d'office.
+            if utf8 and not (block.isascii() and not decoder.getstate()[0]):
                 try:
                     decoder.decode(block)
                 except UnicodeDecodeError:
@@ -360,45 +380,85 @@ def _check_separator(lines: list[str]) -> None:
 
 
 # --------------------------------------------------------------- découpage des lignes
-def _split_rows(handle, stats: _ReadStats):
-    """Découpe chaque ligne physique en champs : renvoie (n° de ligne, champs).
+def _line_blocks(handle, stats: _ReadStats):
+    """Lit le texte par blocs de lignes physiques entières : (n° de la 1re ligne, texte, lignes).
+
+    Les fins de ligne sont retirées ; seule la toute dernière ligne du fichier
+    peut ne pas être terminée (``stats.last_terminated``). Une ligne démesurée
+    (zone d'octets nuls sans retour à la ligne) est assemblée en une seule fois,
+    sans recopies successives."""
+    number, pending = 1, []
+    while True:
+        text = handle.read(BLOCK_CHARS)
+        if not text:
+            break
+        cut = text.rfind("\n")
+        if cut < 0:
+            pending.append(text)
+            continue
+        block = "".join(pending) + text[:cut]
+        pending = [text[cut + 1:]]
+        lines = block.split("\n")
+        yield number, block, lines
+        number += len(lines)
+    tail = "".join(pending)
+    stats.last_line, stats.last_terminated = number - 1, not tail
+    if tail:
+        stats.last_line = number
+        yield number, tail, [tail]
+
+
+def _split_line(number: int, text: str, stats: _ReadStats) -> list[str] | None:
+    """Découpe UNE ligne physique en champs (None : ligne écartée).
 
     Les lignes vides, de commentaire « # » ou corrompues sont comptées ou
     rejetées ici. Une ligne sans guillemet est découpée directement à la
     virgule ; sinon le module ``csv`` l'analyse en mode strict, LIMITÉ À CETTE
     LIGNE : un guillemet non fermé ne peut pas avaler la suite du fichier."""
-    number, terminated = 0, True
-    for number, line in enumerate(handle, start=1):
-        terminated = line.endswith("\n")
-        text = line[:-1] if terminated else line
-        if "\x00" in text:
-            if text.strip("\x00 \t\r"):
-                stats.reject(number, "octets nuls dans la ligne (zone corrompue ou écriture interrompue)",
-                             text, "REQ_COMMON_KH_2302")
-            else:
-                stats.nul_padding += 1
-            continue
-        if text[:1] in ("", " ", "\t", "#", "\ufeff"):  # contrôles coûteux seulement si utiles
-            text = text.lstrip("\ufeff")    # BOM d'un 2e fichier collé à la suite du 1er
-            if not text.strip():
-                stats.empty_lines += 1
-                continue
-            if text.lstrip().startswith("#"):
-                stats.comments.append(number)
-                continue
-        if '"' in text:
-            try:
-                fields = next(csv.reader([text], strict=True))
-            except csv.Error as exc:
-                stats.reject(number, f"guillemets mal formés ({exc})", text)
-                continue
+    if "\x00" in text:
+        if text.strip("\x00 \t\r"):
+            stats.reject(number, "octets nuls dans la ligne (zone corrompue ou écriture interrompue)",
+                         text, "REQ_COMMON_KH_2302")
         else:
-            fields = text.split(",")
-        if not fields[0].strip() and not any(cell.strip() for cell in fields):
-            stats.empty_lines += 1           # « ,,,, » : aucune donnée
-            continue
-        yield number, fields
-    stats.last_line, stats.last_terminated = number, terminated
+            stats.nul_padding += 1
+        return None
+    if text[:1] in ("", " ", "\t", "#", "\ufeff"):  # contrôles coûteux seulement si utiles
+        text = text.lstrip("\ufeff")    # BOM d'un 2e fichier collé à la suite du 1er
+        if not text.strip():
+            stats.empty_lines += 1
+            return None
+        if text.lstrip().startswith("#"):
+            stats.comments.append(number)
+            return None
+    if '"' in text:
+        try:
+            fields = next(csv.reader([text], strict=True))
+        except csv.Error as exc:
+            stats.reject(number, f"guillemets mal formés ({exc})", text)
+            return None
+    else:
+        fields = text.split(",")
+    if not fields[0].strip() and not any(cell.strip() for cell in fields):
+        stats.empty_lines += 1           # « ,,,, » : aucune donnée
+        return None
+    return fields
+
+
+def _ordinary_lines(block: str, lines: list[str], header_first: str | None) -> np.ndarray:
+    """Lignes « ordinaires » d'un bloc, découpables toutes ensemble à la virgule.
+
+    Sont exclues (et traitées une à une par ``_split_line``) les lignes vides
+    ou commençant par un blanc, « # », « , » ou une marque BOM, celles qui
+    contiennent un guillemet ou un octet nul, et celles qui commencent comme
+    l'en-tête (en-tête répété de fichiers mis bout à bout)."""
+    starts = [line[:1] for line in lines]
+    odd_starts = {start for start in set(starts) if not start or start.isspace() or start in "#,\ufeff"}
+    repeated = bool(header_first) and (block.startswith(header_first) or "\n" + header_first in block)
+    if not odd_starts and not repeated and '"' not in block and "\x00" not in block:
+        return np.ones(len(lines), dtype=bool)
+    return np.fromiter((not (start in odd_starts or '"' in line or "\x00" in line
+                             or (repeated and line.startswith(header_first)))
+                        for start, line in zip(starts, lines)), dtype=bool, count=len(lines))
 
 
 def _width(fields: list[str]) -> int:
@@ -483,11 +543,19 @@ def read_csv(path, max_size_mb: float = 500.0, progress: ProgressCallback | None
         # newline=None : fins de ligne \n, \r\n et \r reconnues, même mélangées.
         handle = io.TextIOWrapper(raw, encoding=encoding, errors=errors, newline=None)
         stats = _ReadStats()
-        rows = _split_rows(handle, stats)
-        first_rows = []
-        for row in rows:
-            first_rows.append(row)
+        blocks = _line_blocks(handle, stats)
+        first_rows, rest = [], []
+        for start, _, lines in blocks:
+            for offset, text in enumerate(lines):
+                fields = _split_line(start + offset, text, stats)
+                if fields is not None:
+                    first_rows.append((start + offset, fields))
+                    if len(first_rows) >= SNIFF_ROWS:
+                        break
             if len(first_rows) >= SNIFF_ROWS:
+                remaining = lines[offset + 1:]       # suite du bloc, lue avec les blocs suivants
+                if remaining:
+                    rest.append((start + offset + 1, "\n".join(remaining), remaining))
                 break
         if not first_rows:
             raise CsvReadError(issues + [Issue(Severity.ERROR, "Aucune ligne exploitable : fichier composé "
@@ -496,7 +564,7 @@ def read_csv(path, max_size_mb: float = 500.0, progress: ProgressCallback | None
             _check_separator([_rejoin(fields) for _, fields in first_rows[:SEPARATOR_SAMPLE]])
         except CsvReadError as exc:
             raise CsvReadError(issues + exc.issues)
-        table = _parse(first_rows, rows, raw, size, path, sha, issues, stats, progress, cancel)
+        table = _parse(first_rows, chain(rest, blocks), raw, size, path, sha, issues, stats, progress, cancel)
     return table
 
 
@@ -507,8 +575,12 @@ def _rejoin(fields: list[str]) -> str:
     return buffer.getvalue()
 
 
-def _parse(first_rows, rows, raw, size, path, sha, issues, stats, progress, cancel) -> CsvTable:
-    """En-tête puis blocs de données convertis en numpy."""
+def _parse(first_rows, blocks, raw, size, path, sha, issues, stats, progress, cancel) -> CsvTable:
+    """En-tête puis blocs de données convertis en numpy.
+
+    Dans chaque bloc, les suites de lignes ordinaires de même largeur sont
+    découpées d'un coup (``take_run``) ; les autres lignes passent une à une
+    par ``_split_line`` et ``accept``, avec exactement les mêmes règles."""
     header_position, width, data_start = _locate_header(first_rows)
     for line, fields in first_rows[:header_position or 0]:
         issues.append(Issue(Severity.WARNING, "Ligne de métadonnées avant l'en-tête ignorée : « "
@@ -538,25 +610,28 @@ def _parse(first_rows, rows, raw, size, path, sha, issues, stats, progress, canc
     header_key = [cell.strip() for cell in header_fields] if header_position is not None else None
     builders = [_ColumnBuilder(name, index) for index, name in enumerate(names[1:], start=1)]
     time_raw: list[str] = []
-    line_numbers: list[int] = []
-    chunk: list[list[str]] = []
+    number_chunks: list[np.ndarray] = []
+    columns: list[list[str]] = [[] for _ in range(n_columns)]   # cellules en attente de conversion
+    numbers: list[int] = []                                     # leurs lignes physiques
 
     def flush() -> None:
-        """Convertit le bloc de lignes accumulé (colonnes numpy) et publie l'avancement."""
-        if not chunk:
+        """Convertit les cellules en attente (colonnes numpy) et publie l'avancement."""
+        if not numbers:
             return
-        columns = list(zip(*chunk))       # transposition rapide (C)
         time_raw.extend(columns[0])
         for builder, cells in zip(builders, columns[1:]):
             builder.add(cells)
-        chunk.clear()
+        number_chunks.append(np.array(numbers, dtype=np.int64))
+        for cells in columns:
+            cells.clear()
+        numbers.clear()
         if cancel is not None and cancel.is_set():
             raise ReadCancelled()
         if progress is not None:
             progress(min(1.0, raw.tell() / size))
 
     def accept(line: int, fields: list[str]) -> None:
-        """Contrôle le nombre de champs puis ajoute la ligne au bloc."""
+        """Contrôle le nombre de champs puis ajoute UNE ligne aux cellules en attente."""
         if len(fields) != n_columns:
             if len(fields) > n_columns and not any(cell.strip() for cell in fields[n_columns:]):
                 fields = fields[:n_columns]          # virgules finales sans contenu : tolérées
@@ -570,23 +645,50 @@ def _parse(first_rows, rows, raw, size, path, sha, issues, stats, progress, canc
                 and [cell.strip() for cell in fields] == header_key:
             stats.repeated_headers.append(line)     # fichiers concaténés
             return
-        chunk.append(fields)
-        line_numbers.append(line)
+        for cells, cell in zip(columns, fields):
+            cells.append(cell)
+        numbers.append(line)
         stats.last_accepted = line
-        if len(chunk) >= CHUNK_ROWS:
-            flush()
+
+    def take_run(first: int, run: list[str], fields_per_line: int) -> bool:
+        """Suite de lignes ordinaires ayant toutes le même nombre de champs,
+        découpée d'un seul coup. Mêmes règles que ``accept`` : virgules finales
+        vides tolérées, largeur réduite de tout le fichier complétée. Renvoie
+        False si la suite doit être traitée ligne par ligne (lignes à rejeter)."""
+        if fields_per_line < n_columns and fields_per_line != short_width:
+            return False
+        cells = ",".join(run).split(",")
+        if any("".join(cells[extra::fields_per_line]).strip() for extra in range(n_columns, fields_per_line)):
+            return False
+        for position, pending in enumerate(columns):
+            pending.extend(cells[position::fields_per_line] if position < fields_per_line else [""] * len(run))
+        numbers.extend(range(first, first + len(run)))
+        if fields_per_line > n_columns:
+            stats.trimmed += len(run)
+        stats.last_accepted = first + len(run) - 1
+        return True
 
     for line, fields in first_rows[data_start:]:
         accept(line, fields)
-    for line, fields in rows:
-        accept(line, fields)
+    header_first = header_key[0] if header_key else None
+    for start, block, lines in blocks:
+        commas = np.fromiter(map(str.count, lines, repeat(",")), dtype=np.int64, count=len(lines))
+        commas[~_ordinary_lines(block, lines, header_first)] = -1
+        bounds = (np.flatnonzero(np.diff(commas)) + 1).tolist()
+        for begin, end in zip([0] + bounds, bounds + [len(lines)]):
+            if commas[begin] < 0 or not take_run(start + begin, lines[begin:end], int(commas[begin]) + 1):
+                for number, text in enumerate(lines[begin:end], start=start + begin):
+                    fields = _split_line(number, text, stats)
+                    if fields is not None:
+                        accept(number, fields)
+        flush()
     flush()
     _summarize(issues, stats, n_columns, len(time_raw))
     if not time_raw:
         raise CsvReadError(issues + [Issue(Severity.ERROR, "Aucune ligne de données exploitable après l'en-tête.",
                                            header_line + 1)])
     return CsvTable(path=path, size_bytes=size, sha256=sha, header=names, time_raw=time_raw,
-                    line_numbers=np.array(line_numbers, dtype=np.int64),
+                    line_numbers=_concat(number_chunks, np.int64),
                     columns=[builder.finish() for builder in builders], issues=issues)
 
 

@@ -118,6 +118,18 @@ class TimeBaseTests(unittest.TestCase):
         self.assertLess(time.perf_counter() - start, 10.0)
         self.assertEqual(result.event_counts[EventKind.MISSING], 1)
 
+    def test_many_frequency_changes_stay_linear(self):
+        """REQ 4105 / 2104 : 40 000 changements de fréquence analysés en quelques secondes
+        (chaque changement est cherché dans une fenêtre, sans relire toute la fin du fichier)."""
+        n = 480_000
+        dt = np.where((np.arange(n) // 12) % 2 == 0, 0.01, 0.02)
+        t = np.concatenate(([0.0], np.cumsum(dt)))
+        start = time.perf_counter()
+        result = analyze(t)
+        self.assertLess(time.perf_counter() - start, 30.0)
+        self.assertEqual(len(result.segments), 40_000)
+        np.testing.assert_allclose([s.period_s for s in result.segments[:3]], [0.01, 0.02, 0.01])
+
     def test_ms_formatting(self):
         self.assertEqual(ms(0.02), "20")
         self.assertEqual(ms(3.55e-15), "0")

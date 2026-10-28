@@ -137,6 +137,14 @@ class InterfaceTests(unittest.TestCase):
                                      MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
         self.root.update()
         self.assertAlmostEqual(tab.axle().t1, 12.0, delta=0.1)
+        # REQ 4105 : seuls les curseurs sont redessinés, sur le rendu figé du reste.
+        self.assertIsNotNone(tab._background)
+        x_px, y_px = ax.transData.transform((14.0, 1.0))
+        tab.canvas.callbacks.process("motion_notify_event",
+                                     MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
+        self.root.update()
+        self.assertAlmostEqual(tab.axle().t1, 14.0, delta=0.1)
+        self.assertIn("14.", tab.panel.table.item(tab.panel.table.get_children()[0], "values")[3])
 
     def test_drag_and_drop_to_axle(self):
         from ptbg.gui.tree_panel import TreeRef

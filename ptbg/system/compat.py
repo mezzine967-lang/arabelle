@@ -125,6 +125,40 @@ def open_with_default_application(path: Path) -> str | None:
         return f"Ouverture impossible de {path} : {exc}"
 
 
+def process_memory_mb() -> tuple[float | None, float | None]:
+    """Mémoire du processus en Mo : (actuelle, maximale atteinte), None si inconnue.
+
+    Sert au banc de performance (tools/banc_performance.py, REQ_COMMON_KH_2310).
+    Windows : ``GetProcessMemoryInfo`` (psapi, via ctypes) ; Linux : /proc/self/statm
+    et ``getrusage`` (module ``resource``, propre à Unix). Jamais d'exception."""
+    try:
+        if IS_WINDOWS:
+            import ctypes
+            from ctypes import wintypes
+
+            class Counters(ctypes.Structure):
+                """Structure PROCESS_MEMORY_COUNTERS de l'API Windows."""
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+                    (name, ctypes.c_size_t) for name in (
+                        "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage",
+                        "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage", "PagefileUsage",
+                        "PeakPagefileUsage")]
+
+            counters = Counters()
+            counters.cb = ctypes.sizeof(counters)
+            process = ctypes.windll.kernel32.GetCurrentProcess()
+            if not ctypes.windll.psapi.GetProcessMemoryInfo(process, ctypes.byref(counters), counters.cb):
+                return None, None
+            return counters.WorkingSetSize / 1048576, counters.PeakWorkingSetSize / 1048576
+        import resource
+
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024        # Ko sous Linux
+        pages = int(Path("/proc/self/statm").read_text().split()[1])
+        return pages * os.sysconf("SC_PAGE_SIZE") / 1048576, peak
+    except Exception:  # noqa: BLE001 - mesure facultative
+        return None, None
+
+
 def project_root() -> Path:
     """Dossier racine des sources (contient MAIN.py, docs/, data/)."""
     return Path(__file__).resolve().parents[2]

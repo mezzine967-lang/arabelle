@@ -120,19 +120,37 @@ def interpret(column: RawColumn, signal_type: SignalType | None = None,
         lookup = {label: code for code, label in enumerate(categories)}
         other = (kinds == KIND_NUMBER) | (kinds == KIND_BOOL)
         if other.any():
-            for position in np.flatnonzero(other):
-                label = _number_label(column.values[position], kinds[position])
-                values[position] = lookup.setdefault(label, len(lookup))
+            # Chaque valeur distincte (par nature) reçoit son libellé une seule fois,
+            # dans l'ordre d'apparition ; valeurs comparées bit à bit (« -0 » ≠ « 0 »).
+            groups, distinct = [], []
+            for kind in (KIND_NUMBER, KIND_BOOL):
+                where = np.flatnonzero(kinds == kind)
+                if where.size:
+                    bits, first, inverse = np.unique(column.values[where].view(np.int64),
+                                                     return_index=True, return_inverse=True)
+                    codes = np.empty(bits.size)
+                    groups.append((where, codes, inverse.reshape(-1)))
+                    distinct += [(int(where[f]), kind, b, codes, rank)
+                                 for rank, (b, f) in enumerate(zip(bits.view(np.float64).tolist(), first.tolist()))]
+            for _, kind, value, codes, rank in sorted(distinct, key=lambda item: item[0]):
+                codes[rank] = lookup.setdefault(_number_label(value, kind), len(lookup))
+            for where, codes, inverse in groups:
+                values[where] = codes[inverse]
             categories = sorted(lookup, key=lookup.get)
         return SignalData(column.name, chosen, automatic, values, missing,
                           np.zeros(len(kinds), dtype=bool), categories)
-    values = column.values.copy()
+    values = column.values
     invalid = kinds == KIND_TEXT
     if chosen is SignalType.BOOL:
         # Un nombre autre que 0/1 n'est pas un booléen : invalide, pas arrondi.
         not_binary = (kinds == KIND_NUMBER) & (values != 0.0) & (values != 1.0)
         invalid = invalid | not_binary
-    values[invalid] = np.nan
+    if invalid.any():
+        # Copie seulement s'il y a des valeurs à masquer : sinon la variable
+        # partage les valeurs lues (non modifiables), sans doubler la mémoire.
+        values = values.copy()
+        values[invalid] = np.nan
+        values.flags.writeable = False
     return SignalData(column.name, chosen, automatic, values, missing, invalid)
 
 

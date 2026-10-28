@@ -1,4 +1,4 @@
-# Architecture de VISU PTBG 2.1.0 — pour reprendre le code
+# Architecture de VISU PTBG 2.2.0 — pour reprendre le code
 
 ## 1. Vue d'ensemble
 
@@ -14,6 +14,7 @@ ptbg/
 ├── core/                    traitements purs : ni Tk ni Matplotlib (REQ 3003)
 │   ├── diagnostics.py       gravités et constats
 │   ├── csv_reader.py        lecture contrôlée des CSV (REQ 2300-2310)
+│   ├── vector_parse.py      conversions de colonnes entières (nombres, horodatages) (REQ 4105)
 │   ├── signals.py           types Bool / Float / Texte, groupes binaires (REQ 2200-2201)
 │   ├── time_parser.py       formats de temps -> secondes, origine absolue (REQ 2305-2307)
 │   ├── time_base.py         analyse du raster (REQ 4100-4107)
@@ -68,11 +69,20 @@ jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interf
 ## 2. Flux de données
 
 1. **Lecture** (`gui/app.py::_load`, fil de travail) : `load_source()` →
-   `read_csv()` (contrôles 2300-2310 ; découpage **ligne physique par ligne physique**
-   dans `_split_rows`, repérage de l'en-tête dans `_locate_header`, conversion par blocs
-   de 20 000 lignes, chaque cellule classée vide / nombre / booléen / texte / non finie)
-   → `convert_time_column()` (1re colonne → secondes + origine absolue) → `analyze()`
-   (raster, événements, horodatages aberrants, horodatage régularisé facultatif).
+   `read_csv()` (contrôles 2300-2310 ; texte lu par blocs de 512 Ki caractères en
+   lignes physiques entières (`_line_blocks`) ; repérage de l'en-tête dans
+   `_locate_header` sur les 50 premières lignes ; dans chaque bloc, les suites de
+   lignes « ordinaires » de même largeur (`_ordinary_lines`) sont découpées d'un coup
+   (`take_run`), toute autre ligne passe par `_split_line` et `accept` ; chaque
+   cellule est classée vide / nombre / booléen / texte / non finie, colonne par
+   colonne (`_ColumnBuilder`))
+   → `convert_time_column()` (1re colonne → secondes + origine absolue, décodée pour
+   toute la colonne par `vector_parse.match_templates`) → `analyze()` (raster,
+   événements, horodatages aberrants, horodatage régularisé facultatif).
+   Règle des conversions en bloc : numpy convertit la colonne entière ; ce qu'il refuse
+   est repris par la fonction « une cellule / une ligne » d'origine (`_classify`,
+   `_time_of_day_ns`, `_parse_datetime_text`…) : le résultat est identique, seule la
+   vitesse change.
    `load_source()` ne lève jamais d'exception (sauf annulation) : toute erreur devient
    un constat ERREUR sur ce seul fichier (REQ 4105).
 2. **Interprétation** à la demande : `SourceFile.signal(nom)` applique le type (auto ou
@@ -82,8 +92,13 @@ jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interf
 4. **Axe des temps** : `Workspace.timeline()` renvoie un `Timeline` (relatif ou absolu) ;
    `Timeline.x(fichier)` donne les abscisses (mises en cache) de chaque échantillon.
 5. **Curseurs** : positions stockées dans `TabState` / `AxleState` ; `core/readings.py`
-   calcule les lectures (échantillon réel, jamais interpolé) ; `TabRenderer.draw_cursors()`
-   ne redessine que les curseurs à chaque mouvement de souris.
+   calcule les lectures (échantillon réel, jamais interpolé) sur une `TimeGrid` (abscisses
+   finies et leur ordre, préparées une fois par fichier et par axe des temps) ;
+   `TabRenderer.draw_cursors()` ne recrée que les curseurs, et `AnalysisTab.update_cursors()`
+   les redessine seuls sur le rendu figé du reste de la figure (« blitting », rendu
+   mémorisé à chaque dessin complet par `_on_draw`). Zoom : chaque courbe est une
+   `DisplayCurve` dont l'ordre des abscisses n'est analysé qu'une fois. Nuage X/Y et mots
+   binaires gardés en cache tant que leurs courbes ne changent pas.
 6. **Rapport** : une page est une copie figée du `TabState` (`ReportPage`) ;
    `export_pdf()` dessine chaque page (en-tête + zone graphique + lectures) puis l'annexe.
 
@@ -98,6 +113,9 @@ jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interf
 | Réduction min/max des points | courbes de millions de points fluides ; les pics restent visibles ; les curseurs lisent les vrais échantillons |
 | Aucune interpolation, aucune valeur inventée | traçabilité d'un outil d'analyse d'anomalies : une cellule vide reste vide (croix), un trou de temps interrompt la courbe |
 | Lecture ligne par ligne (et non `csv.reader` sur tout le fichier) | un guillemet non fermé ne peut plus avaler la suite du fichier ; numéros de ligne exacts ; découpage direct à la virgule plus rapide, module `csv` en mode strict seulement pour les lignes à guillemets |
+| Blocs de lignes ordinaires découpés d'un coup, conversions de colonnes entières | un fichier de 500 Mo se lit en quelques dizaines de secondes ; les lignes et cellules particulières gardent leur traitement une à une, d'où des résultats identiques (vérifiés par comparaison automatique avec la 2.1.0) |
+| Valeurs lues non modifiables et partagées par les variables | la règle « aucune valeur modifiée » est garantie par numpy (écriture refusée) ; pas de copie par variable, mémoire réduite |
+| Curseurs « animés » (blitting) | un mouvement de souris ne redessine que les curseurs : fluidité avec des millions de points ; le PDF dessine les curseurs normalement |
 | Ligne au mauvais nombre de champs rejetée, jamais complétée | sa dernière valeur pourrait être tronquée : mieux vaut un trou signalé qu'une valeur fausse |
 | Robustesse vérifiée par un banc de fichiers abîmés | `tests/test_robustesse.py` : lignes tronquées ou en trop, guillemets, octets nuls, encodages, en-têtes absents ou répétés, horodatages aberrants, valeurs extrêmes, 40 corruptions aléatoires |
 | Nanosecondes entières pour les dates | pas d'arrondi flottant sur des horodatages absolus à la nanoseconde (REQ 2306) |
@@ -137,4 +155,5 @@ python -m unittest discover -s tests -v          # tout (IHM ignorée sans écra
 xvfb-run python -m unittest discover -s tests    # Linux sans écran : IHM incluse
 python tools/verifier_tracabilite.py             # chaque requis du Word est tracé
 python tools/audit_environnement.py              # versions présentes vs figées
+python tools/banc_performance.py f.csv           # durées et mémoire sur de vrais fichiers
 ```

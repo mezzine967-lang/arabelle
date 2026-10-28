@@ -1,4 +1,4 @@
-# Guide d'utilisation — VISU PTBG 2.1.0
+# Guide d'utilisation — VISU PTBG 2.2.0
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier
@@ -96,7 +96,7 @@ Pour chaque fichier, l'outil contrôle :
 | Stabilité | part des Δt dans la tolérance, jitter, déphasages, changements de fréquence |
 | Croissance continue | aucun horodatage dupliqué ni retour arrière |
 | Données manquantes | trous de k périodes (k − 1 échantillons manquants) |
-| Lisibilité, horodatages aberrants | horodatage illisible ; horodatage isolé à plus de 10 périodes de ses deux voisins (ex. « 00:00:00 » au milieu d'un essai à 18 h), exclu des courbes et signalé en erreur |
+| Lisibilité, horodatages aberrants | horodatage illisible ; horodatage isolé à plus de 10 périodes de ses deux voisins (ex. « 00:00:00 » au milieu d'un essai à 18 h, ou « 23:59:59 » au milieu d'un essai à 0 h 10), exclu des courbes et signalé en erreur, sans compter de faux passage de minuit |
 
 Le **Time Base Monitor**, en bas de chaque onglet, montre pour chaque fichier affiché la
 conversion appliquée, l'origine, le statut, les Δt (ou Δt / période quand les fichiers ont
@@ -212,3 +212,4 @@ affichés par courbe.
 | Axe absolu refusé | un fichier n'a pas d'origine absolue : la saisir dans Base de temps > Configurer |
 | Rien ne s'affiche sous SLES à distance | se connecter avec `ssh -X` (session graphique requise) |
 | Message sur une bibliothèque au démarrage | versions différentes de celles testées : voir Information > Sources et docs/DEPENDANCES.md |
+| Lecture lente ou mémoire insuffisante sur de très gros fichiers | mesurer le poste avec `python tools/banc_performance.py fichier.csv` et ajuster la taille maximale (Outils > Préférences) |
