@@ -48,6 +48,8 @@ def describe_source(source: SourceFile) -> str:
     else:
         origin = "origine relative (non définie)"
     mode = "régularisé, jitter ignoré" if source.time_settings.ignore_jitter else "brut"
+    if source.analysis.excluded.size and source.time_settings.hide_aberrant:
+        mode += f", {source.analysis.excluded.size} horodatage(s) aberrant(s) masqué(s)"
     assumed = " (unité SUPPOSÉE, à confirmer)" if conversion.unit_assumed else ""
     text = (f"{source.name} [{source.time_status().label}] : {conversion.description}{assumed} ; {origin} ; "
             f"affichage {mode}\n    {analysis.summary()}")

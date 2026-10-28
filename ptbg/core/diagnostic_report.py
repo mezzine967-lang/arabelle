@@ -30,6 +30,7 @@ def file_report(source: SourceFile, timeline: Timeline) -> str:
         lines.append(f"- Origine absolue : {format_absolute(conversion.origin_ns, 9, conversion.date_known)}")
     settings = source.time_settings
     lines.append(f"- Affichage : {'régularisé (jitter ignoré)' if settings.ignore_jitter else 'brut'} ; "
+                 f"horodatages aberrants {'masqués' if settings.hide_aberrant else 'affichés'} ; "
                  f"décalage manuel {settings.offset_s:g} s")
     if settings.operator_note:
         lines.append(f"- Diagnostic opérateur : {settings.operator_note}")

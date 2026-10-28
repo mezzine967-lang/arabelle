@@ -119,6 +119,7 @@ class PreferencesDialog(simpledialog.Dialog):
         ("tolerance_pct", "Tolérance par défaut de la période (%)", float),
         ("default_counter_unit", "Unité supposée d'un compteur sans unité (ns, us, ms, s)", str),
         ("frequency_change_min_run", "Intervalles consécutifs pour un changement de fréquence", int),
+        ("aberrant_jump_periods", "Écart (périodes) d'un horodatage aberrant isolé", float),
         ("max_points_per_curve", "Points affichés par courbe avant réduction min/max", int),
     )
 
@@ -151,6 +152,7 @@ class PreferencesDialog(simpledialog.Dialog):
             messagebox.showerror("Préférences", "Unité inconnue.", parent=self)
             return False
         if values["max_file_size_mb"] <= 0 or values["frequency_change_min_run"] < 2 \
+                or values["aberrant_jump_periods"] < 2 \
                 or values["max_points_per_curve"] < 200 or not 0 < values["tolerance_pct"] < 100:
             messagebox.showerror("Préférences", "Valeur hors limites.", parent=self)
             return False

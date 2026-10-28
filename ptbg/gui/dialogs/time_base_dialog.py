@@ -57,6 +57,7 @@ class TimeBaseDialog(simpledialog.Dialog):
         self.origin = tk.StringVar(value=ts.origin)
         self.offset = tk.StringVar(value=f"{ts.offset_s:g}" if ts.offset_s else "")
         self.ignore_jitter = tk.BooleanVar(value=ts.ignore_jitter)
+        self.hide_aberrant = tk.BooleanVar(value=ts.hide_aberrant)
         rows = (
             ("Format de l'horodatage", ttk.Combobox(master, textvariable=self.fmt, state="readonly",
                                                     values=[f.label for f in FORMATS], width=30), ""),
@@ -80,16 +81,19 @@ class TimeBaseDialog(simpledialog.Dialog):
         ttk.Checkbutton(master, text="Affichage régularisé sur le raster (jitter ignoré, REQ 4107) — "
                                      "décoché : horodatage brut du fichier (référence)",
                         variable=self.ignore_jitter).grid(row=7, column=0, columnspan=3, sticky="w", pady=4)
-        ttk.Label(master, text="Diagnostic opérateur associé (REQ 4106) :").grid(row=8, column=0, columnspan=3,
+        ttk.Checkbutton(master, text="Masquer sur les courbes les horodatages aberrants isolés — décoché : "
+                                     "affichés à leur instant brut (toujours signalés dans le TBM)",
+                        variable=self.hide_aberrant).grid(row=8, column=0, columnspan=3, sticky="w", pady=2)
+        ttk.Label(master, text="Diagnostic opérateur associé (REQ 4106) :").grid(row=9, column=0, columnspan=3,
                                                                                 sticky="w")
         self.note = tk.Text(master, width=80, height=3, wrap="word")
         self.note.insert("1.0", ts.operator_note)
-        self.note.grid(row=9, column=0, columnspan=3, sticky="ew")
+        self.note.grid(row=10, column=0, columnspan=3, sticky="ew")
         self.unit_to_others = tk.BooleanVar(value=False)
         if self.others_assumed:
             ttk.Checkbutton(master, text=f"Appliquer aussi cette unité aux {self.others_assumed} autre(s) "
                                          "fichier(s) dont l'unité est supposée (REQ 2307)",
-                            variable=self.unit_to_others).grid(row=10, column=0, columnspan=3, sticky="w", pady=4)
+                            variable=self.unit_to_others).grid(row=11, column=0, columnspan=3, sticky="w", pady=4)
         return rows[2][1]
 
     def validate(self) -> bool:
@@ -123,5 +127,6 @@ class TimeBaseDialog(simpledialog.Dialog):
         self.result = TimeBaseSettings(
             fmt=fmt, unit=self.unit.get(), nominal_period_s=None if period is None else period / 1000.0,
             tolerance_pct=tolerance, origin=self.origin.get().strip(), offset_s=offset,
-            ignore_jitter=self.ignore_jitter.get(), operator_note=self.note.get("1.0", "end").strip())
+            ignore_jitter=self.ignore_jitter.get(), hide_aberrant=self.hide_aberrant.get(),
+            operator_note=self.note.get("1.0", "end").strip())
         self.share_unit = self.unit_to_others.get() and self.unit.get() != "auto"

@@ -1,4 +1,4 @@
-# VISU PTBG 2.2.0 — analyseur graphique de perturbographie
+# VISU PTBG 2.3.0 — analyseur graphique de perturbographie
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
 Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
@@ -57,7 +57,7 @@ ptbg/plotting/     dessin commun écran et PDF, Time Base Monitor
 ptbg/report/       rapport PDF
 ptbg/gui/          interface Tkinter : contrôleur, arbre, onglets, dialogues
 ptbg/system/       compatibilité Windows / SLES, environnement, journal
-tests/             131 tests automatisés (dont l'interface réelle et la robustesse)
+tests/             132 tests automatisés (dont l'interface réelle et la robustesse)
 tools/             audit d'environnement, banc de performance, traçabilité, données de démo
 install/           installation et lancement Windows / SLES
 docs/              guide, architecture, dépendances, compatibilité, traçabilité
@@ -69,11 +69,11 @@ Pour reprendre le code : **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 Les 64 lignes de la spécification sont tracées dans
 **[docs/TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md)** (réalisation, code, test,
-statut) : 49 implémentées et testées, 12 implémentées selon une interprétation à valider,
+statut) : 47 implémentées et testées, 14 implémentées selon une interprétation à valider,
 1 proposition (énoncé vide), 2 à qualifier sur cible ou sur volumes réels. Les
 interprétations à faire valider sont dans **[docs/POINTS_OUVERTS.md](docs/POINTS_OUVERTS.md)**.
 Récapitulatif Excel (requis, réalisation, programmes, tests, commentaires de la relecture) :
-[docs/recapitulatif/](docs/recapitulatif/Recapitulatif_requis_VISU_PTBG_2.2.0.xlsx).
+[docs/recapitulatif/](docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx).
 
 Robustesse : un fichier abîmé (ligne tronquée ou en trop, guillemet non fermé, octets
 nuls, en-tête absent ou répété, encodage non UTF-8, horodatage aberrant…) est lu sans

@@ -147,10 +147,13 @@ class SourceFile:
     def display_seconds(self) -> np.ndarray:
         """Temps relatif affiché : brut (par défaut) ou régularisé (option « jitter
         ignoré », REQ 4107), plus le décalage manuel éventuel. Un horodatage
-        aberrant isolé n'est pas placé sur l'axe (il est signalé dans le TBM)."""
+        aberrant isolé reste affiché à son instant brut (signalé dans le TBM),
+        sauf option « masquer » du fichier ; l'affichage régularisé ne peut pas le
+        placer sur le raster et ne le montre pas."""
         base = self.analysis.regular_s if self.time_settings.ignore_jitter else self.conversion.seconds
         seconds = base + float(self.time_settings.offset_s or 0.0)
-        seconds[self.analysis.excluded] = np.nan      # horodatages aberrants : non placés
+        if self.time_settings.hide_aberrant:
+            seconds[self.analysis.excluded] = np.nan  # choix de l'utilisateur, indiqué dans le TBM
         return seconds
 
     def gap_starts(self) -> np.ndarray:
@@ -177,7 +180,7 @@ def configure_time(source: SourceFile, settings: Settings,
     tolerance = ts.tolerance_pct if ts.tolerance_pct is not None else settings.tolerance_pct
     source.analysis = analyze(source.conversion.seconds, ts.nominal_period_s, tolerance,
                               settings.frequency_change_min_run, settings.max_stored_events,
-                              settings.preferred_periods_ms)
+                              settings.preferred_periods_ms, settings.aberrant_jump_periods)
     source._signals.clear()          # le type automatique dépend des horodatages lisibles
     source.revision += 1
 

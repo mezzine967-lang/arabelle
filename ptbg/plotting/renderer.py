@@ -178,13 +178,19 @@ class TabRenderer:
         self.draw_cursors()
 
     def _fit_time_range(self, master) -> None:
-        """Vue initiale : toute la durée des courbes affichées."""
+        """Vue initiale : toute la durée des fichiers affichés. Les horodatages
+        aberrants isolés (signalés dans le TBM) ne servent pas au cadrage : ils
+        restent dessinés, visibles en dézoomant, sans écraser toute la vue."""
+        sources = [source for source in self.sources_in_tab() if source.is_loaded]
+        abscissae = [self.timeline.x(source) if not source.analysis.excluded.size
+                     else np.delete(self.timeline.x(source), source.analysis.excluded) for source in sources] \
+            or [curve.x for _, _, curve in self._lines]
         bounds = []
-        for _, _, curve in self._lines:
+        for x in abscissae:
             # Min / max sans copier les abscisses (NaN ignorés) ; ±inf : abscisses finies seules.
-            lo, hi = (np.fmin.reduce(curve.x), np.fmax.reduce(curve.x)) if curve.x.size else (np.nan, np.nan)
+            lo, hi = (np.fmin.reduce(x), np.fmax.reduce(x)) if x.size else (np.nan, np.nan)
             if not (np.isfinite(lo) and np.isfinite(hi)):
-                finite = curve.x[np.isfinite(curve.x)]
+                finite = x[np.isfinite(x)]
                 lo, hi = (finite.min(), finite.max()) if finite.size else (np.nan, np.nan)
             if np.isfinite(lo):
                 bounds.append((float(lo), float(hi)))

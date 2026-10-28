@@ -10,7 +10,9 @@ lorsque la spécification les précisera (voir docs/POINTS_OUVERTS.md) :
 - ``default_counter_unit`` : unité supposée d'un compteur de temps dont
   l'en-tête ne précise pas l'unité (« index » des CSV d'exemple : ms) ;
 - ``frequency_change_min_run`` : nombre d'intervalles consécutifs cohérents
-  nécessaires pour déclarer un changement de fréquence (et non une perte).
+  nécessaires pour déclarer un changement de fréquence (et non une perte) ;
+- ``aberrant_jump_periods`` : écart (en périodes) au-delà duquel un horodatage
+  isolé est déclaré aberrant (valeur arbitraire, à valider).
 
 Le fichier est stocké en JSON dans le dossier utilisateur (voir
 system/compat.py) ; un fichier absent ou corrompu redonne les valeurs par
@@ -35,6 +37,7 @@ class Settings:
     tolerance_pct: float = 10.0
     default_counter_unit: str = "ms"
     frequency_change_min_run: int = 10
+    aberrant_jump_periods: float = 10.0
     preferred_periods_ms: tuple = (10.0, 20.0)  # REQ_COMMON_KH_2100
     max_stored_events: int = 5000
     # --- Affichage ---

@@ -1,4 +1,4 @@
-# Matrice de traçabilité des requis — VISU PTBG 2.2.0
+# Matrice de traçabilité des requis — VISU PTBG 2.3.0
 
 Document de référence : **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026),
 fichier `docs/specification/NCS00ICOMMON----ES010_RevA.docx`.
@@ -8,6 +8,9 @@ apparaît deux fois : « Analog signal type : float » et « Binary group signal
 Contrôle automatique : `python tools/verifier_tracabilite.py` (et le test
 `tests/test_architecture.py`) relit les identifiants **dans le Word** et vérifie que
 chacun est cité ici, dans le code et dans au moins un test. Aucun requis n'est laissé de côté (aucun n'est oublié ; tous ne sont pas encore validés).
+Un test cité prouve que la fonction existe et qu'un cas représentatif est vérifié ; il ne
+prouve pas à lui seul que toute l'exigence est satisfaite : c'est la revue des énoncés (et
+des points ouverts) avec le rédacteur de la spécification qui le confirmera.
 
 Légende du statut :
 
@@ -79,7 +82,7 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
 | REQ_COMMON_KH_4100 | Raster défini et contrôlé : valeur, stabilité, croissance continue | 3 contrôles nommés (+ données manquantes), statut OK / AVERTISSEMENT / ERREUR | `core/time_base.py` (`analyze`, `_add_checks`) | `test_time_base.test_perfect_raster`, `test_duplicates_and_backward_are_errors` | Implémenté — interprétation à valider (tolérance 10 %, 10 intervalles) |
-| REQ_COMMON_KH_4101 | Repérer et mettre en évidence les incohérences (données manquantes, mauvais phasage) | Trous (k × T), déphasage, doublons, retours arrière, horodatages illisibles et aberrants isolés ; marqueurs dans le TBM (y compris pour les horodatages illisibles), liste avec ligne CSV ; courbes interrompues ; croix sur cellules vides ; valeurs « nan »/« inf » et valeurs incompatibles avec le type comptées par variable | `core/time_base.py`, `plotting/monitor.py`, `core/sampling.py` | `test_time_base.test_missing_samples_detected_and_kept_in_regular_time`, `test_wrong_phasing_detected`, `test_robustesse.test_isolated_aberrant_timestamp_is_one_error_not_a_fake_gap`, `test_nan_and_inf_are_missing_values_not_text` | Implémenté et testé |
+| REQ_COMMON_KH_4101 | Repérer et mettre en évidence les incohérences (données manquantes, mauvais phasage) | Trous (k × T), déphasage, doublons, retours arrière, horodatages illisibles et aberrants isolés ; marqueurs dans le TBM (y compris pour les horodatages illisibles), liste avec ligne CSV ; courbes interrompues ; croix sur cellules vides ; valeurs « nan »/« inf » et valeurs incompatibles avec le type comptées par variable | `core/time_base.py`, `plotting/monitor.py`, `core/sampling.py` | `test_time_base.test_missing_samples_detected_and_kept_in_regular_time`, `test_wrong_phasing_detected`, `test_robustesse.test_isolated_aberrant_timestamp_is_one_error_not_a_fake_gap`, `test_aberrant_timestamp_stays_visible_unless_hidden`, `test_nan_and_inf_are_missing_values_not_text` | Implémenté et testé |
 | REQ_COMMON_KH_4102 | Axe dédié « Time Base Monitor » détaillant conversion et statut, présent sur chaque template | Ajouté automatiquement sous chaque disposition, même axe des temps ; texte de conversion et statut par fichier | `plotting/monitor.py`, `plotting/renderer.py` | `test_package_report.test_every_template_has_time_base_monitor` | Implémenté et testé |
 | REQ_COMMON_KH_4103 | Masquable seulement sans avertissement ni erreur | Bouton refusé avec explication ; réaffichage automatique si une alerte apparaît | `plotting/monitor.py` (`can_hide`), `gui/analysis_tab.py` | `test_package_report.test_monitor_hiding_rules`, `test_gui.test_monitor_hide_rules` | Implémenté et testé |
 | REQ_COMMON_KH_4104 | Présent dans tous les rapports ; sinon indication de bonne construction | TBM sur chaque page ; s'il a été masqué, encadré « construction de la base de temps vérifiée : CONFORME » | `plotting/renderer.py`, `plotting/monitor.py` (`confirmation_text`) | `test_package_report.test_report_note_when_monitor_hidden` | Implémenté et testé |
@@ -125,8 +128,8 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 | REQ_COMMON_KH_5404 | (identique à 5403) | Couvert par la même réalisation : C1 et C2 posés d'office avec leurs instants, Δt, 1/Δt et ΔV | `gui/analysis_tab.py`, `plotting/renderer.py`, `core/readings.py` | `test_package_report.test_cursor_labels_show_time_and_value`, `test_gui.test_curves_cursors_mouse_and_keyboard` | Implémenté — interprétation à valider (énoncé dupliqué) |
 | REQ_COMMON_KH_5405 | Curseur global synchronisant tous les axes | Ligne sur tous les axes (TBM compris), déplacée ensemble ; zoom commun (axe X partagé) | `plotting/renderer.py`, `gui/analysis_tab.py` | `test_gui.test_curves_cursors_mouse_and_keyboard` | Implémenté et testé |
 | REQ_COMMON_KH_5406 | Curseur horizontal : signaux analogiques seulement | Refusé sur courbe Bool/Texte ; niveau, franchissements montants/descendants | `gui/app.py` (`horizontal_cursor`), `core/sampling.py` (`crossings`) | `test_gui.test_horizontal_cursor_only_on_float`, `test_analysis_tools.test_crossings_with_condition` | Implémenté et testé |
-| REQ_COMMON_KH_5407 | Curseur horizontal conditionné par un Bool | Condition (1 à 3 Bool, ET/OU) ; franchissements retenus sous condition, périodes ombrées | `core/conditional.py`, `gui/dialogs/analysis_dialogs.py` | `test_analysis_tools.test_same_file_condition_uses_same_row`, `test_other_file_condition_holds_last_state` | Implémenté et testé |
-| REQ_COMMON_KH_5408 | Curseur X/Y : deux curseurs ou point de croisement seul | Nuage X/Y, corrélation r et régression ; point désigné avec deux curseurs (X et Y) ou point seul ; C1/C2 reportés | `core/xy.py`, `plotting/renderer.py` | `test_analysis_tools.test_xy_same_file_and_cross_file`, `test_gui.test_xy_tab_and_point_pick` | Implémenté et testé |
+| REQ_COMMON_KH_5407 | Curseur horizontal conditionné par un Bool | Condition (1 à 3 Bool, ET/OU) ; franchissements retenus sous condition, périodes ombrées | `core/conditional.py`, `gui/dialogs/analysis_dialogs.py` | `test_analysis_tools.test_same_file_condition_uses_same_row`, `test_other_file_condition_holds_last_state` | Implémenté — interprétation à valider (Bool d'un autre fichier : dernier état maintenu) |
+| REQ_COMMON_KH_5408 | Curseur X/Y : deux curseurs ou point de croisement seul | Nuage X/Y, corrélation r et régression ; point désigné avec deux curseurs (X et Y) ou point seul ; C1/C2 reportés | `core/xy.py`, `plotting/renderer.py` | `test_analysis_tools.test_xy_same_file_and_cross_file`, `test_gui.test_xy_tab_and_point_pick` | Implémenté — interprétation à valider (appariement de deux fichiers : plus proche à moins d'une demi-période) |
 
 ## 4.5 Traitement conditionnel
 
@@ -149,8 +152,8 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 
 | Statut | Lignes |
 |---|---|
-| Implémenté et testé | 49 |
-| Implémenté — interprétation à valider (voir POINTS_OUVERTS.md) | 12 |
+| Implémenté et testé | 47 |
+| Implémenté — interprétation à valider (voir POINTS_OUVERTS.md) | 14 |
 | Proposition — énoncé vide à rédiger | 1 |
 | Implémenté — qualification (cible ou volumes réels) à faire | 2 |
 | **Total** | **64** |

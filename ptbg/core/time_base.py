@@ -160,13 +160,13 @@ _KIND_OF_CODE = {DT_MISSING: EventKind.MISSING, DT_PHASE: EventKind.PHASE,
                  DT_DUPLICATE: EventKind.DUPLICATE, DT_BACKWARD: EventKind.BACKWARD}
 
 
-OUTLIER_JUMP = 10      # écart minimal (en périodes) d'un horodatage aberrant isolé
+OUTLIER_JUMP = 10      # écart minimal par défaut (en périodes) d'un horodatage aberrant isolé (préférence)
 
 
-def _isolated_outliers(t: np.ndarray, nominal: float | None) -> np.ndarray:
+def _isolated_outliers(t: np.ndarray, nominal: float | None, jump_periods: float = OUTLIER_JUMP) -> np.ndarray:
     """Positions (dans ``t``) des horodatages aberrants isolés (voir en-tête).
 
-    Le temps saute de plus de ``OUTLIER_JUMP`` périodes en arrivant sur la
+    Le temps saute de plus de ``jump_periods`` périodes en arrivant sur la
     mesure et repart aussitôt en sens inverse, alors que ses deux voisins se
     suivent (écart positif inférieur à ce saut). Une base de temps saine est
     croissante : un tel aller-retour n'est jamais un comportement normal."""
@@ -178,7 +178,7 @@ def _isolated_outliers(t: np.ndarray, nominal: float | None) -> np.ndarray:
     if not (np.isfinite(period) and period > 0):
         return np.empty(0, dtype=np.int64)
     before, after, span = d[:-1], d[1:], t[2:] - t[:-2]
-    jump = OUTLIER_JUMP * period
+    jump = jump_periods * period
     spike = ((before > jump) & (after < -jump)) | ((before < -jump) & (after > jump))
     return np.flatnonzero(spike & (span > 0) & (span <= jump)) + 1
 
@@ -283,8 +283,11 @@ def _regularize(t: np.ndarray, codes: np.ndarray, cycles: np.ndarray,
 
 def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
             tolerance_pct: float = 10.0, min_run: int = 10, max_events: int = 5000,
-            preferred_periods_ms=(10.0, 20.0)) -> TimeBaseAnalysis:
-    """Analyse complète d'une base de temps en secondes (NaN = illisible)."""
+            preferred_periods_ms=(10.0, 20.0), outlier_jump: float = OUTLIER_JUMP) -> TimeBaseAnalysis:
+    """Analyse complète d'une base de temps en secondes (NaN = illisible).
+
+    ``outlier_jump`` : écart (en périodes) au-delà duquel un horodatage isolé est
+    aberrant (préférence ``aberrant_jump_periods``, 10 par défaut, à valider)."""
     seconds = np.asarray(seconds, dtype=np.float64)
     valid_index = np.flatnonzero(np.isfinite(seconds))
     result = TimeBaseAnalysis(n_samples=seconds.size, n_valid=valid_index.size,
@@ -297,7 +300,7 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
                              for i in invalid_index[:max_events])
         result.checks.append(Check("Lisibilité", Severity.ERROR,
                                    f"{invalid_index.size} horodatage(s) illisible(s)."))
-    outliers = _isolated_outliers(seconds[valid_index], nominal_period_s)
+    outliers = _isolated_outliers(seconds[valid_index], nominal_period_s, outlier_jump)
     if outliers.size:
         aberrant = valid_index[outliers]
         result.excluded = aberrant
@@ -306,8 +309,9 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
                              for i in aberrant[:max_events])
         result.checks.append(Check("Horodatages aberrants", Severity.ERROR,
                                    f"{aberrant.size} horodatage(s) isolé(s) très éloigné(s) de leurs voisins : "
-                                   "exclu(s) de l'analyse du raster et des courbes (valeur brute dans le "
-                                   "diagnostic du fichier)."))
+                                   "exclu(s) du calcul du raster, affiché(s) à leur instant brut sur les "
+                                   "courbes (sauf option « masquer » du fichier) ; valeur brute dans le "
+                                   "diagnostic du fichier."))
         valid_index = np.delete(valid_index, outliers)
         result.regular_s[aberrant] = np.nan
         result.n_valid = valid_index.size

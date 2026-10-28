@@ -1,4 +1,4 @@
-# Guide d'utilisation — VISU PTBG 2.2.0
+# Guide d'utilisation — VISU PTBG 2.3.0
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier
@@ -96,7 +96,7 @@ Pour chaque fichier, l'outil contrôle :
 | Stabilité | part des Δt dans la tolérance, jitter, déphasages, changements de fréquence |
 | Croissance continue | aucun horodatage dupliqué ni retour arrière |
 | Données manquantes | trous de k périodes (k − 1 échantillons manquants) |
-| Lisibilité, horodatages aberrants | horodatage illisible ; horodatage isolé à plus de 10 périodes de ses deux voisins (ex. « 00:00:00 » au milieu d'un essai à 18 h, ou « 23:59:59 » au milieu d'un essai à 0 h 10), exclu des courbes et signalé en erreur, sans compter de faux passage de minuit |
+| Lisibilité, horodatages aberrants | horodatage illisible ; horodatage isolé à plus de 10 périodes de ses deux voisins (ex. « 00:00:00 » au milieu d'un essai à 18 h, ou « 23:59:59 » au milieu d'un essai à 0 h 10), signalé en erreur et exclu du calcul du raster, sans compter de faux passage de minuit ; il reste affiché à son instant brut (case « Masquer… » de Base de temps > Configurer pour le retirer des courbes ; seuil de 10 périodes réglable dans Outils > Préférences) |
 
 Le **Time Base Monitor**, en bas de chaque onglet, montre pour chaque fichier affiché la
 conversion appliquée, l'origine, le statut, les Δt (ou Δt / période quand les fichiers ont

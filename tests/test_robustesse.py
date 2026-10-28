@@ -16,7 +16,7 @@ from ptbg.config import Settings
 from ptbg.core import csv_reader
 from ptbg.core.arrangement import CurveRef, TabState
 from ptbg.core.csv_reader import CsvReadError, read_csv
-from ptbg.core.data_package import Workspace, load_source
+from ptbg.core.data_package import Workspace, configure_time, load_source
 from ptbg.core.diagnostics import Severity
 from ptbg.core.readings import compute_readings
 from ptbg.core.signals import SignalType
@@ -254,8 +254,34 @@ class ValueAndTimeRobustnessTests(unittest.TestCase):
         self.assertAlmostEqual(conversion.seconds[199], 1.99, places=9)
         self.assertNotIn("minuit", " ".join(i.message for i in conversion.issues))
         result = analyze(conversion.seconds)
-        self.assertEqual(list(result.excluded), [100])            # signalé, exclu des courbes
+        self.assertEqual(list(result.excluded), [100])            # signalé, exclu du raster
         self.assertEqual(result.event_counts[EventKind.OUTLIER], 1)
+
+    def test_aberrant_timestamp_stays_visible_unless_hidden(self):
+        """REQ 4101 / 4105 : un horodatage aberrant est signalé et exclu du seul calcul du
+        raster ; il reste affiché à son instant brut, sauf option « masquer » du fichier.
+        Le seuil (10 périodes) est une préférence, à valider (point ouvert n° 16)."""
+        times = [10 * i for i in range(200)]
+        times[100] = 99_999_999
+        content = "t_ms,a\n" + "".join(f"{t},{i}\n" for i, t in enumerate(times))
+        source = self.load(content)
+        self.assertEqual(list(source.analysis.excluded), [100])
+        self.assertIs(source.time_status(), Severity.ERROR)
+        self.assertAlmostEqual(source.display_seconds()[100], 99_999.999)      # brut, visible
+        ws = Workspace()
+        ws.active_package.files.append(source)
+        tab = TabState.from_template("1A", "aberrant")
+        tab.axles[0].curves = [CurveRef(source.id, "a")]
+        figure = Figure()
+        FigureCanvasAgg(figure)
+        renderer = TabRenderer(figure, tab, ws, ws.timeline(), 2000)
+        renderer.draw()
+        self.assertLess(renderer.axes[0].get_xlim()[1], 3.0)                  # vue cadrée sur les mesures normales
+        source.time_settings.hide_aberrant = True
+        self.assertTrue(np.isnan(source.display_seconds()[100]))
+        tolerant = Settings(aberrant_jump_periods=1e12)
+        configure_time(source, tolerant)
+        self.assertEqual(source.analysis.excluded.size, 0)
 
     def test_isolated_aberrant_timestamp_is_one_error_not_a_fake_gap(self):
         t = np.arange(200) * 0.01

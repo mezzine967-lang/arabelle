@@ -547,7 +547,7 @@ class Application:
     def preferences(self) -> None:
         """Modifie les préférences ; réanalyse les bases de temps si les seuils changent."""
         before = (self.settings.tolerance_pct, self.settings.frequency_change_min_run,
-                  self.settings.default_counter_unit)
+                  self.settings.default_counter_unit, self.settings.aberrant_jump_periods)
         dialog = PreferencesDialog(self.root, self.settings)
         if not dialog.result:
             return
@@ -556,7 +556,7 @@ class Application:
         error = self.settings.save()
         self.notify(error or "Préférences enregistrées.", "AVERTISSEMENT" if error else "INFO")
         after = (self.settings.tolerance_pct, self.settings.frequency_change_min_run,
-                 self.settings.default_counter_unit)
+                 self.settings.default_counter_unit, self.settings.aberrant_jump_periods)
         if before != after and self.workspace.loaded_files() and not self._busy():
             sources = self.workspace.loaded_files()
             self._run(lambda task: [configure_time(s, self.settings) for s in sources],

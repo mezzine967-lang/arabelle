@@ -105,6 +105,9 @@ class TimeBaseSettings:
     - ``ignore_jitter`` : affichage régularisé sur le raster (option, REQ 4107) ;
       par défaut l'horodatage BRUT est affiché : le jitter dans la tolérance
       n'est simplement pas compté comme anomalie ;
+    - ``hide_aberrant`` : ne pas placer sur les courbes les horodatages aberrants
+      isolés (option) ; par défaut ils restent affichés à leur instant brut, et
+      sont dans tous les cas signalés en ERREUR et exclus du calcul du raster ;
     - ``operator_note`` : diagnostic associé saisi par l'utilisateur (REQ 4106).
     """
     fmt: TimeFormat = TimeFormat.AUTO
@@ -114,6 +117,7 @@ class TimeBaseSettings:
     origin: str = ""
     offset_s: float = 0.0
     ignore_jitter: bool = False
+    hide_aberrant: bool = False
     operator_note: str = ""
 
     def to_dict(self) -> dict:

@@ -1,4 +1,4 @@
-# VISU PTBG 2.2.0 — dépendances figées de RÉFÉRENCE (REQ_COMMON_KH_3004)
+# VISU PTBG 2.3.0 — dépendances figées de RÉFÉRENCE (REQ_COMMON_KH_3004)
 #
 # Valables SANS MODIFICATION pour Python 3.11, 3.12, 3.13 et 3.14,
 # sous Windows 11 64 bits (win_amd64) et SLES 15 SP7 x86-64 (manylinux,

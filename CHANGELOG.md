@@ -3,6 +3,27 @@
 Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
 Chaque version incrémente `ptbg/version.py` et ajoute une entrée ici.
 
+## 2.3.0 — 2026-10-28 — statuts plus prudents, horodatages aberrants visibles
+
+Suite à une relecture critique du récapitulatif :
+
+- **Statuts** : REQ 5407 (Bool d'un autre fichier : dernier état maintenu) et REQ 5408
+  (appariement de deux fichiers : échantillon le plus proche à moins d'une demi-période)
+  passent en « interprétation à valider » : ces règles de rapprochement entre PLC ne sont
+  pas décrites par les requis (points ouverts n° 12 et nouveau n° 18). Bilan : 47 implémentés
+  et testés, 14 interprétations à valider, 1 proposition, 2 qualifications à faire.
+- **Horodatage aberrant** (point ouvert n° 16) : toujours signalé en ERREUR et exclu du seul
+  calcul du raster, mais désormais **affiché à son instant brut** sur les courbes (vue
+  initiale cadrée sur les mesures normales) ; case « Masquer » par fichier (Base de temps >
+  Configurer, enregistrée dans le projet) ; seuil de 10 périodes réglable (Outils >
+  Préférences, `aberrant_jump_periods`), à valider.
+- Matrice : un test cité prouve qu'un cas représentatif est vérifié, pas à lui seul que
+  toute l'exigence l'est (précision ajoutée).
+- Récapitulatif Excel : plus de `**` Markdown dans les cellules ; « Commentaires de
+  Sébastien pris en compte : 4, dont 3 à valider » ; « requis avec au moins un test
+  associé » au lieu d'une preuve de satisfaction.
+- 132 tests (nouveau : horodatage aberrant visible, masquable, seuil réglable, cadrage).
+
 ## 2.2.0 — 2026-10-28 — performances sur gros fichiers
 
 Modifications ciblées des modules existants ; aucune règle métier changée sauf la
@@ -52,7 +73,7 @@ séries abîmés générés au hasard, avec numpy 2.4 et numpy 1.24.
   fichiers PTBG, ou sur un fichier de synthèse de N Mo (`--generer N`), pour fixer la
   taille maximale (REQ 2310) sur les postes cibles ; mémoire lue par
   `system/compat.py` (`process_memory_mb`).
-- Récapitulatif Excel des requis : `docs/recapitulatif/Recapitulatif_requis_VISU_PTBG_2.2.0.xlsx`
+- Récapitulatif Excel des requis : `docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx`
   (synthèse par statut et par section, 64 lignes de requis avec énoncé du Word, commentaire
   de Sébastien, réalisation, programmes et tests, réponses aux 4 commentaires, 17 points
   ouverts avec colonne de réponse, 45 fichiers de programme, 131 tests). Matrice : REQ 5404
