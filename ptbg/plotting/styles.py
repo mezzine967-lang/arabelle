@@ -20,6 +20,8 @@ SEVERITY_COLORS = {
 
 # Marqueurs des événements de base de temps dans le Time Base Monitor.
 EVENT_STYLE = {
+    EventKind.INVALID: ("P", "#b71c1c"),
+    EventKind.OUTLIER: ("*", "#b71c1c"),
     EventKind.MISSING: ("v", "#c62828"),
     EventKind.PHASE: ("D", "#E69F00"),
     EventKind.DUPLICATE: ("X", "#000000"),

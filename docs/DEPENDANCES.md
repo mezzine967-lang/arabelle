@@ -58,7 +58,8 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 |---|---|
 | `tkinter` (et `tkinter.ttk`, `filedialog`, `messagebox`, `simpledialog`, `font`) | toute l'interface ; exige Tcl/Tk (voir § 3 bis) |
 | `csv` | lecture des CSV, export des résultats du traitement conditionnel |
-| `io` | flux texte UTF-8 strict sur le fichier binaire (avancement de lecture) |
+| `io` | flux texte décodé sur le fichier binaire (avancement de lecture) |
+| `codecs` | contrôle UTF-8 par blocs et lecture de secours Windows-1252 des octets non UTF-8 (signalée, REQ 2302) |
 | `hashlib` | SHA-256 des CSV, du projet et des modules (en-tête de rapport, Information > Sources) |
 | `json` | préférences et fichier projet |
 | `re` | formats de temps, unités dans les en-têtes, groupes binaires `NOM[i]` |
@@ -90,22 +91,22 @@ chaque ligne dans un environnement virtuel neuf :
 <!-- RESULTATS_MATRICE -->
 | Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
 |---|---|---|---|---|---|---|
-| py310-min-tk86 | 3.10.14 | 8.6.12 | 1.24.4 | 3.6.3 | 90 tests : OK, 11 tests IHM ignorés | IHM ignorée : Python « standalone » ancien, `_tkinter` intégré statiquement (artefact du banc de test, absent sous Windows / SLES) |
-| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 90 tests : OK, 11 tests IHM ignorés | IHM refusée au démarrage avec message clair : TkAgg de matplotlib 3.6 incompatible avec Tk 9 |
-| py311-ref-tk86 | 3.11.9 | 8.6.12 | 2.4.6 | 3.10.9 | 90 tests : OK, 11 tests IHM ignorés | IHM ignorée : même artefact du banc de test (matplotlib le signale lui-même) |
-| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 90 tests : OK |  |
-| py311-old-tk86 | 3.11.9 | 8.6.12 | 1.26.4 | 3.8.4 | 90 tests : OK, 11 tests IHM ignorés | IHM ignorée : même artefact du banc de test |
-| py311-mpl39-tk9 | 3.11.15 | 9.0.3 | 1.26.4 | 3.9.4 | 90 tests : OK, 11 tests IHM ignorés | IHM refusée au démarrage avec message clair : TkAgg de matplotlib 3.9 incompatible avec Tk 9 (matplotlib ≥ 3.10 requis) |
-| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 90 tests : OK | Tk 8.6 « partagé » comme sous Windows (python.org, Spyder) et SLES |
-| py313-ref-tk9 | 3.13.14 | 9.0.3 | 2.4.6 | 3.10.9 | 90 tests : OK |  |
-| py314-ref-tk9 | 3.14.6 | 9.0.3 | 2.4.6 | 3.10.9 | 90 tests : OK |  |
-| py312-latest-tk9 | 3.12.13 | 9.0.3 | 2.5.4 | 3.11.2 | 90 tests : OK |  |
-| py314-latest-tk9 | 3.14.6 | 9.0.3 | 2.5.4 | 3.11.2 | 90 tests : OK |  |
-| py312-old-tk86 | 3.12.3 | 8.6.14 | 1.26.4 | 3.8.4 | 90 tests : OK | Tk 8.6 « partagé » comme sous Windows (python.org, Spyder) et SLES |
+| py310-min-tk86 | 3.10.14 | 8.6.12 | 1.24.4 | 3.6.3 | 120 tests : OK, 12 tests IHM ignorés | IHM ignorée : Python « standalone » ancien, `_tkinter` intégré statiquement (artefact du banc de test, absent sous Windows / SLES) |
+| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 120 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair : TkAgg de matplotlib 3.6 incompatible avec Tk 9 |
+| py311-ref-tk86 | 3.11.9 | 8.6.12 | 2.4.6 | 3.10.9 | 120 tests : OK, 12 tests IHM ignorés | IHM ignorée : même artefact du banc de test (matplotlib le signale lui-même) |
+| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 120 tests : OK |  |
+| py311-old-tk86 | 3.11.9 | 8.6.12 | 1.26.4 | 3.8.4 | 120 tests : OK, 12 tests IHM ignorés | IHM ignorée : même artefact du banc de test |
+| py311-mpl39-tk9 | 3.11.15 | 9.0.3 | 1.26.4 | 3.9.4 | 120 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair : TkAgg de matplotlib 3.9 incompatible avec Tk 9 (matplotlib ≥ 3.10 requis) |
+| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 120 tests : OK | Tk 8.6 « partagé » comme sous Windows (python.org, Spyder) et SLES |
+| py313-ref-tk9 | 3.13.14 | 9.0.3 | 2.4.6 | 3.10.9 | 120 tests : OK |  |
+| py314-ref-tk9 | 3.14.6 | 9.0.3 | 2.4.6 | 3.10.9 | 120 tests : OK |  |
+| py312-latest-tk9 | 3.12.13 | 9.0.3 | 2.5.4 | 3.11.2 | 120 tests : OK |  |
+| py314-latest-tk9 | 3.14.6 | 9.0.3 | 2.5.4 | 3.11.2 | 120 tests : OK |  |
+| py312-old-tk86 | 3.12.3 | 8.6.14 | 1.26.4 | 3.8.4 | 120 tests : OK | Tk 8.6 « partagé » comme sous Windows (python.org, Spyder) et SLES |
 
-Lecture : « 90 tests : OK » = lecture CSV, base de temps, curseurs, rendu, PDF, projet,
-architecture **et** 11 tests de l'interface réelle (fenêtres Tk pilotées). Quand l'IHM est
-ignorée, les 79 autres tests passent. La référence `requirements.txt` réussit intégralement
+Lecture : « 120 tests : OK » = lecture CSV, robustesse (fichiers abîmés), base de temps, curseurs, rendu, PDF, projet,
+architecture **et** 12 tests de l'interface réelle (fenêtres Tk pilotées). Quand l'IHM est
+ignorée, les 108 autres tests passent. La référence `requirements.txt` réussit intégralement
 avec Tk 8.6 (famille Windows / Spyder / SLES) et Tk 9.0, de Python 3.11 à 3.14. Les
 versions récentes (numpy 2.5.4, matplotlib 3.11.2) passent aussi : une future montée
 sera sans modification du code.

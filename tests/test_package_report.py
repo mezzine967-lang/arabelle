@@ -132,6 +132,8 @@ class RenderAndReportTests(unittest.TestCase):
         for name in ("Test_PID_P_AS_scenari0045.csv", "simulation10_execution1.csv"):
             self.ws.active_package.files.append(load_source(EXAMPLES / name, self.settings))
         self.ok, self.bad = self.ws.files()
+        # Colonne « index » sans unité : l'opérateur confirme les millisecondes.
+        configure_time(self.ok, self.settings, TimeBaseSettings(unit="ms"))
 
     def tearDown(self):
         self.files.cleanup()
@@ -158,6 +160,10 @@ class RenderAndReportTests(unittest.TestCase):
     def test_monitor_hiding_rules(self):
         """REQ 4103 : masquage refusé en cas d'erreur, permis sinon."""
         self.assertTrue(monitor.can_hide([self.ok])[0])
+        configure_time(self.ok, self.settings, TimeBaseSettings())       # unité de nouveau supposée
+        allowed, reason = monitor.can_hide([self.ok])
+        self.assertFalse(allowed)                                        # REQ 2307 : à confirmer
+        configure_time(self.ok, self.settings, TimeBaseSettings(unit="ms"))
         allowed, reason = monitor.can_hide([self.ok, self.bad])
         self.assertFalse(allowed)
         self.assertIn(self.bad.name, reason)

@@ -3,6 +3,48 @@
 Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
 Chaque version incrémente `ptbg/version.py` et ajoute une entrée ici.
 
+## 2.1.0 — 2026-10-28 — robustesse de la lecture et de la base de temps
+
+Banc de 130 fichiers abîmés (et 40 corruptions aléatoires dans la suite de tests) :
+aucune exception, aucune donnée saine perdue ou inventée, chaque anomalie citée avec sa ligne.
+
+**Lecture CSV (défauts corrigés)**
+- Un guillemet non fermé avalait toute la suite du fichier : la lecture se fait
+  désormais ligne par ligne, seule la ligne fautive est rejetée.
+- Des virgules finales sur les seules lignes de données faisaient perdre l'en-tête ;
+  un préambule aussi large que le tableau était pris pour l'en-tête ; un fichier sans
+  en-tête perdait sa 1re mesure : nouveau repérage de l'en-tête (`_locate_header`).
+- En-tête répété au milieu (fichiers concaténés), lignes « ,,,, », octets nuls
+  (fichier interrompu), dernière ligne non terminée : ignorés ou rejetés, et signalés.
+- Une cellule de plus de 128 Ko faisait refuser le fichier ; « nan »/« inf » étaient
+  pris pour du texte (une colonne Float pouvait devenir Texte).
+- Octets non UTF-8 (Windows-1252) et UTF-16 : fichier lu et marqué en ERREUR avec la
+  1re ligne fautive, au lieu d'être refusé en entier (REQ 2302).
+- Point-virgule avec virgule décimale mieux détecté ; virgule décimale dans un fichier
+  à virgules : refus expliqué au lieu de colonnes inventées.
+- Une ligne au mauvais nombre de champs est citée avec son extrait.
+
+**Base de temps**
+- Horodatage brut affiché par défaut ; la régularisation devient une option (REQ 4107).
+- Unité de compteur supposée : avertissement (TBM non masquable) jusqu'à confirmation,
+  applicable d'un coup à plusieurs fichiers (REQ 2307).
+- Horodatage aberrant isolé (ex. « 00:00:00 » au milieu d'un essai à 18 h) : une
+  erreur au lieu d'un faux passage de minuit décalant tout le fichier d'un jour, ou
+  d'un faux trou de plusieurs millions d'échantillons.
+- Format de temps détecté sur tout le fichier (des lignes illisibles en tête ne font
+  plus perdre la base de temps) ; une valeur aberrante ne change plus la conversion
+  d'un compteur ; les lignes à horodatage illisible ne changent plus le type des variables.
+- Horodatages illisibles et aberrants marqués dans le TBM.
+
+**Affichage et isolation**
+- Valeurs extrêmes (±1e308) : axe borné au lieu d'une erreur « Singular matrix ».
+- Un axe impossible à dessiner affiche un message au lieu d'interrompre l'onglet ;
+  une erreur imprévue sur un fichier le marque en erreur sans arrêter les autres.
+- Constats par variable : cellules vides, valeurs non finies, valeurs incompatibles.
+
+**Documentation** : statuts de la traçabilité reformulés (implémenté et testé /
+interprétation à valider / proposition / qualification à faire) ; points ouverts complétés.
+
 ## 2.0.0 — 2026-10-27 — réécriture complète
 
 Réécriture structurée de l'outil, couvrant les 64 lignes de requis de

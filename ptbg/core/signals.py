@@ -17,7 +17,11 @@ variable, sans relire le fichier) :
 4. sinon                                                       -> FLOAT.
 
 Une colonne constante à 0 (ou à 1) reste FLOAT : rien ne permet de dire que
-c'est un booléen, l'utilisateur peut forcer le type.
+c'est un booléen, l'utilisateur peut forcer le type. Les nombres écrits
+« nan » / « inf » sont des valeurs absentes (comme une cellule vide), pas du
+texte. Les lignes dont l'horodatage est illisible (ligne de total, de
+commentaire...) ne participent pas au choix du type : elles ne sont pas
+tracées et ne doivent pas changer un Bool en Float.
 """
 from __future__ import annotations
 
@@ -27,7 +31,7 @@ from enum import Enum
 
 import numpy as np
 
-from ptbg.core.csv_reader import KIND_BOOL, KIND_EMPTY, KIND_NUMBER, KIND_TEXT, RawColumn
+from ptbg.core.csv_reader import KIND_BOOL, KIND_EMPTY, KIND_NONFINITE, KIND_NUMBER, KIND_TEXT, RawColumn
 
 
 class SignalType(Enum):
@@ -48,7 +52,7 @@ class SignalData:
     type: SignalType
     auto_type: SignalType
     values: np.ndarray        # float64 ; NaN = cellule vide ou invalide
-    missing: np.ndarray       # bool : cellule VIDE dans le CSV
+    missing: np.ndarray       # bool : cellule VIDE (ou « nan » / « inf ») dans le CSV
     invalid: np.ndarray       # bool : cellule non vide incompatible avec le type
     categories: list[str] = field(default_factory=list)   # pour TEXTE : code -> libellé
 
@@ -60,33 +64,52 @@ class SignalData:
             return "1 (vrai)" if value >= 0.5 else "0 (faux)"
         if self.type is SignalType.TEXT:
             code = int(value)
-            return self.categories[code] if 0 <= code < len(self.categories) else "?"
+            return short_label(self.categories[code]) if 0 <= code < len(self.categories) else "?"
         return f"{value:.6g}"
 
 
-def auto_type(column: RawColumn) -> SignalType:
-    """Type proposé automatiquement pour une colonne (règle du module)."""
-    n_number = column.count(KIND_NUMBER)
-    n_bool = column.count(KIND_BOOL)
-    n_text = column.count(KIND_TEXT)
+def short_label(text: str, limit: int = 40) -> str:
+    """Libellé d'état abrégé pour l'affichage (une cellule peut être démesurée)."""
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+def auto_type(column: RawColumn, ignore: np.ndarray | None = None) -> SignalType:
+    """Type proposé automatiquement pour une colonne (règle du module).
+
+    ``ignore`` : lignes à ne pas prendre en compte (horodatage illisible) ;
+    ignoré s'il couvre tout le fichier (base de temps entièrement illisible)."""
+    kinds = column.kinds
+    binary, has_zero, has_one = column.binary_numbers, column.has_zero, column.has_one
+    if ignore is not None and ignore.any() and not ignore.all():
+        keep = ~ignore
+        kinds = kinds[keep]
+        numbers = column.values[keep][kinds == KIND_NUMBER]
+        binary = bool(np.all((numbers == 0.0) | (numbers == 1.0)))
+        has_zero, has_one = bool(np.any(numbers == 0.0)), bool(np.any(numbers == 1.0))
+    n_number = int(np.count_nonzero(kinds == KIND_NUMBER))
+    n_bool = int(np.count_nonzero(kinds == KIND_BOOL))
+    n_text = int(np.count_nonzero(kinds == KIND_TEXT))
     filled = n_number + n_bool + n_text
     if filled == 0:
         return SignalType.FLOAT
     if n_text * 2 >= filled:
         return SignalType.TEXT
-    if n_bool > 0 and (n_number == 0 or column.binary_numbers):
+    if n_bool > 0 and (n_number == 0 or binary):
         return SignalType.BOOL
-    if n_bool == 0 and n_number > 0 and column.binary_numbers and column.has_zero and column.has_one:
+    if n_bool == 0 and n_number > 0 and binary and has_zero and has_one:
         return SignalType.BOOL
     return SignalType.FLOAT
 
 
-def interpret(column: RawColumn, signal_type: SignalType | None = None) -> SignalData:
-    """Interprète une colonne brute selon le type demandé (auto si None)."""
-    automatic = auto_type(column)
+def interpret(column: RawColumn, signal_type: SignalType | None = None,
+              ignore: np.ndarray | None = None) -> SignalData:
+    """Interprète une colonne brute selon le type demandé (auto si None).
+
+    ``ignore`` est transmis à ``auto_type`` (lignes exclues du choix du type)."""
+    automatic = auto_type(column, ignore)
     chosen = signal_type or automatic
     kinds = column.kinds
-    missing = kinds == KIND_EMPTY
+    missing = (kinds == KIND_EMPTY) | (kinds == KIND_NONFINITE)
     if chosen is SignalType.TEXT:
         # Les nombres d'une colonne d'états deviennent eux aussi des libellés.
         categories = list(column.categories)

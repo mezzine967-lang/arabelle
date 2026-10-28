@@ -30,7 +30,7 @@ from ptbg.core.data_package import Timeline, Workspace
 from ptbg.core.readings import cursor_positions, horizontal_crossings, xy_data
 from ptbg.core.conditional import evaluate, true_intervals
 from ptbg.core.sampling import break_at, decimate, missing_markers, sample_at
-from ptbg.core.signals import SignalType
+from ptbg.core.signals import SignalType, short_label
 from ptbg.core.xy import point_at_time
 from ptbg.plotting import monitor
 from ptbg.plotting.styles import (ACTIVE_AXLE_COLOR, CURSOR_COLORS, FONT_NORMAL, FONT_SMALL,
@@ -43,6 +43,36 @@ MAX_MARKERS = 3000      # croix / marqueurs dessinés au plus par courbe
 MAX_SHADED = 400        # périodes de condition ombrées au plus
 MAX_XY_POINTS = 20000
 HSPACE = 0.45           # espace vertical entre axes (fraction de hauteur moyenne)
+
+
+def _representable_limits(arrays) -> tuple[float, float] | None:
+    """Limites à imposer si l'étendue des valeurs dépasse le flottant 64 bits.
+
+    Des valeurs proches de ±1,8e308 (dépassement PLC) donnent une étendue
+    infinie : Matplotlib ne peut plus construire sa transformation (« Singular
+    matrix »). La vue est alors bornée à ±1e307 ; les valeurs ne sont pas
+    modifiées et restent lisibles aux curseurs. None dans tous les autres cas."""
+    finite = [values[np.isfinite(values)] for values in arrays]
+    finite = [values for values in finite if values.size]
+    if not finite:
+        return None
+    lo = min(float(values.min()) for values in finite)
+    hi = max(float(values.max()) for values in finite)
+    with np.errstate(over="ignore"):
+        span = hi - lo
+    return None if np.isfinite(span) else (max(lo, -1e307), min(hi, 1e307))
+
+
+def _bound_axes(ax, xlim, ylim) -> None:
+    """Applique ces limites, l'échelle automatique coupée AVANT (elle déborderait)."""
+    if xlim:
+        ax.set_autoscalex_on(False)
+    if ylim:
+        ax.set_autoscaley_on(False)
+    if xlim:
+        ax.set_xlim(*xlim)
+    if ylim:
+        ax.set_ylim(*ylim)
 
 
 class TabRenderer:
@@ -109,10 +139,13 @@ class TabRenderer:
             else:
                 ax = self.container.add_subplot(spec)
             self.axes.append(ax)
-            if axle.kind == "xy":
-                self._draw_xy_axle(index, ax, axle)
-            else:
-                self._draw_time_axle(index, ax, axle)
+            try:
+                if axle.kind == "xy":
+                    self._draw_xy_axle(index, ax, axle)
+                else:
+                    self._draw_time_axle(index, ax, axle)
+            except Exception as exc:  # noqa: BLE001 - REQ 4105 : un axe en défaut n'empêche pas les autres
+                self._axle_failed(ax, exc)
         if with_tbm:
             # Hauteur réelle de la bande TBM (formule de GridSpec avec hspace).
             rows = len(ratios)
@@ -164,6 +197,13 @@ class TabRenderer:
                 spine.set_edgecolor(ACTIVE_AXLE_COLOR)
                 spine.set_linewidth(2.0)
 
+    def _axle_failed(self, ax, exc: Exception) -> None:
+        """Axe impossible à dessiner : il est vidé et l'erreur y est écrite (écran et PDF)."""
+        self._lines = [entry for entry in self._lines if entry[0] is not ax]
+        ax.clear()
+        ax.text(0.5, 0.5, f"Affichage impossible : {type(exc).__name__} : {exc}", transform=ax.transAxes,
+                ha="center", va="center", fontsize=FONT_NORMAL, color="#c62828", wrap=True)
+
     def _placeholder(self, ax, text: str) -> None:
         """Texte d'aide dans un axe vide (écran seulement, jamais dans le PDF)."""
         if not self.for_print:
@@ -209,6 +249,7 @@ class TabRenderer:
                 marks = missing_markers(x, curve.values, curve.signal.missing)[:MAX_MARKERS]
                 if marks.size:
                     ax.plot(x[marks], curve.values[marks], "x", color=color, ms=7, mew=1.6)
+        _bound_axes(ax, None, _representable_limits([curve.values for curve in curves]))
         ax.legend(loc="best", fontsize=FONT_SMALL, framealpha=0.85)
 
     def _draw_digital(self, index, ax, axle, curves: list[CurveData]) -> None:
@@ -226,7 +267,8 @@ class TabRenderer:
                     name = f"{curve.ref.name}.{member.name}"      # bit d'un groupe créé à la main
                 if member.type is SignalType.TEXT:
                     scale = LANE_HEIGHT / max(len(member.categories) - 1, 1)
-                    name += " (" + "/".join(member.categories[:5]) + ("…" if len(member.categories) > 5 else "") + ")"
+                    name += (" (" + "/".join(short_label(c, 20) for c in member.categories[:5])
+                             + ("…" if len(member.categories) > 5 else "") + ")")
                 x = self.timeline.x(curve.source)
                 y = base + scale * values
                 xb, yb = break_at(x, y, curve.source.gap_starts())
@@ -258,6 +300,7 @@ class TabRenderer:
             return
         step = max(1, data.n // MAX_XY_POINTS)
         ax.plot(data.x[::step], data.y[::step], ".", ms=2.5, color=curve_color(0), alpha=0.7)
+        _bound_axes(ax, _representable_limits([data.x]), _representable_limits([data.y]))
         if np.isfinite(data.slope):
             span = np.array([data.x.min(), data.x.max()])
             ax.plot(span, data.slope * span + data.intercept, "--", color="#555555", lw=1.0,
@@ -296,11 +339,15 @@ class TabRenderer:
             artist.remove()
         self._cursor_artists = []
         for index, (ax, axle) in enumerate(zip(self.axes, self.tab.axles)):
-            if axle.kind == "xy":
-                self._draw_xy_cursor(ax, axle)
-                continue
-            self._draw_vertical_cursors(index, ax, axle)
-            self._draw_horizontal_cursor(index, ax, axle)
+            try:
+                if axle.kind == "xy":
+                    self._draw_xy_cursor(ax, axle)
+                    continue
+                self._draw_vertical_cursors(index, ax, axle)
+                self._draw_horizontal_cursor(index, ax, axle)
+            except Exception as exc:  # noqa: BLE001 - REQ 4105 : même règle que pour le tracé
+                self._keep(ax.text(0.5, 0.02, f"Curseur non affichable : {exc}", transform=ax.transAxes,
+                                   ha="center", va="bottom", fontsize=FONT_SMALL, color="#c62828"))
         if self.tbm_plot is not None and self.tab.global_cursor and self.tab.t_global is not None:
             self._keep(self.tbm_plot.axvline(self.tab.t_global, color=CURSOR_COLORS["Global"], ls="--", lw=1.1))
 

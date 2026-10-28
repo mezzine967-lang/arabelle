@@ -29,10 +29,15 @@ def _float_or_none(text: str):
 class TimeBaseDialog(simpledialog.Dialog):
     """Renvoie ``self.result`` = nouveau ``TimeBaseSettings`` ou None (annulé)."""
 
-    def __init__(self, parent, source: SourceFile, default_tolerance: float) -> None:
-        """Mémorise le fichier et la tolérance par défaut, puis ouvre le dialogue modal."""
+    def __init__(self, parent, source: SourceFile, default_tolerance: float, others_assumed: int = 0) -> None:
+        """Mémorise le fichier et la tolérance par défaut, puis ouvre le dialogue modal.
+
+        ``others_assumed`` : nombre d'autres fichiers dont l'unité de compteur est
+        supposée ; s'il y en a, l'unité choisie peut leur être appliquée d'un coup."""
         self.source = source
         self.default_tolerance = default_tolerance
+        self.others_assumed = others_assumed
+        self.share_unit = False
         super().__init__(parent, f"Base de temps — {source.name}")
 
     def body(self, master):
@@ -72,13 +77,19 @@ class TimeBaseDialog(simpledialog.Dialog):
             ttk.Label(master, text=label).grid(row=row, column=0, sticky="w", padx=(0, 6), pady=2)
             widget.grid(row=row, column=1, sticky="w", pady=2)
             ttk.Label(master, text=hint, foreground="#555555", wraplength=330).grid(row=row, column=2, sticky="w")
-        ttk.Checkbutton(master, text="Jitter ignoré : horodatage régularisé sur le raster (REQ 4107)",
+        ttk.Checkbutton(master, text="Affichage régularisé sur le raster (jitter ignoré, REQ 4107) — "
+                                     "décoché : horodatage brut du fichier (référence)",
                         variable=self.ignore_jitter).grid(row=7, column=0, columnspan=3, sticky="w", pady=4)
         ttk.Label(master, text="Diagnostic opérateur associé (REQ 4106) :").grid(row=8, column=0, columnspan=3,
                                                                                 sticky="w")
         self.note = tk.Text(master, width=80, height=3, wrap="word")
         self.note.insert("1.0", ts.operator_note)
         self.note.grid(row=9, column=0, columnspan=3, sticky="ew")
+        self.unit_to_others = tk.BooleanVar(value=False)
+        if self.others_assumed:
+            ttk.Checkbutton(master, text=f"Appliquer aussi cette unité aux {self.others_assumed} autre(s) "
+                                         "fichier(s) dont l'unité est supposée (REQ 2307)",
+                            variable=self.unit_to_others).grid(row=10, column=0, columnspan=3, sticky="w", pady=4)
         return rows[2][1]
 
     def validate(self) -> bool:
@@ -113,3 +124,4 @@ class TimeBaseDialog(simpledialog.Dialog):
             fmt=fmt, unit=self.unit.get(), nominal_period_s=None if period is None else period / 1000.0,
             tolerance_pct=tolerance, origin=self.origin.get().strip(), offset_s=offset,
             ignore_jitter=self.ignore_jitter.get(), operator_note=self.note.get("1.0", "end").strip())
+        self.share_unit = self.unit_to_others.get() and self.unit.get() != "auto"

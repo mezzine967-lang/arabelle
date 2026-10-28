@@ -48,7 +48,7 @@ def describe_source(source: SourceFile) -> str:
     else:
         origin = "origine relative (non définie)"
     mode = "régularisé, jitter ignoré" if source.time_settings.ignore_jitter else "brut"
-    assumed = " (unité supposée)" if conversion.unit_assumed else ""
+    assumed = " (unité SUPPOSÉE, à confirmer)" if conversion.unit_assumed else ""
     text = (f"{source.name} [{source.time_status().label}] : {conversion.description}{assumed} ; {origin} ; "
             f"affichage {mode}\n    {analysis.summary()}")
     if source.time_settings.operator_note:
@@ -106,10 +106,20 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     for position, source in enumerate(loaded):
         lines.append(_draw_source(plot_ax, source, timeline, CURVE_COLORS[position % len(CURVE_COLORS)],
                                   top, position, relative))
-    if any(e.kind is not EventKind.FREQUENCY for s in loaded for e in s.analysis.events):
+    if plot_ax.get_legend_handles_labels()[0]:
         plot_ax.legend(loc="upper left", fontsize=FONT_SMALL - 1, framealpha=0.8, ncol=3)
     plot_ax.set_ylim(0, top * 1.08)
     return lines
+
+
+def _readable_neighbour_x(x_all: np.ndarray, indices: list[int]) -> np.ndarray:
+    """Abscisse où montrer un horodatage illisible (REQ 4101) : celle de la
+    mesure lisible qui le précède (ou qui le suit, en début de fichier)."""
+    valid = np.flatnonzero(np.isfinite(x_all))
+    if valid.size == 0:
+        return np.full(len(indices), np.nan)
+    rank = np.clip(np.searchsorted(valid, indices) - 1, 0, valid.size - 1)
+    return x_all[valid[rank]]
 
 
 def _draw_source(ax, source, timeline, color, top, position, relative):
@@ -141,6 +151,8 @@ def _draw_source(ax, source, timeline, color, top, position, relative):
         if not events:
             continue
         ex = x_all[[e.index for e in events]]
+        if kind in (EventKind.INVALID, EventKind.OUTLIER):        # instant inconnu ou faux
+            ex = _readable_neighbour_x(x_all, [e.index for e in events])
         ey = np.clip([0.0 if not np.isfinite(e.dt_s) else e.dt_s * scale[min(np.searchsorted(analysis.dt_index, e.index), scale.size - 1)]
                       for e in events], 0, top)
         if kind is EventKind.FREQUENCY:

@@ -13,6 +13,8 @@ from unittest import mock
 
 from helpers import DEMO, EXAMPLES, TempFiles
 from ptbg.config import Settings
+from ptbg.core.data_package import configure_time
+from ptbg.core.time_parser import TimeBaseSettings
 from ptbg.system.activity_log import ActivityLog
 from ptbg.system.compat import display_problem
 from ptbg.system.environment import tkagg_problem
@@ -152,6 +154,7 @@ class InterfaceTests(unittest.TestCase):
     def test_monitor_hide_rules(self):
         """REQ 4103 : refus si alerte, accepté si base de temps conforme."""
         good, bad = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv", EXAMPLES / "simulation10_execution1.csv")
+        configure_time(good, self.ctl.settings, TimeBaseSettings(unit="ms"))   # unité confirmée (REQ 2307)
         tab = self.ctl.graph.active_tab()
         tab.add_curves([(good.id, "output", False)], 0)
         tab.toggle_monitor()
@@ -162,6 +165,19 @@ class InterfaceTests(unittest.TestCase):
             tab.toggle_monitor()
         warning.assert_called_once()
         self.assertTrue(tab.state.tbm_visible)
+
+    def test_unit_confirmed_for_several_files(self):
+        """REQ 2307 : unité supposée = avertissement ; confirmée d'un coup pour plusieurs PLC."""
+        first, second = self.load(EXAMPLES / "scenari0002.csv", EXAMPLES / "scenari0045.csv")
+        self.assertTrue(first.conversion.unit_assumed and second.conversion.unit_assumed)
+        self.assertEqual(first.time_status().label, "AVERTISSEMENT")
+        answer = mock.Mock(result=TimeBaseSettings(unit="ms"), share_unit=True)
+        with mock.patch("ptbg.gui.app.TimeBaseDialog", return_value=answer):
+            self.ctl.configure_time_base(first)
+        pump(self.root, lambda: self.ctl.task is None)
+        for source in (first, second):
+            self.assertFalse(source.conversion.unit_assumed)
+            self.assertEqual(source.time_settings.unit, "ms")
 
     def test_horizontal_cursor_only_on_float(self):
         """REQ 5406 : refusé sur un axe logique."""

@@ -1,9 +1,11 @@
 # Points ouverts — interprétations à faire valider
 
-Chaque requis est réalisé (voir TRACABILITE_REQUIS.md). Lorsque l'énoncé de la Rev. A
-est incomplet, ambigu ou commenté par le relecteur, l'interprétation retenue est
-décrite ci-dessous ; elle est **paramétrable ou isolée dans un module**, de sorte qu'une
-réponse différente ne remette pas l'architecture en cause.
+Chaque requis a reçu une implémentation ou une proposition (voir TRACABILITE_REQUIS.md),
+mais **plusieurs règles métier et valeurs par défaut restent à valider** : elles sont
+listées ci-dessous. Chacune est **paramétrable ou isolée dans un module**, de sorte qu'une
+réponse différente ne remette pas l'architecture en cause. Tant que les essais Windows,
+SLES et gros fichiers ne sont pas faits, le code est *préparé* pour les deux systèmes, il
+n'est pas encore *qualifié* compatible.
 
 | # | Requis | Question | Interprétation retenue | Où la modifier |
 |---|---|---|---|---|
@@ -13,15 +15,17 @@ réponse différente ne remette pas l'architecture en cause.
 | 4 | REQ_COMMON_KH_3000 (commentaire « ou Windows ? double compatibilité ») | Quelle cible ? | **Double compatibilité** Windows 11 64 bits (Spyder 6) et SLES 15 SP7, confirmée par le demandeur. | `system/compat.py` |
 | 5 | REQ_COMMON_KH_2201 (2e occurrence) « Binary group signal » — identifiant dupliqué | Qu'est-ce qu'un groupe binaire dans les CSV PTBG ? Faut-il renuméroter l'exigence ? | Ensemble ordonné de colonnes Bool (bit 0 = 1er membre) : détecté automatiquement pour `NOM[i]` / `NOM.i`, ou créé par l'utilisateur ; affiché en pistes regroupées, lu comme mot binaire. Un mot entier codant des bits n'est pas décodé. | `core/signals.py` (`BinaryGroup`, `detect_indexed_groups`) |
 | 6 | REQ_COMMON_KH_5202 « type Bool or Float » | Existe-t-il une convention de typage dans les CSV ? | Règle automatique : `true/false`, ou nombres 0/1 avec au moins un 0 et un 1 → Bool ; sinon Float. Une colonne constante reste Float. Colonnes d'états texte (« STOP », « ACTIVE », vus dans les CSV de simulation) → type Texte, hors spécification. Type forçable par variable. | `core/signals.py` (`auto_type`) |
-| 7 | REQ_COMMON_KH_4107 « Constitute absolute timestamp. Clock jitter ignored » | Que signifie « jitter ignoré » ? | (a) le jitter dans la tolérance n'est pas une anomalie ; (b) l'horodatage affiché est **régularisé** : droite t = a + T·k ajustée par blocs alignés sur le raster (les trous restent visibles, aucune mesure créée). Option « horodatage brut » disponible par fichier. | `core/time_base.py` (`_regularize`), dialogue Base de temps |
+| 7 | REQ_COMMON_KH_4107 « Constitute absolute timestamp. Clock jitter ignored » | Que signifie « jitter ignoré » ? | Le jitter dans la tolérance **n'est pas une anomalie** (il est mesuré et affiché, pas compté comme défaut). L'axe des temps affiche par défaut l'**horodatage brut** du fichier : rien n'est recalé en silence. En option, par fichier, un affichage **régularisé** (droite t = a + T·k ajustée par blocs alignés, trous conservés, aucune mesure créée), toujours indiqué dans le TBM et le rapport. | `core/time_base.py` (`_regularize`), dialogue Base de temps |
 | 8 | REQ_COMMON_KH_4107 / 2102 | D'où vient l'origine absolue d'un compteur ? | Horodatage hh:mm:ss (date saisissable) ou date-heure : absolu d'office. Compteur : origine saisie par l'utilisateur. L'axe absolu n'est proposé que si chaque fichier a une origine. Aucun recalage automatique entre PLC : décalage manuel explicite, affiché dans le TBM. | `core/data_package.py` (`Timeline`) |
-| 9 | REQ_COMMON_KH_4100 / 4106 — tolérance | Quelle tolérance par défaut sur la période ? | **10 %** de la période (préférence), réglable par fichier ; un changement de fréquence = 10 intervalles consécutifs cohérents hors raster. | `config.py` |
-| 10 | REQ_COMMON_KH_2307 — unité du compteur | Unité d'un compteur sans unité (colonne « index » des CSV fournis, pas de 20) ? | Lue dans l'en-tête (`t_ms`, `Temps (s)`, `time[us]`…), sinon **ms supposée** (information affichée dans le TBM), réglable. | `core/time_parser.py`, `config.py` |
+| 9 | REQ_COMMON_KH_4100 / 4106 — tolérance | Quelle tolérance par défaut sur la période ? Combien d'intervalles pour un changement de fréquence ? | Valeurs **arbitraires, non fournies par les requis** : 10 % de la période et 10 intervalles consécutifs cohérents hors raster. Ce sont des réglages utilisateur (Outils > Préférences, et tolérance par fichier dans Base de temps), affichés dans le TBM. | `config.py` |
+| 10 | REQ_COMMON_KH_2307 — unité du compteur | Unité d'un compteur sans unité (colonne « index » des CSV fournis, pas de 20) ? | Lue dans l'en-tête (`t_ms`, `Temps (s)`, `time[us]`…). Sinon l'unité de la préférence (ms) est **SUPPOSÉE** et signalée en **avertissement** : « unité SUPPOSÉE, à confirmer » dans le TBM et le rapport, TBM non masquable, jusqu'à ce que l'opérateur choisisse l'unité (Base de temps > Configurer, applicable d'un coup à tous les fichiers concernés). Alternative possible si demandée : axe en « unités de compteur » sans conversion. | `core/time_parser.py`, `config.py` |
 | 11 | REQ_COMMON_KH_5404 (énoncé identique à 5403) | Exigence différente attendue (Δt, écart de valeurs ?) | Couvert par la même réalisation : C1 et C2 posés d'office avec leurs instants, plus Δt, 1/Δt et ΔV par courbe. | `plotting/renderer.py`, `core/readings.py` |
 | 12 | REQ_COMMON_KH_5407 / 5500 (énoncé 5500 **vide**) | Quel traitement conditionnel est attendu ? | Curseur horizontal : franchissements retenus seulement si la condition Bool est vraie (même ligne pour le même fichier ; dernier état connu pour un autre fichier). Section 4.5 : statistiques sous condition (durée, min, max, moyenne, écart-type, durée au-dessus d'un seuil). | `core/conditional.py` |
-| 13 | REQ_COMMON_KH_5401 « cross value » | Valeur interpolée ou échantillon ? | **Échantillon réel**, jamais interpolé : le plus proche pour un Float, l'état maintenu (précédent) pour un Bool ; instant et ligne CSV de l'échantillon affichés. | `core/sampling.py` |
-| 14 | REQ_COMMON_KH_2301 / 2302 / 2303 | Faut-il refuser ou tolérer un fichier non conforme ? | Séparateur ≠ virgule et encodage ≠ UTF-8 : fichier **refusé** avec diagnostic (les autres fichiers restent chargés). Métadonnées, lignes « # », lignes mal formées : **tolérées et signalées**. | `core/csv_reader.py` |
-| 15 | REQ_COMMON_KH_6005 « Project Name & Unit », « Project file reference or Hash » | Origine de ces champs ? | Saisis dans Rapport > En-tête ; référence = texte libre + nom du fichier projet `.ptbg.json` ; empreinte = SHA-256 du fichier projet enregistré ; SHA-256 de chaque CSV source. | `report/pdf_report.py` |
+| 13 | REQ_COMMON_KH_5401 « cross value » | Valeur interpolée ou échantillon ? | **Échantillon réel**, jamais interpolé : le plus proche pour un Float ; pour un Bool, **règle métier ajoutée** : l'état maintenu (échantillon précédent), cohérente avec le tracé en escalier ; instant et ligne CSV de l'échantillon affichés. | `core/sampling.py` |
+| 14 | REQ_COMMON_KH_2301 / 2302 / 2303 | Faut-il refuser ou tolérer un fichier non conforme ? | Séparateur ≠ virgule : fichier **refusé** avec diagnostic (les autres restent chargés). Encodage ≠ UTF-8 (fichier Windows-1252, UTF-16, octet corrompu) : fichier **lu** mais marqué en **ERREUR** avec la 1re ligne fautive, pour ne pas perdre les mesures. Métadonnées, lignes « # », lignes mal formées : **tolérées, signalées et listées**. | `core/csv_reader.py` |
+| 15 | REQ_COMMON_KH_6005 « Project Name & Unit », « Project file reference or Hash » | Origine de ces champs ? Le fichier projet est-il prévu ? | Saisis dans Rapport > En-tête ; référence = texte libre + nom du fichier projet ; empreinte = SHA-256 du fichier projet enregistré ; SHA-256 de chaque CSV source. Le **fichier projet `.ptbg.json` est une proposition** (non décrit dans la spécification). | `report/pdf_report.py`, `core/project.py` |
+| 16 | REQ_COMMON_KH_4105 / 2301 / 2308 — fichiers abîmés | Que faire d'une ligne incomplète, d'un en-tête absent ou répété, d'un horodatage aberrant ? | Une ligne au mauvais nombre de champs est **rejetée et listée** (jamais complétée : sa dernière valeur pourrait être tronquée). Sans en-tête, la 1re ligne de mesures est gardée (colonnes Colonne_1…). Un en-tête répété (fichiers concaténés) est ignoré. Un horodatage isolé à plus de **10 périodes** de ses deux voisins (qui se suivent normalement) est déclaré **aberrant** : ERREUR, exclu du raster et des courbes, au lieu d'un faux retour arrière suivi d'un faux trou. Valeur de 10 périodes arbitraire. | `core/csv_reader.py`, `core/time_base.py` (`OUTLIER_JUMP`) |
+| 17 | REQ_COMMON_KH_5500 (énoncé **vide**) | Le requis peut-il être déclaré satisfait ? | **Non** : la fonction de statistiques conditionnelles (n° 12) est une proposition ; le requis reste à rédiger. | — |
 
 ## Qualification restant à consigner
 
@@ -29,4 +33,6 @@ réponse différente ne remette pas l'architecture en cause.
   (procédure de 15 minutes : COMPATIBILITE_OS.md § 5) avec les versions réellement
   présentes, relevées par `python tools/audit_environnement.py`.
 - Essai de performance sur les volumes réels de PTBG (taille, nombre de colonnes, de
-  fichiers) pour confirmer la valeur de REQ 2310.
+  fichiers) pour confirmer la valeur de REQ 2310. Repère mesuré sur le banc Linux
+  (Python 3.11) : 97 Mo, 1 000 000 lignes × 21 colonnes lus et analysés en 11 s environ,
+  en arrière-plan avec barre d'avancement.

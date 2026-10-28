@@ -35,12 +35,16 @@ class CsvFormatTests(unittest.TestCase):
             read_csv(path)
         self.assertEqual(ctx.exception.issues[0].requirement, "REQ_COMMON_KH_2301")
 
-    def test_non_utf8_rejected_with_requirement(self):
-        """REQ 2302 : encodage UTF-8 strict."""
-        path = self.files.write("latin.csv", "t,température\n0,1\n".encode("latin-1"))
-        with self.assertRaises(CsvReadError) as ctx:
-            read_csv(path)
-        self.assertEqual(ctx.exception.issues[-1].requirement, "REQ_COMMON_KH_2302")
+    def test_non_utf8_read_but_flagged_with_requirement(self):
+        """REQ 2302 : un fichier Windows-1252 est une non-conformité (ERREUR, ligne citée),
+        mais ses mesures restent exploitables et les accents lisibles."""
+        path = self.files.write("latin.csv", "t,température\n0,1\n10,2\n".encode("cp1252"))
+        table = read_csv(path)
+        self.assertEqual(table.header, ["t", "température"])
+        self.assertEqual(table.n_samples, 2)
+        issue = next(i for i in table.issues if i.requirement == "REQ_COMMON_KH_2302")
+        self.assertIs(issue.severity, Severity.ERROR)
+        self.assertEqual(issue.line, 1)
 
     def test_bom_tolerated_and_reported(self):
         path = self.files.write("bom.csv", "﻿t,a\n0,1\n1,2\n")

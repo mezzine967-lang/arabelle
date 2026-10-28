@@ -79,7 +79,9 @@ class TimeBaseSettings:
       déclenchement, ou date du jour pour un format hh:mm:ss) ;
     - ``offset_s`` : décalage manuel pour aligner des PLC non synchronisés
       (REQ 2102, 2104) ; toujours affiché dans le Time Base Monitor ;
-    - ``ignore_jitter`` : horodatage régularisé sur le raster (REQ 4107) ;
+    - ``ignore_jitter`` : affichage régularisé sur le raster (option, REQ 4107) ;
+      par défaut l'horodatage BRUT est affiché : le jitter dans la tolérance
+      n'est simplement pas compté comme anomalie ;
     - ``operator_note`` : diagnostic associé saisi par l'utilisateur (REQ 4106).
     """
     fmt: TimeFormat = TimeFormat.AUTO
@@ -88,7 +90,7 @@ class TimeBaseSettings:
     tolerance_pct: float | None = None
     origin: str = ""
     offset_s: float = 0.0
-    ignore_jitter: bool = True
+    ignore_jitter: bool = False
     operator_note: str = ""
 
     def to_dict(self) -> dict:
@@ -127,9 +129,27 @@ class TimeConversion:
 
 
 # ------------------------------------------------------------------ détection
+def looks_like_time(text: str) -> bool:
+    """Vrai si le texte a la forme d'un horodatage (compteur, heure, date-heure).
+
+    Sert aussi au lecteur CSV pour distinguer une ligne de mesures d'une ligne
+    d'en-têtes ou de métadonnées."""
+    text = text.strip()
+    return bool(_COUNTER_RE.match(text) or _TIME_OF_DAY_RE.match(text)
+                or _ISO_DATETIME_RE.match(text) or _FR_DATETIME_RE.match(text))
+
+
 def detect_format(raw: list[str]) -> TimeFormat | None:
-    """Détecte le format dominant sur les premières valeurs non vides."""
-    sample = [text.strip() for text in raw[:DETECTION_SAMPLE * 2] if text.strip()][:DETECTION_SAMPLE]
+    """Format le plus représenté parmi des valeurs prises sur TOUT le fichier.
+
+    L'échantillon réunit le début du fichier et des valeurs réparties jusqu'à
+    la fin : quelques centaines de lignes illisibles en tête (ou une fin
+    corrompue) ne font pas perdre toute la base de temps. Le format retenu doit
+    couvrir au moins 10 % de l'échantillon ; les valeurs qui ne le respectent
+    pas deviennent des horodatages illisibles, signalés un par un."""
+    spread = np.linspace(0, len(raw) - 1, num=min(len(raw), DETECTION_SAMPLE * 2)).astype(int) if raw else []
+    picked = raw[:DETECTION_SAMPLE] + [raw[i] for i in spread]
+    sample = [text.strip() for text in picked if text.strip()]
     if not sample:
         return None
     scores = {
@@ -139,7 +159,7 @@ def detect_format(raw: list[str]) -> TimeFormat | None:
                                  for t in sample),
     }
     best = max(scores, key=scores.get)
-    return best if scores[best] >= 0.8 * len(sample) else None
+    return best if scores[best] >= 0.1 * len(sample) else None
 
 
 def unit_from_name(column_name: str) -> str | None:
@@ -245,9 +265,12 @@ def _convert_counter(raw, name, settings, default_unit) -> TimeConversion:
     assumed = unit is None
     if assumed:
         unit = default_unit
-        issues.append(Issue(Severity.INFO,
-                            f"Unité du compteur « {name} » non précisée : {UNIT_LABELS[unit]} supposée "
-                            "(à confirmer dans Base de temps > Configurer).", requirement="REQ_COMMON_KH_2307"))
+        # AVERTISSEMENT (et non information) : période et durées n'ont de sens que
+        # si l'unité est juste ; le TBM reste affiché tant qu'elle n'est pas confirmée.
+        issues.append(Issue(Severity.WARNING,
+                            f"Unité du compteur « {name} » absente de l'en-tête : {UNIT_LABELS[unit]} SUPPOSÉE, "
+                            "non confirmée. Période et durées n'ont de sens que si cette unité est juste : "
+                            "la confirmer dans Base de temps > Configurer.", requirement="REQ_COMMON_KH_2307"))
     if unit == "cycle":
         if not settings.nominal_period_s:
             issues.append(Issue(Severity.ERROR, "Unité « cycles PLC » : la période nominale doit être "
@@ -261,8 +284,9 @@ def _convert_counter(raw, name, settings, default_unit) -> TimeConversion:
     values = _parse_numbers(raw)
     description = f"Compteur « {name} » en {UNIT_LABELS[unit]} × {factor:g} -> s"
     finite = np.isfinite(values)
-    if finite.any() and np.nanmax(np.abs(values)) >= 2 ** 53:
-        # Grands entiers (ex. nanosecondes depuis 1970) : calcul exact relatif.
+    # Grands entiers (ex. nanosecondes depuis 1970) : calcul exact relatif. La
+    # médiane décide : une seule valeur aberrante ne change pas la conversion.
+    if finite.any() and np.median(np.abs(values[finite])) >= 2 ** 53:
         values, reference = _relative_big_integers(raw)
         description += f", relatif à la 1re valeur {reference}"
     seconds = values * factor
@@ -287,25 +311,35 @@ def _relative_big_integers(raw: list[str]) -> tuple[np.ndarray, int]:
 
 
 def _convert_time_of_day(raw, name, settings) -> TimeConversion:
-    """REQ_COMMON_KH_2306 : hh:mm:ss.fraction (jusqu'à la ns), passage de minuit géré."""
+    """REQ_COMMON_KH_2306 : hh:mm:ss.fraction (jusqu'à la ns), passage de minuit géré.
+
+    Un recul de plus de 12 h est un passage de minuit seulement si la mesure
+    SUIVANTE est elle aussi du côté du nouveau jour : une heure isolée
+    aberrante (ex. « 00:00:00 » au milieu d'un essai à 18 h) reste un retour
+    arrière signalé et ne décale pas d'un jour tout le reste du fichier."""
     issues = []
+    of_day = [_time_of_day_ns(text) for text in raw]
+    following = [None] * len(of_day)            # heure valide suivante (anticipation)
+    upcoming = None
+    for position in range(len(of_day) - 1, -1, -1):
+        following[position] = upcoming
+        if of_day[position] is not None:
+            upcoming = of_day[position]
     nanoseconds: list[int | None] = []
     day_offset, previous, rollovers = 0, None, 0
-    for text in raw:
-        match = _TIME_OF_DAY_RE.match(text.strip())
-        value = None
-        if match:
-            hours, minutes, secs = (int(match.group(i)) for i in (1, 2, 3))
-            fraction = _fraction_to_ns(match.group(4))
-            if fraction is not None and hours < 24 and minutes < 60 and secs < 60:
-                value = ((hours * 60 + minutes) * 60 + secs) * NS_PER_S + fraction + day_offset
-                # Recul de plus de 12 h : passage de minuit, pas un retour arrière.
-                if previous is not None and value < previous - DAY_NS // 2:
-                    day_offset += DAY_NS
-                    value += DAY_NS
-                    rollovers += 1
-                previous = value
-        nanoseconds.append(value)
+    for position, clock in enumerate(of_day):
+        if clock is None:
+            nanoseconds.append(None)
+            continue
+        if previous is not None and clock < previous - DAY_NS // 2:
+            nxt = following[position]
+            if nxt is None or nxt < previous - DAY_NS // 2:
+                day_offset += DAY_NS
+                rollovers += 1
+                previous = clock
+        else:
+            previous = clock
+        nanoseconds.append(clock + day_offset)
     if rollovers:
         issues.append(Issue(Severity.INFO, f"{rollovers} passage(s) de minuit pris en compte.",
                             requirement="REQ_COMMON_KH_2306"))
@@ -319,6 +353,18 @@ def _convert_time_of_day(raw, name, settings) -> TimeConversion:
                             "(date réglable dans Base de temps > Configurer).", requirement="REQ_COMMON_KH_4107"))
     return TimeConversion(TimeFormat.TIME_OF_DAY, None, False, seconds, ~np.isfinite(seconds),
                           origin_ns, date_known, description, issues)
+
+
+def _time_of_day_ns(text: str) -> int | None:
+    """« hh:mm:ss.fraction » -> nanosecondes depuis minuit (None si illisible)."""
+    match = _TIME_OF_DAY_RE.match(text.strip())
+    if not match:
+        return None
+    hours, minutes, secs = (int(match.group(i)) for i in (1, 2, 3))
+    fraction = _fraction_to_ns(match.group(4))
+    if fraction is None or hours >= 24 or minutes >= 60 or secs >= 60:
+        return None
+    return ((hours * 60 + minutes) * 60 + secs) * NS_PER_S + fraction
 
 
 def _convert_datetime(raw, name) -> TimeConversion:

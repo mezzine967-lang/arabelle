@@ -1,4 +1,4 @@
-# Guide d'utilisation — VISU PTBG 2.0.0
+# Guide d'utilisation — VISU PTBG 2.1.0
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier
@@ -28,8 +28,26 @@ fenêtre reste utilisable et **Annuler** interrompt la lecture.
 
 Format attendu (section 2.3 de la spécification) : CSV, séparateur virgule, UTF-8, sans
 métadonnées, 1re ligne = noms des variables PLC, 1re colonne = base de temps. Un écart
-est signalé dans le nœud **Diagnostic** du fichier ; un séparateur « ; » ou un encodage non
-UTF-8 rend le fichier illisible, sans empêcher la lecture des autres.
+est signalé dans le nœud **Diagnostic** du fichier, avec le numéro de ligne. Seul un
+séparateur autre que la virgule (« ; », tabulation…) rend le fichier illisible, sans
+empêcher la lecture des autres.
+
+Un fichier abîmé est lu sans rien inventer ni perdre en silence :
+
+| Situation | Ce que fait l'outil |
+|---|---|
+| ligne vide, ou « ,,,, » sans aucune valeur | ignorée, comptée (information) |
+| ligne avec trop ou trop peu de champs (ligne tronquée, valeur en trop) | **rejetée et listée** avec son extrait ; jamais complétée (sa dernière valeur pourrait être coupée) ; sa place apparaît comme un trou dans la base de temps |
+| guillemet non fermé, octets nuls (fichier interrompu pendant l'écriture) | seule la ligne concernée est rejetée ; un remplissage d'octets nuls en fin de fichier est signalé |
+| dernière ligne sans retour à la ligne | gardée si elle est complète, avec un avertissement « vérifier cette dernière mesure » |
+| préambule de métadonnées, lignes « # » | ignorés, signalés (non-conformité REQ 2303) |
+| pas de ligne d'en-têtes | la 1re ligne de mesures est **conservée**, colonnes nommées Colonne_1, Colonne_2… |
+| en-tête répété au milieu (fichiers mis bout à bout) | ignoré, signalé |
+| virgules en fin de ligne | tolérées |
+| octets non UTF-8 (fichier enregistré en Windows-1252), UTF-16 | fichier **lu**, marqué en **ERREUR** (non-conformité REQ 2302) avec la 1re ligne fautive |
+| valeur « nan », « inf » | valeur absente (comme une cellule vide), comptée par variable |
+| texte dans une colonne numérique, nombre ≠ 0/1 dans un Bool | non tracé, compté par variable ; le type reste modifiable |
+| virgule décimale dans un fichier à virgules | fichier refusé avec l'explication, aucune fausse colonne n'est créée |
 
 Les fichiers rejoignent le **paquet de données actif** (marqué « actif » dans l'arbre).
 Pour un système de plusieurs PLC, mettre les fichiers de chaque essai dans un même paquet
@@ -64,6 +82,12 @@ heure `hh:mm:ss.fraction` jusqu'à la nanoseconde (passage de minuit géré) ou 
 Un compteur **négatif** correspond au **pré-déclenchement** : t = 0 est l'instant de
 déclenchement (ligne pointillée « déclenchement » sur les axes).
 
+Si l'en-tête du compteur ne précise pas son unité (colonne « index »…), l'unité de la
+préférence (ms) est **supposée** : le fichier passe en **avertissement** (« unité SUPPOSÉE,
+à confirmer ») et le TBM ne peut pas être masqué tant que l'unité n'est pas choisie dans
+**Base de temps > Configurer…** (une case permet de l'appliquer d'un coup aux autres
+fichiers dans le même cas).
+
 Pour chaque fichier, l'outil contrôle :
 
 | Contrôle | Signification |
@@ -72,11 +96,13 @@ Pour chaque fichier, l'outil contrôle :
 | Stabilité | part des Δt dans la tolérance, jitter, déphasages, changements de fréquence |
 | Croissance continue | aucun horodatage dupliqué ni retour arrière |
 | Données manquantes | trous de k périodes (k − 1 échantillons manquants) |
+| Lisibilité, horodatages aberrants | horodatage illisible ; horodatage isolé à plus de 10 périodes de ses deux voisins (ex. « 00:00:00 » au milieu d'un essai à 18 h), exclu des courbes et signalé en erreur |
 
 Le **Time Base Monitor**, en bas de chaque onglet, montre pour chaque fichier affiché la
 conversion appliquée, l'origine, le statut, les Δt (ou Δt / période quand les fichiers ont
 des périodes différentes), la période et sa bande de tolérance, et les anomalies (▼ trou,
-◆ déphasage, ✖ doublon / retour arrière, trait mixte = changement de fréquence).
+◆ déphasage, ✖ doublon / retour arrière, ✚ horodatage illisible, ★ horodatage aberrant,
+trait mixte = changement de fréquence).
 
 **Masquer le TBM** n'est possible que si aucune base de temps affichée n'a
 d'avertissement ni d'erreur ; il réapparaît automatiquement si une alerte survient.
@@ -84,9 +110,14 @@ d'avertissement ni d'erreur ; il réapparaît automatiquement si une alerte surv
 **Base de temps > Configurer…** (ou double-clic sur le fichier) permet d'imposer :
 format, unité, **période nominale** et **tolérance** (diagnostic recalculé), **origine
 absolue** (date-heure du compteur 0, ou date du jour pour un horodatage hh:mm:ss),
-**décalage manuel** (aligner un PLC non synchronisé), choix « jitter ignoré »
-(horodatage régularisé sur le raster) et un **diagnostic opérateur** libre, imprimé dans le
-TBM et le rapport.
+**décalage manuel** (aligner un PLC non synchronisé), un **affichage régularisé**
+facultatif et un **diagnostic opérateur** libre, imprimé dans le TBM et le rapport.
+
+Par défaut les courbes sont tracées sur l'**horodatage brut** du fichier : rien n'est
+recalé. Le jitter qui reste dans la tolérance n'est pas compté comme anomalie, il est
+mesuré et affiché (« jitter max »). L'option « Affichage régularisé » remplace l'affichage
+par une droite ajustée sur le raster (les trous restent visibles, aucune mesure n'est
+créée) ; le TBM indique toujours lequel des deux affichages est utilisé.
 
 **Base de temps > Diagnostic complet** liste chaque anomalie avec sa ligne dans le CSV.
 **Base de temps > Comparer les sources** compare les PLC du paquet : recouvrement, fin de

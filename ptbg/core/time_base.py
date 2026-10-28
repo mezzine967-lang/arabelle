@@ -22,6 +22,12 @@ Vocabulaire :
   Δt « normal »      : |Δt − T| ≤ tol  (le jitter dans la tolérance est ignoré) ;
   Δt « manque »      : |Δt − k·T| ≤ tol avec k ≥ 2 -> k − 1 échantillons manquants ;
   Δt « déphasage »   : Δt positif hors de la grille du raster ;
+  horodatage aberrant : mesure isolée dont l'instant s'écarte de plus de
+                       10 périodes de ses deux voisins, qui eux se suivent
+                       normalement (ex. « 00:00:00 » au milieu d'un essai à
+                       18 h) : signalée en ERREUR et exclue de l'analyse et
+                       des courbes, au lieu de produire un faux retour
+                       arrière suivi d'un faux trou de plusieurs heures ;
   segment            : portion du fichier à période constante ; un changement
                        de fréquence est une suite d'au moins N intervalles
                        consécutifs hors raster et cohérents entre eux.
@@ -46,6 +52,7 @@ from ptbg.core.diagnostics import Severity
 class EventKind(Enum):
     """Catégories d'événements temporels : libellé, libellé court, gravité."""
     INVALID = ("Horodatage illisible", "illisible(s)", Severity.ERROR)
+    OUTLIER = ("Horodatage aberrant isolé", "aberrant(s)", Severity.ERROR)
     DUPLICATE = ("Horodatage dupliqué (Δt = 0)", "doublon(s)", Severity.ERROR)
     BACKWARD = ("Retour arrière du temps (Δt < 0)", "retour(s) arrière", Severity.ERROR)
     MISSING = ("Données manquantes", "trou(s)", Severity.WARNING)
@@ -126,6 +133,7 @@ class TimeBaseAnalysis:
     dt_index: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))
     dt_values: np.ndarray = field(default_factory=lambda: np.empty(0))
     dt_kinds: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int8))
+    excluded: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.int64))  # aberrants
 
     @property
     def status(self) -> Severity:
@@ -150,6 +158,29 @@ class TimeBaseAnalysis:
 DT_NORMAL, DT_MISSING, DT_PHASE, DT_DUPLICATE, DT_BACKWARD = 0, 1, 2, 3, 4
 _KIND_OF_CODE = {DT_MISSING: EventKind.MISSING, DT_PHASE: EventKind.PHASE,
                  DT_DUPLICATE: EventKind.DUPLICATE, DT_BACKWARD: EventKind.BACKWARD}
+
+
+OUTLIER_JUMP = 10      # écart minimal (en périodes) d'un horodatage aberrant isolé
+
+
+def _isolated_outliers(t: np.ndarray, nominal: float | None) -> np.ndarray:
+    """Positions (dans ``t``) des horodatages aberrants isolés (voir en-tête).
+
+    Le temps saute de plus de ``OUTLIER_JUMP`` périodes en arrivant sur la
+    mesure et repart aussitôt en sens inverse, alors que ses deux voisins se
+    suivent (écart positif inférieur à ce saut). Une base de temps saine est
+    croissante : un tel aller-retour n'est jamais un comportement normal."""
+    if t.size < 3:
+        return np.empty(0, dtype=np.int64)
+    d = np.diff(t)
+    positive = d[d > 0]
+    period = nominal or (float(np.median(positive)) if positive.size else np.nan)
+    if not (np.isfinite(period) and period > 0):
+        return np.empty(0, dtype=np.int64)
+    before, after, span = d[:-1], d[1:], t[2:] - t[:-2]
+    jump = OUTLIER_JUMP * period
+    spike = ((before > jump) & (after < -jump)) | ((before < -jump) & (after > jump))
+    return np.flatnonzero(spike & (span > 0) & (span <= jump)) + 1
 
 
 def _run_starts(mask: np.ndarray, min_length: int) -> np.ndarray:
@@ -199,9 +230,11 @@ def _split_frequency_segments(dt: np.ndarray, period: float, tol_frac: float,
 
 def _classify(dt: np.ndarray, period: float, tol: float) -> tuple[np.ndarray, np.ndarray]:
     """Classe chaque Δt (codes DT_*) et renvoie aussi le nombre de cycles k."""
-    with np.errstate(divide="ignore", invalid="ignore"):
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         cycles = np.rint(dt / period)
-    on_grid = np.abs(dt - cycles * period) <= tol
+        # Un Δt gigantesque (horodatage corrompu) ne peut pas être situé sur la
+        # grille à la tolérance près en flottant 64 bits : il reste « hors raster ».
+        on_grid = (np.abs(dt - cycles * period) <= tol) & (np.abs(dt) * 1e-12 <= tol)
     codes = np.full(dt.size, DT_PHASE, dtype=np.int8)
     codes[on_grid & (cycles == 1)] = DT_NORMAL
     codes[on_grid & (cycles >= 2)] = DT_MISSING
@@ -254,6 +287,20 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
                              for i in invalid_index[:max_events])
         result.checks.append(Check("Lisibilité", Severity.ERROR,
                                    f"{invalid_index.size} horodatage(s) illisible(s)."))
+    outliers = _isolated_outliers(seconds[valid_index], nominal_period_s)
+    if outliers.size:
+        aberrant = valid_index[outliers]
+        result.excluded = aberrant
+        result.event_counts[EventKind.OUTLIER] = int(aberrant.size)
+        result.events.extend(TimeEvent(EventKind.OUTLIER, int(i), np.nan, f"t brut = {seconds[i]:.9g} s")
+                             for i in aberrant[:max_events])
+        result.checks.append(Check("Horodatages aberrants", Severity.ERROR,
+                                   f"{aberrant.size} horodatage(s) isolé(s) très éloigné(s) de leurs voisins : "
+                                   "exclu(s) de l'analyse du raster et des courbes (valeur brute dans le "
+                                   "diagnostic du fichier)."))
+        valid_index = np.delete(valid_index, outliers)
+        result.regular_s[aberrant] = np.nan
+        result.n_valid = valid_index.size
     if valid_index.size < 2:
         result.checks.append(Check("Valeur de la période", Severity.ERROR,
                                    "Moins de deux horodatages valides : période indéfinissable."))

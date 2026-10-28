@@ -42,11 +42,28 @@ class XYData:
 
 
 def _fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float]:
-    if x.size < 2 or np.ptp(x) == 0 or np.ptp(y) == 0:
+    """Corrélation de Pearson et droite des moindres carrés (NaN si indéfinies).
+
+    Calcul sur valeurs réduites par leur maximum absolu puis centrées : aucun
+    dépassement flottant, même avec des valeurs extrêmes (±1e308)."""
+    if x.size < 2:
         return np.nan, np.nan, np.nan
-    r = float(np.corrcoef(x, y)[0, 1])
-    slope, intercept = np.polyfit(x, y, 1)
-    return r, float(slope), float(intercept)
+    with np.errstate(all="ignore"):
+        sx, sy = float(np.max(np.abs(x))), float(np.max(np.abs(y)))
+        if not (sx > 0 and sy > 0 and np.isfinite(sx) and np.isfinite(sy)):
+            return np.nan, np.nan, np.nan
+        xs, ys = x / sx, y / sy
+        mx, my = float(xs.mean()), float(ys.mean())
+        xc, yc = xs - mx, ys - my
+        sxx, syy, sxy = float(xc @ xc), float(yc @ yc), float(xc @ yc)
+        if sxx <= 0 or syy <= 0:
+            return np.nan, np.nan, np.nan              # X ou Y constant
+        r = sxy / np.sqrt(sxx * syy)
+        slope = sxy / sxx * (sy / sx)
+        intercept = sy * my - slope * sx * mx
+    if not (np.isfinite(slope) and np.isfinite(intercept)):
+        return float(r), np.nan, np.nan
+    return float(r), float(slope), float(intercept)
 
 
 def build_xy(tx: np.ndarray, vx: np.ndarray, ty: np.ndarray, vy: np.ndarray,

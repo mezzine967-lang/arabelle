@@ -1,4 +1,4 @@
-# VISU PTBG 2.0.0 — analyseur graphique de perturbographie
+# VISU PTBG 2.1.0 — analyseur graphique de perturbographie
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
 Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
@@ -55,7 +55,7 @@ ptbg/plotting/     dessin commun écran et PDF, Time Base Monitor
 ptbg/report/       rapport PDF
 ptbg/gui/          interface Tkinter : contrôleur, arbre, onglets, dialogues
 ptbg/system/       compatibilité Windows / SLES, environnement, journal
-tests/             90 tests automatisés (dont l'interface réelle)
+tests/             120 tests automatisés (dont l'interface réelle et la robustesse)
 tools/             audit d'environnement, traçabilité des requis, données de démo
 install/           installation et lancement Windows / SLES
 docs/              guide, architecture, dépendances, compatibilité, traçabilité
@@ -67,8 +67,14 @@ Pour reprendre le code : **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 Les 64 lignes de la spécification sont tracées dans
 **[docs/TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md)** (réalisation, code, test,
-statut). Les interprétations à faire valider (énoncés vides, ambigus ou commentés) sont
-dans **[docs/POINTS_OUVERTS.md](docs/POINTS_OUVERTS.md)**.
+statut) : 49 implémentées et testées, 12 implémentées selon une interprétation à valider,
+1 proposition (énoncé vide), 2 à qualifier sur cible ou sur volumes réels. Les
+interprétations à faire valider sont dans **[docs/POINTS_OUVERTS.md](docs/POINTS_OUVERTS.md)**.
+
+Robustesse : un fichier abîmé (ligne tronquée ou en trop, guillemet non fermé, octets
+nuls, en-tête absent ou répété, encodage non UTF-8, horodatage aberrant…) est lu sans
+exception, sans perte silencieuse ni valeur inventée ; chaque anomalie est citée avec sa
+ligne (guide, § 2 ; `tests/test_robustesse.py`).
 
 ```
 python tools/verifier_tracabilite.py     # chaque requis du Word : matrice + code + test

@@ -16,6 +16,7 @@ Requis couverts :
 """
 from __future__ import annotations
 
+import traceback
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 from ptbg.config import Settings
-from ptbg.core.csv_reader import KIND_EMPTY, CsvReadError, CsvTable, read_csv
+from ptbg.core.csv_reader import KIND_EMPTY, KIND_NONFINITE, CsvReadError, CsvTable, ReadCancelled, read_csv
 from ptbg.core.diagnostics import Issue, Severity, worst
 from ptbg.core.signals import BinaryGroup, SignalData, SignalType, detect_indexed_groups, interpret
 from ptbg.core.sampling import is_sorted
@@ -46,6 +47,7 @@ class SourceFile:
     revision: int = 0          # incrémenté à chaque changement (invalide les caches)
     _signals: dict[str, SignalData] = field(default_factory=dict, repr=False)
     _x_cache: tuple | None = field(default=None, repr=False)   # (clé, abscisses, triées ?)
+    _data_issues: tuple | None = field(default=None, repr=False)  # (révision, constats)
 
     # ------------------------------------------------------------ identité
     @property
@@ -71,18 +73,40 @@ class SourceFile:
         return worst([self.analysis.status] + [issue.severity for issue in self.time_issues()])
 
     def data_issues(self) -> list[Issue]:
-        """Constats sur les valeurs : cellules vides par variable."""
+        """Constats sur les valeurs, par variable : cellules vides, nombres non
+        finis (« nan », « inf »), valeurs incompatibles avec le type. Mis en
+        cache par révision (l'arbre les consulte à chaque rafraîchissement)."""
         if not self.table:
             return []
-        empty = [(column.name, column.count(KIND_EMPTY)) for column in self.table.columns]
-        empty = [(name, count) for name, count in empty if count]
-        if not empty:
-            return []
-        listing = ", ".join(f"{name} ({count})" for name, count in empty[:8])
-        more = f" et {len(empty) - 8} autre(s)" if len(empty) > 8 else ""
-        return [Issue(Severity.WARNING, f"Cellules vides : {listing}{more}. Elles restent vides "
-                      "(aucune valeur inventée) et sont encadrées de croix sur les courbes.",
-                      requirement="REQ_COMMON_KH_4101")]
+        if self._data_issues is None or self._data_issues[0] != self.revision:
+            self._data_issues = (self.revision, self._compute_data_issues())
+        return self._data_issues[1]
+
+    def _compute_data_issues(self) -> list[Issue]:
+        """Calcul des constats de ``data_issues``."""
+        def listing(pairs):
+            """« nom (nombre), … » limité à 8 variables."""
+            text = ", ".join(f"{name} ({count})" for name, count in pairs[:8])
+            return text + (f" et {len(pairs) - 8} autre(s)" if len(pairs) > 8 else "")
+
+        columns = self.table.columns
+        issues = []
+        empty = [(c.name, c.count(KIND_EMPTY)) for c in columns if c.count(KIND_EMPTY)]
+        if empty:
+            issues.append(Issue(Severity.WARNING, f"Cellules vides : {listing(empty)}. Elles restent vides "
+                                "(aucune valeur inventée) et sont encadrées de croix sur les courbes.",
+                                requirement="REQ_COMMON_KH_4101"))
+        nonfinite = [(c.name, c.count(KIND_NONFINITE)) for c in columns if c.count(KIND_NONFINITE)]
+        if nonfinite:
+            issues.append(Issue(Severity.WARNING, f"Valeurs non numériques « nan » / « inf » : {listing(nonfinite)}. "
+                                "Traitées comme des valeurs absentes.", requirement="REQ_COMMON_KH_4101"))
+        invalid = [(c.name, int(np.count_nonzero(self.signal(c.name).invalid))) for c in columns]
+        invalid = [(f"{name} : {self.signal(name).type.value}", count) for name, count in invalid if count]
+        if invalid:
+            issues.append(Issue(Severity.WARNING, f"Valeurs incompatibles avec le type : {listing(invalid)}. "
+                                "Non tracées ; type modifiable par clic droit sur la variable.",
+                                requirement="REQ_COMMON_KH_4101"))
+        return issues
 
     def all_issues(self) -> list[Issue]:
         return self.read_issues + self.time_issues() + self.data_issues()
@@ -99,7 +123,9 @@ class SourceFile:
         """Variable interprétée selon son type (auto ou forcé), mise en cache."""
         if name not in self._signals:
             column = next(c for c in self.table.columns if c.name == name)
-            self._signals[name] = interpret(column, self.type_overrides.get(name))
+            # Lignes à horodatage illisible exclues du choix automatique du type.
+            ignore = self.conversion.invalid if self.conversion is not None else None
+            self._signals[name] = interpret(column, self.type_overrides.get(name), ignore)
         return self._signals[name]
 
     def set_type(self, name: str, signal_type: SignalType | None) -> None:
@@ -119,10 +145,13 @@ class SourceFile:
 
     # ---------------------------------------------------------------- temps
     def display_seconds(self) -> np.ndarray:
-        """Temps relatif affiché : régularisé (jitter ignoré, REQ 4107) ou brut,
-        plus le décalage manuel éventuel."""
+        """Temps relatif affiché : brut (par défaut) ou régularisé (option « jitter
+        ignoré », REQ 4107), plus le décalage manuel éventuel. Un horodatage
+        aberrant isolé n'est pas placé sur l'axe (il est signalé dans le TBM)."""
         base = self.analysis.regular_s if self.time_settings.ignore_jitter else self.conversion.seconds
-        return base + float(self.time_settings.offset_s or 0.0)
+        seconds = base + float(self.time_settings.offset_s or 0.0)
+        seconds[self.analysis.excluded] = np.nan      # horodatages aberrants : non placés
+        return seconds
 
     def gap_starts(self) -> np.ndarray:
         """Indices des échantillons qui suivent un trou de données (rupture de courbe)."""
@@ -149,6 +178,7 @@ def configure_time(source: SourceFile, settings: Settings,
     source.analysis = analyze(source.conversion.seconds, ts.nominal_period_s, tolerance,
                               settings.frequency_change_min_run, settings.max_stored_events,
                               settings.preferred_periods_ms)
+    source._signals.clear()          # le type automatique dépend des horodatages lisibles
     source.revision += 1
 
 
@@ -165,13 +195,26 @@ def load_source(path, settings: Settings, progress=None, cancel=None,
         source.time_settings = time_settings
     try:
         source.table = read_csv(source.path, settings.max_file_size_mb, progress, cancel)
+        source.read_issues = list(source.table.issues)
+        configure_time(source, settings)
+        for group in detect_indexed_groups({n: source.signal(n) for n in source.variable_names()}):
+            source.groups[group.name] = group
     except CsvReadError as exc:
-        source.read_issues = exc.issues
-        return source
-    source.read_issues = list(source.table.issues)
-    configure_time(source, settings)
-    for group in detect_indexed_groups({n: source.signal(n) for n in source.variable_names()}):
-        source.groups[group.name] = group
+        source.table, source.read_issues = None, exc.issues
+    except ReadCancelled:
+        raise
+    except OSError as exc:            # disque réseau perdu, fichier verrouillé ou supprimé...
+        source.table, source.analysis = None, None
+        source.read_issues = [Issue(Severity.ERROR, f"Lecture interrompue : {exc}")]
+    except MemoryError:
+        source.table, source.analysis = None, None
+        source.read_issues = [Issue(Severity.ERROR, "Mémoire insuffisante pour ce fichier : réduire sa "
+                                    "taille ou fermer d'autres fichiers.", requirement="REQ_COMMON_KH_2310")]
+    except Exception as exc:  # noqa: BLE001 - REQ 4105 : un fichier ne bloque jamais les autres
+        source.table, source.analysis = None, None
+        where = traceback.extract_tb(exc.__traceback__)[-1]     # pour la maintenance
+        source.read_issues = [Issue(Severity.ERROR, f"Erreur inattendue pendant l'analyse : "
+                                    f"{type(exc).__name__} : {exc} ({Path(where.filename).name}:{where.lineno})")]
     return source
 
 

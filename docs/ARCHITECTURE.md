@@ -1,4 +1,4 @@
-# Architecture de VISU PTBG 2.0.0 — pour reprendre le code
+# Architecture de VISU PTBG 2.1.0 — pour reprendre le code
 
 ## 1. Vue d'ensemble
 
@@ -68,9 +68,13 @@ jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interf
 ## 2. Flux de données
 
 1. **Lecture** (`gui/app.py::_load`, fil de travail) : `load_source()` →
-   `read_csv()` (contrôles 2300-2310, conversion par blocs de 20 000 lignes, chaque
-   cellule classée vide / nombre / booléen / texte) → `convert_time_column()` (1re colonne
-   → secondes + origine absolue) → `analyze()` (raster, événements, horodatage régularisé).
+   `read_csv()` (contrôles 2300-2310 ; découpage **ligne physique par ligne physique**
+   dans `_split_rows`, repérage de l'en-tête dans `_locate_header`, conversion par blocs
+   de 20 000 lignes, chaque cellule classée vide / nombre / booléen / texte / non finie)
+   → `convert_time_column()` (1re colonne → secondes + origine absolue) → `analyze()`
+   (raster, événements, horodatages aberrants, horodatage régularisé facultatif).
+   `load_source()` ne lève jamais d'exception (sauf annulation) : toute erreur devient
+   un constat ERREUR sur ce seul fichier (REQ 4105).
 2. **Interprétation** à la demande : `SourceFile.signal(nom)` applique le type (auto ou
    forcé) sans relire le fichier ; résultat mis en cache, invalidé par `revision`.
 3. **Affichage** : un onglet est un `TabState` (données pures) ; `TabRenderer` le dessine
@@ -93,6 +97,9 @@ jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interf
 | Fils (`threading`) plutôt que processus | `multiprocessing` est peu fiable dans Spyder sous Windows |
 | Réduction min/max des points | courbes de millions de points fluides ; les pics restent visibles ; les curseurs lisent les vrais échantillons |
 | Aucune interpolation, aucune valeur inventée | traçabilité d'un outil d'analyse d'anomalies : une cellule vide reste vide (croix), un trou de temps interrompt la courbe |
+| Lecture ligne par ligne (et non `csv.reader` sur tout le fichier) | un guillemet non fermé ne peut plus avaler la suite du fichier ; numéros de ligne exacts ; découpage direct à la virgule plus rapide, module `csv` en mode strict seulement pour les lignes à guillemets |
+| Ligne au mauvais nombre de champs rejetée, jamais complétée | sa dernière valeur pourrait être tronquée : mieux vaut un trou signalé qu'une valeur fausse |
+| Robustesse vérifiée par un banc de fichiers abîmés | `tests/test_robustesse.py` : lignes tronquées ou en trop, guillemets, octets nuls, encodages, en-têtes absents ou répétés, horodatages aberrants, valeurs extrêmes, 40 corruptions aléatoires |
 | Nanosecondes entières pour les dates | pas d'arrondi flottant sur des horodatages absolus à la nanoseconde (REQ 2306) |
 | État des onglets en données pures | captures de rapport, projet JSON et tests sans écran |
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import tkinter as tk
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
@@ -452,20 +453,28 @@ class Application:
         if not source.is_loaded:
             self.show_diagnostic(source)
             return
-        dialog = TimeBaseDialog(self.root, source, self.settings.tolerance_pct)
+        assumed = [s for s in self.workspace.loaded_files() if s is not source and s.conversion.unit_assumed]
+        dialog = TimeBaseDialog(self.root, source, self.settings.tolerance_pct, len(assumed))
         if dialog.result is None or self._busy():
             return
-        new_settings = dialog.result
+        changes = [(source, dialog.result)]
+        if dialog.share_unit:     # unité confirmée d'un coup pour les autres PLC du même type
+            changes += [(other, replace(other.time_settings, unit=dialog.result.unit)) for other in assumed]
+
+        def work(_task):
+            """Réanalyse de chaque fichier modifié (fil de travail)."""
+            for target, settings in changes:
+                configure_time(target, self.settings, settings)
 
         def done(_result):
             """Réanalyse terminée : rafraîchit l'arbre et les onglets."""
-            self.notify(f"Base de temps de {source.name} reconfigurée : {source.time_status().label} — "
-                        f"{source.analysis.summary()}")
+            for target, _settings in changes:
+                self.notify(f"Base de temps de {target.name} reconfigurée : {target.time_status().label} — "
+                            f"{target.analysis.summary()}")
             self.tree.refresh()
             self.graph.redraw_all()
 
-        self._run(lambda task: configure_time(source, self.settings, new_settings), done,
-                  "Analyse de la base de temps")
+        self._run(work, done, "Analyse de la base de temps")
 
     def show_diagnostic(self, source: SourceFile | None = None) -> None:
         """Fenêtre de diagnostic complet du fichier (lecture, base de temps, événements)."""
