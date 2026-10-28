@@ -173,12 +173,13 @@ NCS/00/I/COMMON----/ES/010 Rev. A (matrice : docs/TRACABILITE_REQUIS.md).
 - 90 tests automatisés (unittest) dont l'interface réelle ; campagne Python 3.10
   à 3.14, Tk 8.6 et 9.0, numpy 1.24 à 2.5, matplotlib 3.6 à 3.11.
 
-## 1.0.0 et antérieures — prototype Codex (archivé)
+## 1.0.0 et antérieures — prototype
 
 Prototype Tkinter développé par itérations v0.3 à v1.0.0 (lecture CSV, diagnostic
 de base de temps, croix sur cellules vides, Time Base Monitor, premiers curseurs
-et rapports). Sources conservées dans `archive/` ; les données d'exemple et les
-scripts de simulation en ont été repris à l'identique. Les décisions de cette
+et rapports), remplacé par la version 2.0.0 et retiré du livrable. Les données
+d'exemple et les scripts de simulation de référence ont été conservés à l'identique
+(`data/exemples/`, `data/references_simulation/`). Les décisions de cette
 phase ont été reprises : première colonne imposée comme temps, aucune valeur
 inventée, croix réservées aux cellules vides, groupe binaire = colonnes Bool,
 Bool de condition lu sur la même ligne.

@@ -48,7 +48,7 @@ Contrôler un poste : `python tools/audit_environnement.py` (versions présentes
 Mesurer les performances sur de vrais fichiers PTBG : `python tools/banc_performance.py fichiers.csv`
 (ou `--generer 500` pour un fichier de synthèse de 500 Mo).
 
-## Organisation du code
+## Organisation du dossier
 
 ```
 MAIN.py            construit l'interface, rien d'autre (REQ 3002)
@@ -60,7 +60,11 @@ ptbg/system/       compatibilité Windows / SLES, environnement, journal
 tests/             132 tests automatisés (dont l'interface réelle et la robustesse)
 tools/             audit d'environnement, banc de performance, traçabilité, données de démo
 install/           installation et lancement Windows / SLES
-docs/              guide, architecture, dépendances, compatibilité, traçabilité
+data/demo/         CSV de démonstration (3 PLC + 1 fichier non conforme)
+data/exemples/     CSV reçus du projet (inchangés)
+data/references_simulation/  scripts de simulation de référence reçus (inchangés, hors outil)
+docs/              guide, architecture, traçabilité, points ouverts, dépendances,
+                   compatibilité, spécification (Word), récapitulatif Excel, captures, rapport exemple
 ```
 
 Pour reprendre le code : **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
@@ -99,5 +103,4 @@ Linux sans bureau : `xvfb-run python -m unittest discover -s tests`).
 
 ## Historique
 
-[CHANGELOG.md](CHANGELOG.md). La version 2.0.0 remplace le prototype 1.0.0, archivé
-dans `archive/`.
+[CHANGELOG.md](CHANGELOG.md).
