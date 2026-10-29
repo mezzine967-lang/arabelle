@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import csv
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from ptbg.core.arrangement import AxleState, CurveRef
 from ptbg.core.conditional import (STATS_HEADER, Condition, ConditionTerm, conditional_statistics, evaluate)
 from ptbg.core.data_package import SourceFile, Workspace
+from ptbg.gui.dialogs.base import Dialog
 
 
 def _labels(sources: list[SourceFile]) -> list[str]:
@@ -29,7 +30,7 @@ def _labels(sources: list[SourceFile]) -> list[str]:
     return labels
 
 
-class GroupDialog(simpledialog.Dialog):
+class GroupDialog(Dialog):
     """Choix du nom et des membres Bool d'un groupe ; result = (nom, membres)."""
 
     def __init__(self, parent, source: SourceFile, preselected: list[str]) -> None:
@@ -132,7 +133,7 @@ class ConditionFrame(ttk.LabelFrame):
         return Condition(terms, self.combine.get()) if terms else None
 
 
-class HorizontalCursorDialog(simpledialog.Dialog):
+class HorizontalCursorDialog(Dialog):
     """Niveau du curseur horizontal et condition ; result = (actif, niveau, condition)."""
 
     def __init__(self, parent, workspace: Workspace, axle: AxleState, suggested_level: float) -> None:
@@ -172,7 +173,7 @@ class HorizontalCursorDialog(simpledialog.Dialog):
         self.result = (self.enabled.get(), self._level, self.condition_frame.condition())
 
 
-class XYDialog(simpledialog.Dialog):
+class XYDialog(Dialog):
     """Choix des signaux X et Y ; result = (CurveRef X, CurveRef Y, mode du curseur)."""
 
     def __init__(self, parent, workspace: Workspace, axle: AxleState) -> None:

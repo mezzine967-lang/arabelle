@@ -45,6 +45,7 @@ from ptbg.version import SPECIFICATION, full_name
 
 PAGE_SIZE = (11.69, 8.27)       # A4 paysage, en pouces
 MAX_READING_ROWS = 14           # lignes de lecture imprimées sous le graphique
+CROWDED_READING_ROWS = 8        # idem quand 3 axes ou plus se partagent la hauteur (suite en annexe)
 
 
 @dataclass
@@ -93,13 +94,13 @@ def _draw_header(fig: Figure, header: ReportHeader, summary: list[str]) -> None:
     fig.add_artist(Line2D([0.03, 0.97], [0.858, 0.858], color="#555555", lw=0.6))
 
 
-def _draw_readings(fig: Figure, rows, bottom: float, height: float) -> None:
-    """Tableau des lectures de curseurs sous le graphique."""
+def _draw_readings(fig: Figure, rows, bottom: float, height: float, limit: int) -> None:
+    """Tableau des lectures de curseurs sous le graphique (``limit`` lignes, suite en annexe)."""
     ax = fig.add_axes([0.03, bottom, 0.94, height])
     ax.set_axis_off()
-    shown = [row.as_tuple() for row in rows[:MAX_READING_ROWS]]
-    if len(rows) > MAX_READING_ROWS:
-        shown.append(("…", "", f"{len(rows) - MAX_READING_ROWS} lecture(s) supplémentaire(s) en annexe",
+    shown = [row.as_tuple() for row in rows[:limit]]
+    if len(rows) > limit:
+        shown.append(("…", "", f"{len(rows) - limit} lecture(s) supplémentaire(s) en annexe",
                       "", "", ""))
     table = ax.table(cellText=[[textwrap.shorten(str(c), 60) for c in r] for r in shown],
                      colLabels=READING_HEADER, loc="upper center", cellLoc="left",
@@ -118,7 +119,8 @@ def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspac
                         all(s.conversion.date_known for s in loaded) if loaded else True)
     rows = compute_readings(page.tab, workspace, timeline)
     files = [s for s in (workspace.find(fid) for fid in page.tab.file_ids()) if s is not None]
-    curves = sum(len(axle.curves) for axle in page.tab.axles)
+    # Courbes tracées : celles des axes temporels, plus un nuage par axe X/Y renseigné.
+    curves = sum(len(axle.curves) + (axle.xy_x is not None and axle.xy_y is not None) for axle in page.tab.axles)
     _draw_header(fig, header, [f"Page {number}/{count}", f"Fichiers sources : {len(files)}",
                                f"Courbes : {curves}", f"Lectures de curseurs : {len(rows)}",
                                f"Base de temps : {monitor_status(files).label if files else '—'}"])
@@ -127,7 +129,10 @@ def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspac
     if page.tab.comment:
         fig.text(0.5, 0.815, textwrap.shorten(page.tab.comment, 220), fontsize=7.5, style="italic",
                  ha="center", family=REPORT_FONT)
-    table_height = 0.0 if not rows else min(0.035 + 0.018 * min(len(rows), MAX_READING_ROWS + 1), 0.30)
+    # Disposition chargée (3 axes ou plus) : moins de lignes sous le graphique, qui garde
+    # assez de hauteur pour rester lisible ; les autres lectures vont en annexe.
+    limit = CROWDED_READING_ROWS if page.tab.template.nrows >= 3 else MAX_READING_ROWS
+    table_height = 0.0 if not rows else min(0.035 + 0.018 * min(len(rows), limit + 1), 0.30)
     graph_bottom = 0.04 + table_height
     # Une sous-figure n'utilise que les RATIOS de sa grille (pas top/bottom) :
     # 3 bandes = en-tête (masqué ici), zone graphique, tableau des lectures.
@@ -136,11 +141,11 @@ def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspac
     TabRenderer(area, page.tab, workspace, timeline, settings.max_points_per_curve * 2, for_print=True,
                 height_in=PAGE_SIZE[1] * (0.80 - graph_bottom)).draw()
     if rows:
-        _draw_readings(fig, rows, 0.035, table_height)
+        _draw_readings(fig, rows, 0.035, table_height, limit)
     fig.text(0.5, 0.012, f"{header.tool} — {SPECIFICATION}", ha="center", fontsize=6.5, color="#555555",
              family=REPORT_FONT)
     pdf.savefig(fig)
-    return rows[MAX_READING_ROWS:]
+    return rows[limit:]
 
 
 def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, pages: list[ReportPage],

@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 
 from ptbg.config import Settings
+from ptbg.gui.dialogs.base import Dialog, ask_text
 from ptbg.system.compat import current_user
 
 
-class HeaderDialog(simpledialog.Dialog):
+class HeaderDialog(Dialog):
     """Saisie des champs libres de l'en-tête ; result = dict ou None."""
 
     def __init__(self, parent, settings: Settings) -> None:
@@ -92,8 +93,7 @@ class PagesWindow(tk.Toplevel):
         if index is None:
             return
         page = self.controller.report_pages[index]
-        text = simpledialog.askstring("Commentaire de page", "Commentaire imprimé sous le titre :",
-                                      initialvalue=page.tab.comment, parent=self)
+        text = ask_text(self, "Commentaire de page", "Commentaire imprimé sous le titre :", page.tab.comment)
         if text is not None:
             page.tab.comment = text
             self.refresh()
@@ -111,7 +111,7 @@ class PagesWindow(tk.Toplevel):
         self.refresh()
 
 
-class PreferencesDialog(simpledialog.Dialog):
+class PreferencesDialog(Dialog):
     """Paramètres persistants ; result = dict des valeurs validées."""
 
     FIELDS = (

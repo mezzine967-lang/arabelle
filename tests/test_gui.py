@@ -9,6 +9,7 @@ import time
 import tkinter as tk
 import unittest
 from pathlib import Path
+from tkinter import simpledialog
 from unittest import mock
 
 from helpers import DEMO, EXAMPLES, TempFiles
@@ -216,6 +217,62 @@ class InterfaceTests(unittest.TestCase):
         tab.add_curves([(source.id, "output", False)], 0)
         self.assertTrue(tab.float_curve_selected())
 
+    def test_dialogs_speak_french(self):
+        """REQ 5100 : les dialogues de l'outil affichent « OK » / « Annuler » (et non
+        « Cancel ») ; la saisie de texte (renommer, commentaire) en fait partie."""
+        from ptbg.gui.dialogs import analysis_dialogs, report_dialogs, time_base_dialog
+        from ptbg.gui.dialogs.base import Dialog, TextQuery, ask_text
+        for module in (analysis_dialogs, report_dialogs, time_base_dialog):
+            for item in vars(module).values():
+                if isinstance(item, type) and issubclass(item, simpledialog.Dialog):
+                    self.assertTrue(issubclass(item, Dialog), item.__name__)
+        seen = []
+
+        def answer():
+            """Relève les boutons du dialogue ouvert, puis répond « Vue 2 »."""
+            dialog = [w for w in self.root.winfo_children() if isinstance(w, TextQuery)][-1]
+            buttons = dialog.winfo_children()[-1].winfo_children()
+            seen.extend(button.cget("text") for button in buttons)
+            dialog.entry.delete(0, "end")
+            dialog.entry.insert(0, "Vue 2")
+            dialog.ok()
+
+        self.root.after(300, answer)
+        self.assertEqual(ask_text(self.root, "Onglet", "Nouveau titre :", "Vue"), "Vue 2")
+        self.assertEqual(seen, ["OK", "Annuler"])
+
+    def test_narrow_window_keeps_every_tool_visible(self):
+        """REQ 5104 / 5106 : fenêtre étroite, la barre d'outils de l'onglet passe à la ligne :
+        chaque bouton reste entièrement visible (« Vue d'origine » ne sort plus de l'écran)."""
+        tab = self.ctl.graph.active_tab()
+        self.ctl.toggle_tree()
+        self.root.geometry("820x700+0+0")
+        end = time.time() + 1.0
+        while time.time() < end:                       # redimensionnement et redessins différés
+            self.root.update()
+            time.sleep(0.01)
+        bar = tab.tbm_button.master
+        for widget in bar.winfo_children():
+            if widget.winfo_manager() == "place":
+                self.assertLessEqual(widget.winfo_x() + widget.winfo_width(), bar.winfo_width() + 1,
+                                     widget.winfo_class())
+        self.assertGreater(bar.winfo_height(), 2 * tab.tbm_button.winfo_height())     # plus de 2 lignes
+
+    def test_truncated_rows_have_a_tooltip_text(self):
+        """REQ 5201 / 5402 : une ligne tronquée de l'arbre ou du panneau de lecture a une
+        bulle d'aide avec son texte complet."""
+        (source,) = self.load(DEMO / "PLC_B_20ms_dephase.csv")
+        text = self.ctl.tree._row_text(f"file:{source.id}")
+        self.assertIn(source.name, text)
+        self.assertIn("AVERTISSEMENT", text)
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "P_mesure_B", False)], 0)
+        tab.set_active_axle(0)
+        tab.set_cursor_mode("single")
+        self.root.update()
+        row = tab.panel.table.get_children()[0]
+        self.assertIn("Courbe : P_mesure_B", tab.panel._row_text(row))
+
     def test_reset_view_returns_to_full_duration(self):
         """REQ 5106 / 5405 : après un zoom et un déplacement vertical, « Vue d'origine »
         réaffiche toute la durée avec les échelles automatiques ; les courbes restent."""
@@ -349,7 +406,7 @@ class InterfaceTests(unittest.TestCase):
                 mock.patch("ptbg.gui.app.messagebox.askyesno", return_value=False):
             self.ctl.automatic_report()
         self.assertTrue(auto_pdf.read_bytes().startswith(b"%PDF"))
-        with mock.patch("ptbg.gui.app.simpledialog.askstring", return_value="Vue 1"):
+        with mock.patch("ptbg.gui.app.ask_text", return_value="Vue 1"):
             self.ctl.add_report_page()
             tab.set_cursor_mode("single")
             self.ctl.add_report_page()

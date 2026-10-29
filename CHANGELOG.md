@@ -7,7 +7,7 @@ et le nombre de tests.
 
 | Version | Date | En une ligne | Tests |
 |---|---|---|---|
-| 1.0.0 | 2026-10-29 | première version livrée pour revue des requis | 140 |
+| 1.0.0 | 2026-10-29 | première version livrée pour revue des requis | 144 |
 
 ## 1.0.0 — 2026-10-29 — première version livrée
 
@@ -31,7 +31,7 @@ les 18 questions à faire valider.
 | Rapports (§ 5) | PDF automatique ou pas à pas, en-tête complet (REQ 6005), Time Base Monitor, lectures, page de traçabilité |
 | Projet | fichier `.ptbg.json` (chemins relatifs, réglages, onglets, curseurs, pages du rapport) |
 | Architecture (§ 6) | Python 3.11 de référence (3.10 à 3.14 vérifiés), stdlib + numpy + matplotlib ; Windows 11 et SLES 15 SP7 depuis les mêmes sources, différences isolées dans `ptbg/system/compat.py` |
-| Qualité | 140 tests automatisés (dont l'interface réelle et un banc de fichiers abîmés) ; contrôle automatique de la traçabilité ; performances : 1 million de lignes × 21 colonnes lues et analysées en 5 à 7 s sur le banc Linux |
+| Qualité | 144 tests automatisés (dont l'interface réelle et un banc de fichiers abîmés) ; contrôle automatique de la traçabilité ; performances : 1 million de lignes × 21 colonnes lues et analysées en 5 à 7 s sur le banc Linux |
 
 Reste à faire avant de déclarer l'outil qualifié : réponses aux points ouverts, essai de
 réception sur Windows 11 / Spyder 6 et sur le Service Unit SLES 15 SP7, essai sur les

@@ -13,7 +13,10 @@
 """
 from __future__ import annotations
 
+import textwrap
+
 import numpy as np
+from matplotlib.lines import Line2D
 
 from ptbg.core.data_package import SourceFile, Timeline
 from ptbg.core.diagnostics import Severity, worst
@@ -22,6 +25,8 @@ from ptbg.core.time_parser import format_absolute
 from ptbg.plotting.styles import CURVE_COLORS, EVENT_STYLE, FONT_SMALL, SEVERITY_COLORS, apply_grid
 
 TITLE = "Time Base Monitor"
+LINE_HEIGHT_PT = 8.5      # interligne des étiquettes « fichier : T = … » (points)
+LEGEND_WIDTH = 22         # caractères par ligne de la légende placée dans la marge du rapport
 
 
 def monitor_status(sources: list[SourceFile]) -> Severity:
@@ -58,25 +63,38 @@ def describe_source(source: SourceFile) -> str:
     return text
 
 
-def text_height_in(sources: list[SourceFile]) -> float:
-    """Hauteur (pouces) du bandeau texte : titre + lignes de description."""
-    lines = sum(describe_source(source).count("\n") + 1 for source in sources) or 1
-    return 0.22 + 0.118 * lines
+def wrap_text(text: str, chars: int) -> str:
+    """Texte coupé à ``chars`` caractères par ligne ; les suites gardent le retrait
+    de leur ligne (rien n'est rogné au bord de la figure)."""
+    out = []
+    for line in text.split("\n"):
+        indent = " " * (len(line) - len(line.lstrip()) + 4)
+        out += textwrap.wrap(line, max(chars, 20), subsequent_indent=indent) or [""]
+    return "\n".join(out)
 
 
-def confirmation_text(sources: list[SourceFile]) -> str:
+def text_height_in(sources: list[SourceFile], chars: int) -> float:
+    """Hauteur (pouces) du bandeau texte : titre + lignes de description coupées à ``chars``."""
+    lines = sum(wrap_text(describe_source(source), chars).count("\n") + 1 for source in sources) or 1
+    return 0.28 + 0.118 * lines             # marge sous le texte : il ne touche pas la courbe
+
+
+def confirmation_text(sources: list[SourceFile], chars: int) -> str:
     """Indication imprimée quand le TBM a été retiré de la mise en page (REQ 4104)."""
     status = monitor_status(sources)
     verdict = "CONFORME" if status <= Severity.INFO else f"NON CONFORME ({status.label})"
     lines = [f"{TITLE} retiré de la mise en page par l'émetteur — construction de la base de "
              f"temps vérifiée : {verdict}."]
     lines += [describe_source(source) for source in sources]
-    return "\n".join(lines)
+    return wrap_text("\n".join(lines), chars)
 
 
-def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline) -> list:
+def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline, chars: int,
+                 outside: bool = False) -> list:
     """Dessine le TBM : bandeau de texte (conversion/statut) + courbe des Δt.
 
+    Description coupée à ``chars`` caractères par ligne. Légende des anomalies : une entrée par sorte d'anomalie (total des
+    fichiers) ; ``outside`` (rapport) la place à droite de la courbe.
     Renvoie les (ligne, x, y) des courbes de Δt pour que le rendu les réduise
     au zoom comme les autres courbes."""
     status = monitor_status(sources) if sources else Severity.OK
@@ -85,7 +103,7 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     title = f"{TITLE} — statut : {status.label if sources else 'aucun fichier affiché'}"
     text_ax.text(0.0, 1.0, title, transform=text_ax.transAxes, va="top", ha="left",
                  fontsize=FONT_SMALL + 1, fontweight="bold", color=color)
-    body = "\n".join(describe_source(source) for source in sources)
+    body = wrap_text("\n".join(describe_source(source) for source in sources), chars)
     # Corps placé juste sous le titre (décalage en points, indépendant de la hauteur).
     text_ax.annotate(body, xy=(0.0, 1.0), xycoords="axes fraction", xytext=(0, -13),
                      textcoords="offset points", va="top", ha="left",
@@ -108,10 +126,28 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     for position, source in enumerate(loaded):
         lines.append(_draw_source(plot_ax, source, timeline, CURVE_COLORS[position % len(CURVE_COLORS)],
                                   top, position, relative))
-    if plot_ax.get_legend_handles_labels()[0]:
-        plot_ax.legend(loc="upper left", fontsize=FONT_SMALL - 1, framealpha=0.8, ncol=3)
+    totals = {kind: sum(s.analysis.event_counts[kind] for s in loaded) for kind in EVENT_STYLE
+              if kind is not EventKind.FREQUENCY}
+    handles = [Line2D([], [], marker=EVENT_STYLE[kind][0], ls="none", ms=6, color=EVENT_STYLE[kind][1],
+                      mec="white", mew=0.5, label=_legend_label(f"{kind.label} ({count})", outside))
+               for kind, count in totals.items() if count]
+    changes = sum(s.analysis.event_counts[EventKind.FREQUENCY] for s in loaded)
+    if changes:
+        handles.append(Line2D([], [], color=EVENT_STYLE[EventKind.FREQUENCY][1], ls="-.", lw=1.2,
+                              label=_legend_label(f"{EventKind.FREQUENCY.label} ({changes})", outside)))
+    if handles and outside:
+        plot_ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
+                       fontsize=FONT_SMALL - 1, frameon=False)
+    elif handles:
+        plot_ax.legend(handles=handles, loc="upper left", fontsize=FONT_SMALL - 1, framealpha=0.8,
+                       ncol=len(handles))
     plot_ax.set_ylim(0, top * 1.08)
     return lines
+
+
+def _legend_label(text: str, outside: bool) -> str:
+    """Libellé de légende ; à droite de la courbe (rapport), coupé pour tenir dans la marge."""
+    return "\n".join(textwrap.wrap(text, LEGEND_WIDTH)) if outside else text
 
 
 def _readable_neighbour_x(x_all: np.ndarray, indices: list[int]) -> np.ndarray:
@@ -161,8 +197,10 @@ def _draw_source(ax, source, timeline, color, top, position, relative):
             for value in ex:
                 ax.axvline(value, color=event_color, lw=1.2, ls="-.")
         else:
-            ax.plot(ex, ey, marker, ls="none", ms=6, color=event_color, mec="white", mew=0.5,
-                    label=f"{kind.label} ({analysis.event_counts[kind]})")
-    ax.text(0.995, 0.97 - 0.12 * position, f"{source.name} : T = {ms(analysis.period_used_s)} ms",
-            transform=ax.transAxes, ha="right", va="top", fontsize=FONT_SMALL - 1, color=color)
+            ax.plot(ex, ey, marker, ls="none", ms=6, color=event_color, mec="white", mew=0.5)
+    # Une ligne par fichier, empilées en points : elles ne se recouvrent pas sur une courbe basse.
+    ax.annotate(f"{source.name} : T = {ms(analysis.period_used_s)} ms", xy=(0.995, 1.0),
+                xycoords="axes fraction", xytext=(0, -2 - position * LINE_HEIGHT_PT), textcoords="offset points",
+                ha="right", va="top", fontsize=FONT_SMALL - 1, color=color,
+                bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.3))
     return line, x, shown

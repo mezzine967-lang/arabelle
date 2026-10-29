@@ -20,6 +20,8 @@ demandée par REQ_COMMON_KH_5405.
 """
 from __future__ import annotations
 
+import textwrap
+
 import numpy as np
 from matplotlib import rc_context, style
 from matplotlib.transforms import blended_transform_factory
@@ -43,6 +45,21 @@ MAX_MARKERS = 3000      # croix / marqueurs dessinés au plus par courbe
 MAX_SHADED = 400        # périodes de condition ombrées au plus
 MAX_XY_POINTS = 20000
 HSPACE = 0.45           # espace vertical entre axes (fraction de hauteur moyenne)
+CHAR_WIDTH_EM = 0.62    # largeur moyenne d'un caractère (fraction de la taille de police)
+LINE_PT = 1.35          # hauteur d'une ligne de texte (fraction de la taille de police)
+MIN_TBM_PLOT_IN = 0.45  # hauteur minimale de la courbe des Δt du TBM (pouces)
+
+
+def _time_slot_below(tpl, slot) -> bool:
+    """Vrai si un autre axe temporel est placé sous ``slot``, dans les mêmes colonnes."""
+    columns = set(range(slot.col, slot.col + slot.colspan))
+    return any(other.kind == "time" and other.row >= slot.row + slot.rowspan
+               and columns & set(range(other.col, other.col + other.colspan)) for other in tpl.slots)
+
+
+def _height_pt(ax) -> float:
+    """Hauteur réelle d'un axe en points (connue dès sa création, avant tout dessin)."""
+    return ax.bbox.height * 72.0 / ax.figure.dpi
 
 
 def _representable_limits(arrays) -> tuple[float, float] | None:
@@ -99,6 +116,7 @@ class TabRenderer:
         self._cursor_artists: list = []
         self._h_cache: dict = {}
         self._legend_outside = False        # légende de l'axe en cours de dessin hors du graphique
+        self._time_labels = True            # graduations de temps écrites sur l'axe en cours de dessin
 
     # ------------------------------------------------------------------ build
     def sources_in_tab(self):
@@ -129,9 +147,21 @@ class TabRenderer:
             ratios.append(min(0.8 * total, 0.38 * total * (1 + 0.3 * max(len(sources) - 1, 0))))
         elif with_note:
             ratios.append(0.12 * total * (1 + 0.5 * len(sources)))
+        # Caractères par ligne du texte du TBM : largeur de la zone / largeur d'un caractère.
+        right = 0.84 if self.for_print else 0.985
+        width_pt = self.container.bbox.width * 72.0 / self.container.figure.dpi * (right - 0.075)
+        chars = int(width_pt / (CHAR_WIDTH_EM * (FONT_SMALL - 0.5)))
+        if with_tbm:
+            # Petite fenêtre : la bande du TBM grandit assez pour son texte et une courbe
+            # lisible (sans dépasser 60 % de la hauteur), au lieu que le texte morde la courbe.
+            rows, others = len(ratios), sum(ratios[:-1])
+            scale = self.height_in * 0.89 * rows / (rows + HSPACE * (rows - 1))
+            needed = monitor.text_height_in(sources, chars) + MIN_TBM_PLOT_IN
+            if scale > needed:
+                ratios[-1] = max(ratios[-1], min(needed * others / (scale - needed), 1.5 * others))
         grid = self.container.add_gridspec(
             len(ratios), tpl.ncols, height_ratios=ratios, width_ratios=list(tpl.col_ratios),
-            left=0.075, right=0.84 if self.for_print else 0.985, top=0.965, bottom=0.075,
+            left=0.075, right=right, top=0.965, bottom=0.075,
             hspace=HSPACE, wspace=0.22)
         master = None
         for index, (slot, axle) in enumerate(zip(tpl.slots, self.tab.axles)):
@@ -144,6 +174,9 @@ class TabRenderer:
             else:
                 ax = self.container.add_subplot(spec)
             self.axes.append(ax)
+            # Temps commun : graduations lues sur l'axe du bas de la colonne ; le titre
+            # de l'axe suivant ne bute plus sur les nombres de celui-ci.
+            self._time_labels = not _time_slot_below(tpl, slot)
             try:
                 if axle.kind == "xy":
                     self._draw_xy_axle(index, ax, axle)
@@ -156,12 +189,13 @@ class TabRenderer:
             rows = len(ratios)
             band_in = (self.height_in * 0.89 * rows * ratios[-1]
                        / (sum(ratios) * (rows + HSPACE * (rows - 1))))
-            text_in = monitor.text_height_in(sources)
+            text_in = monitor.text_height_in(sources, chars)
             text_share = text_in / max(band_in - text_in, 0.35)
             band = grid[tpl.nrows, :].subgridspec(2, 1, height_ratios=[text_share, 1], hspace=0.04)
             text_ax = self.container.add_subplot(band[0])
             self.tbm_plot = self.container.add_subplot(band[1], sharex=master)
-            for line, x, y in monitor.draw_monitor(text_ax, self.tbm_plot, sources, self.timeline):
+            for line, x, y in monitor.draw_monitor(text_ax, self.tbm_plot, sources, self.timeline, chars,
+                                                   outside=self.for_print):
                 self._lines.append((self.tbm_plot, line, DisplayCurve(x, y)))
             apply_time_axis(self.tbm_plot, self.timeline, True)
             self.tbm_plot.set_xlabel(axis_title(self.timeline), fontsize=FONT_SMALL)
@@ -169,7 +203,7 @@ class TabRenderer:
             note_ax = self.container.add_subplot(grid[tpl.nrows, :])
             note_ax.set_axis_off()
             status = monitor.monitor_status(sources)
-            note_ax.text(0.0, 1.0, monitor.confirmation_text(sources), transform=note_ax.transAxes,
+            note_ax.text(0.0, 1.0, monitor.confirmation_text(sources, chars), transform=note_ax.transAxes,
                          va="top", ha="left", fontsize=FONT_SMALL - 0.5,
                          bbox=dict(boxstyle="round", fc="#f4f8f4", ec=SEVERITY_COLORS[status]))
         if master is not None:
@@ -230,12 +264,12 @@ class TabRenderer:
         """Texte d'aide dans un axe vide (écran seulement, jamais dans le PDF)."""
         if not self.for_print:
             ax.text(0.5, 0.5, text, transform=ax.transAxes, ha="center", va="center",
-                    fontsize=FONT_NORMAL, color="#777777")
+                    fontsize=FONT_NORMAL, color="#777777", clip_on=True)
 
     def _draw_time_axle(self, index: int, ax, axle: AxleState) -> None:
         """Axe temporel : analogique ou pistes logiques selon ses courbes."""
         self._style_axle(index, ax)
-        apply_time_axis(ax, self.timeline, True)
+        apply_time_axis(ax, self.timeline, self._time_labels)
         curves = [c for c in (resolve(ref, self.workspace) for ref in axle.curves) if c is not None]
         if not curves:
             self._placeholder(ax, "Double-cliquer ou glisser une variable de l'arbre ici")
@@ -293,7 +327,15 @@ class TabRenderer:
             legend.set_draggable(True)
 
     def _draw_digital(self, index, ax, axle, curves: list[CurveData]) -> None:
-        """Pistes logiques empilées de haut en bas, étiquetées à gauche."""
+        """Pistes logiques empilées de haut en bas, étiquetées à gauche.
+
+        Axe trop bas pour écrire le nom au-dessus de chaque piste (rapport à
+        4 axes, petite fenêtre) : le nom est écrit au milieu de sa piste et les
+        étiquettes 0/1, qui se chevaucheraient, sont retirées."""
+        lanes = sum(len(c.members) if c.ref.is_group else 1 for c in curves)
+        span = (lanes - 1) * LANE_STEP + LANE_HEIGHT + 0.7          # hauteur des données (ylim)
+        lane_pt = _height_pt(ax) * LANE_STEP / span
+        compact = lane_pt < 3.2 * FONT_SMALL
         ticks, lane = [], 0
         for position, curve in enumerate(curves):
             color = curve.ref.color or curve_color(position)
@@ -320,15 +362,17 @@ class TabRenderer:
                 self._lanes[(index, position)] = (base, scale)
                 # Nom de la piste DANS l'axe : les noms longs ne sont pas tronqués.
                 # Découpé au cadre de l'axe : un nom ne déborde pas quand on déplace la vue.
-                ax.text(0.003, base + LANE_HEIGHT + 0.05, ("► " if selected else "") + name,
+                ax.text(0.003, base + (LANE_HEIGHT / 2 if compact else LANE_HEIGHT + 0.05),
+                        ("► " if selected else "") + name,
                         transform=blended_transform_factory(ax.transAxes, ax.transData),
-                        fontsize=FONT_SMALL, color=color, va="bottom", ha="left", clip_on=True,
+                        fontsize=FONT_SMALL - (1 if compact else 0), color=color,
+                        va="center" if compact else "bottom", ha="left", clip_on=True,
                         bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.5))
                 ticks += [base, base + LANE_HEIGHT]
                 lane += 1
         ax.set_yticks(ticks)
-        # Au-delà de 4 pistes, les étiquettes 0/1 se chevaucheraient : seuls les traits restent.
-        ax.set_yticklabels(["0", "1"] * (len(ticks) // 2) if lane <= 4 else [], fontsize=FONT_SMALL - 1)
+        # Pistes trop serrées : les étiquettes 0/1 se chevaucheraient, seuls les traits restent.
+        ax.set_yticklabels([] if compact else ["0", "1"] * (len(ticks) // 2), fontsize=FONT_SMALL - 1)
         ax.set_ylim(-(lane - 1) * LANE_STEP - 0.3, LANE_HEIGHT + 0.4)
 
     def _draw_xy_axle(self, index: int, ax, axle: AxleState) -> None:
@@ -350,7 +394,10 @@ class TabRenderer:
         apply_grid(ax, minor_y=True)
         ax.set_xlabel(f"X : {axle.xy_x.name}", fontsize=FONT_SMALL)
         ax.set_ylabel(f"Y : {axle.xy_y.name}", fontsize=FONT_SMALL)
-        ax.set_title(f"Axe {index + 1} — X/Y : {data.describe()}", loc=self._title_side(), fontsize=FONT_SMALL, pad=3)
+        # Titre coupé à la largeur de l'axe : rien n'est rogné au bord de la figure.
+        chars = int(self._width_pt(ax) / (CHAR_WIDTH_EM * FONT_SMALL))
+        ax.set_title(textwrap.fill(f"Axe {index + 1} — X/Y : {data.describe()}", max(chars, 20)),
+                     loc=self._title_side(), fontsize=FONT_SMALL, pad=3)
         if axle.ylim:
             ax.set_ylim(*axle.ylim)
 
@@ -408,30 +455,77 @@ class TabRenderer:
             self.container.figure.draw_artist(artist)
 
     def _draw_vertical_cursors(self, index: int, ax, axle: AxleState) -> None:
-        """Curseurs global, C1, C2 : ligne, instant, valeur de la courbe sélectionnée, Δt."""
+        """Curseurs global, C1, C2 : ligne, instant, valeur de la courbe sélectionnée, Δt.
+
+        Les étiquettes ne se chevauchent pas : chacune prend la première rangée
+        (depuis le haut) où elle ne touche aucune autre ; axe trop bas pour deux
+        lignes par étiquette : l'instant seul (la valeur reste dans les lectures)."""
         to_axes = blended_transform_factory(ax.transData, ax.transAxes)
         curve = resolve(axle.selected_curve(), self.workspace) if axle.selected_curve() else None
-        for row, (label, position) in enumerate(cursor_positions(self.tab, axle)):
+        labels = []
+        for label, position in cursor_positions(self.tab, axle):
             color = CURSOR_COLORS[label]
             self._keep(ax.axvline(position, color=color, lw=1.2, ls="--" if label == "Global" else "-"))
-            text = f"{label}  {self.timeline.format(position)}"
+            lines = [f"{label}  {self.timeline.format(position)}"]
             if curve is not None:
                 sample = sample_at(self.timeline.grid(curve.source), curve.values, position, curve.hold)
                 if sample is not None:
-                    text += f"\n{curve.ref.name} = {curve.format_at(sample.index)}"
+                    lines.append(f"{curve.ref.name} = {curve.format_at(sample.index)}")
                     y_mark = self._display_y(index, axle, curve, sample.value)
                     if y_mark is not None:
                         self._keep(ax.plot(sample.x, y_mark, "o", ms=6, mfc="none", mec=color, mew=1.5)[0])
-            self._keep(ax.text(position, 0.98 - 0.2 * row, text, transform=to_axes, va="top", ha="left",
-                               fontsize=FONT_SMALL, color=color, zorder=5,
-                               bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.6, pad=1.5)))
-        if axle.cursor_mode == "double" and axle.t1 is not None and axle.t2 is not None:
+            labels.append((position, color, lines))
+        double = axle.cursor_mode == "double" and axle.t1 is not None and axle.t2 is not None
+        height = _height_pt(ax) - (2.2 * FONT_SMALL if double else 0)       # place du Δt en bas
+        for depth in (2, 1):
+            placed = self._place_labels(ax, [(x, lines[:depth]) for x, _, lines in labels])
+            used = max((row + 1 for row in placed), default=0)
+            if depth == 1 or used * (depth * LINE_PT * FONT_SMALL + 5) <= height:
+                break
+        for (position, color, lines), row in zip(labels, placed):
+            text = "\n".join(lines[:depth])
+            left, right = ax.get_xlim()
+            flip = self._label_width(text) > (right - position) / (right - left) * self._width_pt(ax)
+            self._keep(ax.annotate(text, xy=(position, 1.0), xycoords=to_axes, va="top",
+                                   xytext=(-3 if flip else 3, -2 - row * (depth * LINE_PT * FONT_SMALL + 5)),
+                                   textcoords="offset points", ha="right" if flip else "left",
+                                   fontsize=FONT_SMALL, color=color, zorder=5, annotation_clip=False,
+                                   bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.6, pad=1.5)))
+        if double:
             delta = axle.t2 - axle.t1
             self._keep(ax.annotate("", xy=(axle.t2, 0.06), xytext=(axle.t1, 0.06), xycoords=to_axes,
                                    arrowprops=dict(arrowstyle="<->", color="#333333", lw=1.0)))
             self._keep(ax.text((axle.t1 + axle.t2) / 2, 0.09, f"Δt = {delta:.9g} s", transform=to_axes,
                                ha="center", va="bottom", fontsize=FONT_SMALL,
                                bbox=dict(fc="#fffde7", ec="#999999", lw=0.5, pad=1.2)))
+
+    @staticmethod
+    def _label_width(text: str) -> float:
+        """Largeur estimée d'une étiquette (points), cadre compris."""
+        return max(len(line) for line in text.split("\n")) * CHAR_WIDTH_EM * FONT_SMALL + 6
+
+    @staticmethod
+    def _width_pt(ax) -> float:
+        """Largeur réelle d'un axe en points."""
+        return ax.bbox.width * 72.0 / ax.figure.dpi
+
+    def _place_labels(self, ax, items) -> list[int]:
+        """Rangée de chaque étiquette (x, lignes) : la première libre à cet endroit."""
+        left, right = ax.get_xlim()
+        scale = self._width_pt(ax) / ((right - left) or 1.0)
+        occupied: list[list[tuple[float, float]]] = []
+        rows = []
+        for x, lines in items:
+            width = self._label_width("\n".join(lines))
+            start = (x - left) * scale
+            span = (start - width, start) if start + width > self._width_pt(ax) else (start, start + width)
+            row = next((n for n, taken in enumerate(occupied)
+                        if all(span[1] < a or span[0] > b for a, b in taken)), len(occupied))
+            if row == len(occupied):
+                occupied.append([])
+            occupied[row].append(span)
+            rows.append(row)
+        return rows
 
     def _display_y(self, index, axle, curve, value):
         """Ordonnée affichée d'une valeur (piste logique : base + échelle × valeur)."""

@@ -41,8 +41,41 @@ from ptbg.plotting.renderer import TabRenderer
 from ptbg.plotting.styles import ACTIVE_AXLE_COLOR, curve_color
 
 PICK_TOLERANCE_PX = 8
+FLOW_MARGIN = 4         # marge gauche et droite de la barre d'outils (pixels)
 PANEL_WIDTH = 420       # largeur initiale du panneau de lecture (pixels)
 CURSOR_MODES = (("none", "Aucun curseur vertical"), ("single", "Curseur simple"), ("double", "Double curseur"))
+
+
+class FlowBar(ttk.Frame):
+    """Barre d'outils dont les éléments passent à la ligne quand la largeur manque."""
+
+    def __init__(self, master) -> None:
+        """Barre vide ; ``add`` y range les éléments dans l'ordre."""
+        super().__init__(master)
+        self._items: list[tuple] = []          # (élément, espace après, début de ligne imposé)
+        self._width = 0
+        self.bind("<Configure>", self._reflow)
+
+    def add(self, widget, gap: int = 4, new_line: bool = False):
+        """Ajoute un élément (créé avec la barre pour parent) ; le renvoie."""
+        self._items.append((widget, gap, new_line))
+        return widget
+
+    def _reflow(self, _event=None) -> None:
+        """Place les éléments ligne par ligne selon la largeur disponible."""
+        width = self.winfo_width()
+        if width <= 1 or width == self._width:
+            return
+        self._width = width
+        x, y, row_height = FLOW_MARGIN, 2, 0
+        for widget, gap, new_line in self._items:
+            needed, height = widget.winfo_reqwidth(), widget.winfo_reqheight()
+            if x > FLOW_MARGIN and (new_line or x + needed > width - FLOW_MARGIN):
+                x, y, row_height = FLOW_MARGIN, y + row_height + 2, 0
+            widget.place(x=x, y=y)
+            x += needed + gap
+            row_height = max(row_height, height)
+        self.configure(height=y + row_height + 2)
 
 
 class AnalysisTab(ttk.Frame):
@@ -66,46 +99,47 @@ class AnalysisTab(ttk.Frame):
 
     # ------------------------------------------------------------- widgets
     def _build_toolbar(self) -> None:
-        """Deux lignes d'outils : sélection (axe, courbe) puis curseurs et TBM."""
-        first = ttk.Frame(self, padding=(4, 2, 4, 0))
-        first.pack(fill="x")
-        second = ttk.Frame(self, padding=(4, 0, 4, 2))
-        second.pack(fill="x")
+        """Deux lignes d'outils : sélection (axe, courbe) puis curseurs et TBM ; dans une
+        fenêtre étroite, les outils passent à la ligne au lieu de sortir de l'écran."""
+        bar = FlowBar(self)
+        bar.pack(fill="x")
         self.axle_choice = tk.StringVar()
         self.curve_choice = tk.StringVar()
         self.cursor_mode = tk.StringVar(value="none")
         self.global_cursor = tk.BooleanVar(value=self.state.global_cursor)
         self.tracking = tk.BooleanVar(value=self.state.tracking)
         self.show_panel = tk.BooleanVar(value=True)
-        ttk.Label(first, text=f"Modèle : {self.state.template.name}").pack(side="left", padx=(0, 10))
-        ttk.Label(first, text="Axe actif").pack(side="left")
-        self.axle_box = ttk.Combobox(first, textvariable=self.axle_choice, width=10, state="readonly")
-        self.axle_box.pack(side="left", padx=(2, 10))
+        bar.add(ttk.Label(bar, text=f"Modèle : {self.state.template.name}"), gap=10)
+        axle = ttk.Frame(bar)
+        ttk.Label(axle, text="Axe actif").pack(side="left")
+        self.axle_box = ttk.Combobox(axle, textvariable=self.axle_choice, width=10, state="readonly")
+        self.axle_box.pack(side="left", padx=(2, 0))
         self.axle_box.bind("<<ComboboxSelected>>", lambda _e: self.set_active_axle(self.axle_box.current()))
-        ttk.Label(first, text="Courbe sélectionnée").pack(side="left")
-        self.curve_box = ttk.Combobox(first, textvariable=self.curve_choice, width=34, state="readonly")
-        self.curve_box.pack(side="left", padx=(2, 10))
+        bar.add(axle, gap=10)
+        curve = ttk.Frame(bar)
+        ttk.Label(curve, text="Courbe sélectionnée").pack(side="left")
+        self.curve_box = ttk.Combobox(curve, textvariable=self.curve_choice, width=28, state="readonly")
+        self.curve_box.pack(side="left", padx=(2, 0))
         self.curve_box.bind("<<ComboboxSelected>>", lambda _e: self._select_curve(self.curve_box.current()))
-        ttk.Button(first, text="Retirer la courbe", command=self.remove_selected_curve).pack(side="left", padx=2)
-        ttk.Button(first, text="Vider l'axe", command=self.clear_axle).pack(side="left", padx=2)
-        ttk.Checkbutton(first, text="Panneau de lecture", variable=self.show_panel,
-                        command=self._toggle_panel).pack(side="right")
-        cursor = ttk.Menubutton(second, text="Curseur vertical")
+        bar.add(curve, gap=10)
+        bar.add(ttk.Button(bar, text="Retirer la courbe", command=self.remove_selected_curve))
+        bar.add(ttk.Button(bar, text="Vider l'axe", command=self.clear_axle))
+        cursor = ttk.Menubutton(bar, text="Curseur vertical")
         menu = tk.Menu(cursor, tearoff=False)
         for value, label in CURSOR_MODES:
             menu.add_radiobutton(label=label, value=value, variable=self.cursor_mode,
                                  command=lambda v=value: self.set_cursor_mode(v))
         cursor["menu"] = menu
-        cursor.pack(side="left")
-        ttk.Checkbutton(second, text="Curseur global", variable=self.global_cursor,
-                        command=self._toggle_global).pack(side="left", padx=6)
-        ttk.Checkbutton(second, text="Suivi souris", variable=self.tracking,
-                        command=self._toggle_tracking).pack(side="left", padx=6)
-        ttk.Button(second, text="Curseur horizontal…", command=self.controller.horizontal_cursor).pack(side="left", padx=2)
-        ttk.Button(second, text="Nuage X/Y…", command=self.controller.configure_xy).pack(side="left", padx=2)
-        self.tbm_button = ttk.Button(second, text="Masquer le TBM", command=self.toggle_monitor)
-        self.tbm_button.pack(side="left", padx=2)
-        ttk.Button(second, text="Vue d'origine", command=self.reset_view).pack(side="left", padx=2)
+        bar.add(cursor, gap=8, new_line=True)
+        bar.add(ttk.Checkbutton(bar, text="Curseur global", variable=self.global_cursor,
+                                command=self._toggle_global), gap=8)
+        bar.add(ttk.Checkbutton(bar, text="Suivi souris", variable=self.tracking,
+                                command=self._toggle_tracking), gap=8)
+        bar.add(ttk.Button(bar, text="Curseur horizontal…", command=self.controller.horizontal_cursor))
+        bar.add(ttk.Button(bar, text="Nuage X/Y…", command=self.controller.configure_xy))
+        self.tbm_button = bar.add(ttk.Button(bar, text="Masquer le TBM", width=15, command=self.toggle_monitor))
+        bar.add(ttk.Button(bar, text="Vue d'origine", command=self.reset_view), gap=10)
+        bar.add(ttk.Checkbutton(bar, text="Panneau de lecture", variable=self.show_panel, command=self._toggle_panel))
 
     def _build_body(self) -> None:
         """Figure Matplotlib intégrée à Tk, barre de zoom et panneau de lecture."""

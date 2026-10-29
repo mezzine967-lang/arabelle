@@ -11,8 +11,9 @@ from tkinter import ttk
 
 from ptbg.core.readings import HEADER
 from ptbg.gui.icons import bold_font
+from ptbg.gui.tooltip import RowTooltip
 
-WIDTHS = (45, 50, 170, 105, 120, 55)
+WIDTHS = (42, 62, 160, 100, 110, 62)
 
 
 class ReadingPanel(ttk.Frame):
@@ -32,6 +33,7 @@ class ReadingPanel(ttk.Frame):
         for name, width in zip(HEADER, WIDTHS):
             self.table.heading(name, text=name)
             self.table.column(name, width=width, minwidth=40, stretch=name in ("Courbe", "Valeur"))
+        RowTooltip(self.table, self._row_text)
         scroll = ttk.Scrollbar(body, orient="vertical", command=self.table.yview)
         xscroll = ttk.Scrollbar(body, orient="horizontal", command=self.table.xview)
         self.table.configure(yscrollcommand=scroll.set, xscrollcommand=xscroll.set)
@@ -48,6 +50,11 @@ class ReadingPanel(ttk.Frame):
         self.table.delete(*self.table.get_children())
         for row in rows:
             self.table.insert("", "end", values=row.as_tuple())
+
+    def _row_text(self, iid: str) -> str:
+        """Texte complet d'une lecture (bulle d'aide), une colonne par ligne."""
+        return "\n".join(f"{name} : {value}" for name, value in zip(HEADER, self.table.item(iid, "values"))
+                         if str(value))
 
     def copy(self) -> None:
         """Copie les lectures (texte tabulé) dans le presse-papiers."""

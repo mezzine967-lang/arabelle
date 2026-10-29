@@ -15,7 +15,7 @@ import tkinter as tk
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox
 
 import numpy as np
 
@@ -29,6 +29,7 @@ from ptbg.core.project import PROJECT_SUFFIX, ReportPage, load_project, save_pro
 from ptbg.core.signals import BinaryGroup, SignalType
 from ptbg.gui.dialogs.analysis_dialogs import (ConditionalProcessingWindow, GroupDialog, HorizontalCursorDialog,
                                                XYDialog)
+from ptbg.gui.dialogs.base import ask_text
 from ptbg.gui.dialogs.report_dialogs import HeaderDialog, PagesWindow, PreferencesDialog
 from ptbg.gui.dialogs.time_base_dialog import TimeBaseDialog
 from ptbg.gui.info_windows import TextWindow, read_document, sources_text, version_text
@@ -356,8 +357,7 @@ class Application:
     def _rename_package(self, package_id: str) -> None:
         """Renomme un paquet de données."""
         package = next((p for p in self.workspace.packages if p.id == package_id), None)
-        name = package and simpledialog.askstring("Paquet", "Nouveau nom :", initialvalue=package.name,
-                                                  parent=self.root)
+        name = package and ask_text(self.root, "Paquet", "Nouveau nom :", package.name)
         if name:
             package.name = name.strip()
             self.tree.refresh()
@@ -409,8 +409,7 @@ class Application:
     def rename_tab(self) -> None:
         """Renomme l'onglet actif (titre repris dans le rapport)."""
         tab = self.graph.active_tab()
-        title = tab and simpledialog.askstring("Onglet", "Nouveau titre :", initialvalue=tab.state.title,
-                                               parent=self.root)
+        title = tab and ask_text(self.root, "Onglet", "Nouveau titre :", tab.state.title)
         if title:
             self.graph.rename_tab(tab, title.strip())
             self.on_tab_changed()
@@ -646,8 +645,7 @@ class Application:
         page = self._page_from_active_tab()
         if page is None:
             return
-        comment = simpledialog.askstring("Rapport pas à pas", "Commentaire de la page (facultatif) :",
-                                         parent=self.root)
+        comment = ask_text(self.root, "Rapport pas à pas", "Commentaire de la page (facultatif) :")
         if comment is None:
             return
         page.tab.comment = comment.strip()

@@ -22,6 +22,7 @@ from ptbg.core.diagnostics import Severity
 from ptbg.core.signals import SignalType
 from ptbg.core.time_base import ms
 from ptbg.gui.icons import Icons, bold_font
+from ptbg.gui.tooltip import RowTooltip
 from ptbg.plotting.styles import SEVERITY_COLORS
 
 DRAG_THRESHOLD_PX = 6
@@ -71,7 +72,7 @@ class TreePanel(ttk.Frame):
         self.tree.heading("type", text="Type")
         self.tree.heading("info", text="Détail")
         self.tree.column("#0", width=230, minwidth=120, stretch=True)
-        self.tree.column("type", width=70, minwidth=50, stretch=False)
+        self.tree.column("type", width=85, minwidth=50, stretch=False)
         self.tree.column("info", width=260, minwidth=80, stretch=False)
         self.tree.tag_configure("active", font=self.bold)
         for severity in (Severity.WARNING, Severity.ERROR):
@@ -85,6 +86,7 @@ class TreePanel(ttk.Frame):
         body.rowconfigure(0, weight=1)
         body.columnconfigure(0, weight=1)
 
+        RowTooltip(self.tree, self._row_text)
         self.tree.bind("<<TreeviewSelect>>", lambda _e: controller.on_tree_selection(self.selection()))
         self.tree.bind("<Double-1>", self._on_double_click)
         self.tree.bind("<Button-3>", self._on_context_menu)
@@ -123,6 +125,11 @@ class TreePanel(ttk.Frame):
         for iid in self.tree.get_children(parent):
             yield iid
             yield from self._all_items(iid)
+
+    def _row_text(self, iid: str) -> str:
+        """Texte complet d'une ligne (bulle d'aide) : élément, type et détail."""
+        parts = [self.tree.item(iid, "text")] + [str(v) for v in self.tree.item(iid, "values") if str(v)]
+        return " — ".join(part for part in parts if part)
 
     def _insert_file(self, parent, source, needle, opened, known) -> None:
         """Ajoute un fichier et ses enfants : base de temps, groupes, diagnostic, variables."""

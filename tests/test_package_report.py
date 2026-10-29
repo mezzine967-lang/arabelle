@@ -208,6 +208,48 @@ class RenderAndReportTests(unittest.TestCase):
         lanes = [text for text in renderer.axes[1].texts if "init" in text.get_text()]
         self.assertTrue(lanes and all(text.get_clip_on() for text in lanes))
 
+    def test_crowded_report_page_stays_readable(self):
+        """REQ 6001 / 5401 / 4102 : page à 4 axes de pistes logiques, deux doubles curseurs
+        et un curseur global, sur une hauteur de rapport : aucune étiquette de curseur ni
+        nom de piste ne se chevauche, le temps n'est gradué que sur l'axe du bas, et la
+        légende du TBM n'a qu'une entrée par anomalie (placée à droite de la courbe)."""
+        from matplotlib.text import Annotation
+        for name in ("simulation10_execution1.csv", "simulation10_execution2.csv"):
+            self.ws.active_package.files.append(load_source(EXAMPLES / name, self.settings))
+        a, b = self.ws.files()[-2:]
+        tab = TabState.from_template("4A", "Chargé")
+        tab.axles[0].curves = [CurveRef(a.id, "source")]
+        tab.axles[1].curves = [CurveRef(b.id, name) for name in ("prod1", "prod2", "prod3")]
+        tab.axles[2].curves = [CurveRef(b.id, name) for name in ("cons1_state", "cons2_state")]
+        tab.axles[3].curves = [CurveRef(b.id, name) for name in ("published", "pub_output")]
+        for axle, (t1, t2) in ((tab.axles[1], (1.007, 1.0359)), (tab.axles[3], (1.0075, 1.0855))):
+            axle.cursor_mode, axle.t1, axle.t2 = "double", t1, t2
+        tab.global_cursor, tab.t_global, tab.xlim = True, 1.0352, [0.93, 1.17]
+        figure = Figure(figsize=(11.69, 3.9))                 # hauteur de la zone graphique d'une page A4
+        FigureCanvasAgg(figure)
+        renderer = TabRenderer(figure, tab, self.ws, self.ws.timeline(), 2000, for_print=True)
+        renderer.draw()
+        figure.canvas.draw()
+
+        def overlapping(texts):
+            """Couples de textes dont les cadres se recouvrent."""
+            boxes = [text.get_window_extent() for text in texts]
+            return [(i, j) for i in range(len(boxes)) for j in range(i + 1, len(boxes))
+                    if boxes[i].overlaps(boxes[j])]
+
+        for index, ax in enumerate(renderer.axes):
+            labels = [artist for artist in renderer._cursor_artists
+                      if isinstance(artist, Annotation) and artist.get_text() and artist.axes is ax]
+            self.assertFalse(overlapping(labels), f"étiquettes de curseurs superposées, axe {index + 1}")
+            self.assertFalse(overlapping([text for text in ax.texts if text.get_text().strip()]),
+                             f"noms de pistes superposés, axe {index + 1}")
+            labelled = any(tick.label1.get_visible() for tick in ax.xaxis.get_major_ticks())
+            self.assertEqual(labelled, index == 3, f"graduations de temps, axe {index + 1}")
+        legend = renderer.tbm_plot.get_legend()
+        names = [text.get_text().split(" (")[0] for text in legend.get_texts()]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertGreater(legend.get_window_extent().x0, renderer.tbm_plot.get_window_extent().x1)
+
     def test_report_page_layout_like_project_test_reports(self):
         """REQ 6001 / 6005 : en-tête à chasse fixe, identification à gauche avec tous les
         champs de REQ 6005, bilan de la page à droite ; légende des courbes à droite,

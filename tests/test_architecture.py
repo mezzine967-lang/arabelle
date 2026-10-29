@@ -108,7 +108,7 @@ class ArchitectureTests(unittest.TestCase):
 
     def test_no_unused_functions(self):
         """REQ_COMMON_KH_3007 : toute fonction définie est appelée quelque part."""
-        hooks = {"body", "validate", "apply", "main"}       # appelées par Tkinter / le point d'entrée
+        hooks = {"body", "buttonbox", "validate", "apply", "main"}   # appelées par Tkinter / le point d'entrée
         defined, used = {}, set()
         for path in PRODUCTION + TOOLS:
             for node in ast.walk(tree_of(path)):

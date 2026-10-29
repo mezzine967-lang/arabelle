@@ -86,6 +86,8 @@ Paquet de données 1 (actif)
   (Bool, Float, Texte, automatique), créer un groupe binaire avec la sélection,
   configurer la base de temps, diagnostic complet, fermer.
 - **Filtrer** : saisir une partie du nom des variables.
+- **Bulle d'aide** : la souris posée sur une ligne affiche son texte complet (utile quand
+  l'arbre est étroit et que les colonnes sont tronquées). Idem dans le panneau de lecture.
 
 Type automatique : `true/false` ou valeurs 0/1 (avec au moins un 0 et un 1) → Bool ;
 textes d'états (« STOP », « ACTIVE ») → Texte ; sinon Float.
@@ -220,6 +222,11 @@ condition est vraie. Copier ou exporter en CSV.
 | **Rapport automatique** (Ctrl+P) | une page de l'onglet actif |
 | **+ Page pas à pas** (Ctrl+K) | capture la vue active (zoom, curseurs, légendes, nuage X/Y, condition) avec un commentaire ; recommencer après chaque réglage |
 | **Gérer les pages…** | ordonner, commenter, supprimer les captures, puis **Générer le PDF** |
+
+Dans une disposition de 3 axes ou plus, la page garde 8 lectures sous le graphique pour que
+les axes restent lisibles ; les autres lectures sont imprimées en annexe. Les étiquettes des
+curseurs ne se chevauchent jamais : si l'axe est trop bas, elles se réduisent à l'instant (la
+valeur figure dans le tableau des lectures).
 
 Chaque page, au format des rapports de test du projet (police à chasse fixe, axes
 quadrillés, légendes à droite), comporte l'en-tête — à gauche : version de l'outil,

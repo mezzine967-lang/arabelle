@@ -50,7 +50,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | `ptbg/report/` | rapport PDF |
 | `ptbg/gui/` | interface Tkinter : contrôleur, arbre, onglets, dialogues |
 | `ptbg/system/` | compatibilité Windows / SLES, environnement, journal |
-| `tests/` | 140 tests automatisés (dont l'interface réelle et la robustesse) |
+| `tests/` | 144 tests automatisés (dont l'interface réelle et la robustesse) |
 | `tools/` | audit d'environnement, banc de performance, traçabilité, données de démo |
 | `install/` | installation et lancement Windows / SLES |
 | `data/demo/` | CSV de démonstration (3 PLC + 1 fichier non conforme) |
@@ -82,7 +82,7 @@ Les 64 lignes de la spécification sont tracées dans
 ## 6. Vérifier
 
 ```
-python -m unittest discover -s tests -v     # 140 tests (sous Linux sans bureau : xvfb-run devant)
+python -m unittest discover -s tests -v     # 144 tests (sous Linux sans bureau : xvfb-run devant)
 python tools/verifier_tracabilite.py        # chaque requis du Word : matrice + code + test
 python tools/audit_environnement.py         # versions présentes / versions figées
 python tools/banc_performance.py f.csv      # durées et mémoire (ou --generer 500 : fichier de 500 Mo)

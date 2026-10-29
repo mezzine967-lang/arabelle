@@ -10,11 +10,12 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 
 from ptbg.core.data_package import SourceFile
 from ptbg.core.time_base import ms
 from ptbg.core.time_parser import UNIT_LABELS, TimeBaseSettings, TimeFormat, parse_absolute
+from ptbg.gui.dialogs.base import Dialog
 
 FORMATS = list(TimeFormat)
 UNITS = ["auto"] + list(UNIT_LABELS)
@@ -26,7 +27,7 @@ def _float_or_none(text: str):
     return float(text) if text else None
 
 
-class TimeBaseDialog(simpledialog.Dialog):
+class TimeBaseDialog(Dialog):
     """Renvoie ``self.result`` = nouveau ``TimeBaseSettings`` ou None (annulé)."""
 
     def __init__(self, parent, source: SourceFile, default_tolerance: float, others_assumed: int = 0) -> None:

@@ -46,8 +46,10 @@ ptbg/
     ├── status_bar.py        barre d'état (REQ 5102)
     ├── info_windows.py      fenêtres Information et visualiseur Markdown (REQ 5101)
     ├── tasks.py             fils de travail (REQ 4105)
+    ├── tooltip.py           bulle d'aide des lignes tronquées (arbre, lectures)
     ├── icons.py             icônes de statut dessinées
     └── dialogs/             base de temps, groupes, curseur H, X/Y, rapport, préférences
+                             (base.py : boutons « OK » / « Annuler », saisie de texte)
 tests/                       unittest : core, rendu, PDF, IHM réelle, architecture
 tools/                       audit d'environnement, traçabilité, données de démonstration
 install/                     installation et lancement Windows / SLES
