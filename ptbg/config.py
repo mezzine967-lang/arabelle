@@ -1,7 +1,8 @@
 """Préférences de l'outil, modifiables par Outils > Préférences.
 
 Les valeurs par défaut ci-dessous sont des CHOIX DOCUMENTÉS, à confirmer
-lorsque la spécification les précisera (voir docs/POINTS_OUVERTS.md) :
+lorsque la spécification les précisera (onglet « Points ouverts » du
+récapitulatif Excel, docs/recapitulatif/) :
 
 - ``max_file_size_mb`` : le requis REQ_COMMON_KH_2310 indique « xxxMo » sans
   valeur. 500 Mo est retenu : un CSV de cette taille occupe environ 0,5 à 1 Go

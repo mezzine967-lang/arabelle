@@ -9,6 +9,17 @@ bibliothèque standard de Python, **numpy** et **matplotlib**, toutes présentes
 l'environnement de Spyder 6 : rien n'est à installer au poste Windows, et l'installation
 SLES se limite à un environnement virtuel avec 11 wheels binaires (aucune compilation).
 
+## En bref
+
+| Question | Réponse | Section |
+|---|---|---|
+| Quel Python ? | **3.11** (référence) ; code vérifié de 3.10 à 3.14 ; 64 bits | § 1 |
+| Quelles bibliothèques ? | numpy 2.4.6 et matplotlib 3.10.9 (directes) + 9 transitives de matplotlib, toutes figées dans `requirements.txt` | § 2 |
+| Et la bibliothèque standard ? | liste complète des modules utilisés et de leur rôle | § 3 |
+| Qu'est-ce qui a été testé ? | suite complète sur 3 à 12 combinaisons Python / Tk / numpy / matplotlib à chaque version | § 4 |
+| Que faire avant une montée de version ? | effets connus et procédure d'analyse d'impact en 5 étapes | § 5 |
+| Installer sans Internet ? | wheels préparées sur un poste connecté | § 6 |
+
 ## 1. Interpréteur Python
 
 | Élément | Valeur |
@@ -17,7 +28,7 @@ SLES se limite à un environnement virtuel avec 11 wheels binaires (aucune compi
 | Versions vérifiées (suite de tests complète, IHM comprise) | 3.10, 3.11, 3.12, 3.13, 3.14 — voir § 4 |
 | Version minimale acceptée par le code | 3.10 (`ptbg/version.py`, `MIN_PYTHON`) — contrôlée au lancement par `MAIN.py` |
 | Architecture | 64 bits (Windows 11 x64 et SLES x86-64, les cibles du projet). Des wheels 32 bits existent pour certains paquets, mais ce mode n'est ni ciblé ni testé |
-| Python 3.6 (REQ 3001) | Non retenu : fin de vie en décembre 2021, dernières versions compatibles numpy 1.19 / matplotlib 3.3 ; le relecteur indique qu'un Python 3.11 est disponible sur SLES 15. Voir POINTS_OUVERTS.md. |
+| Python 3.6 (REQ 3001) | Non retenu : fin de vie en décembre 2021, dernières versions compatibles numpy 1.19 / matplotlib 3.3 ; le relecteur indique qu'un Python 3.11 est disponible sur SLES 15. Question ouverte n° 3 du récapitulatif Excel (onglet « Points ouverts »). |
 
 ## 2. Bibliothèques tierces (figées dans `requirements.txt`)
 
@@ -89,6 +100,14 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 Suite complète (`python -m unittest discover -s tests`, IHM réelle sous Xvfb incluse),
 chaque ligne dans un environnement virtuel neuf.
 
+**Versions 2.5.0 et 2.5.1 (140 tests)** — dernière campagne :
+
+| Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
+|---|---|---|---|---|---|---|
+| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 140 tests : OK | référence `requirements.txt` |
+| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 140 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
+| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 140 tests : OK, 16 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
+
 **Version 2.2.0 (131 tests)** — la mise à jour rapide des curseurs (blitting) a été
 vérifiée avec Tk 8.6 « partagé » (famille Windows / Spyder / SLES) et Tk 9.0, image
 identique au pixel près à un rendu complet :
@@ -107,30 +126,16 @@ Les conversions accélérées de la 2.2.0 ont en outre été comparées résulta
 à celles de la 2.1.0 (plus de 10 000 fichiers et séries abîmés générés au hasard) avec
 numpy 2.4.6 et numpy 1.24.4 : aucune différence.
 
-**Version 2.1.0 (120 tests)** :
+**Version 2.1.0 (120 tests)** : 12 combinaisons, de Python 3.10 à 3.14, Tk 8.6.12,
+8.6.14 et 9.0.3, numpy 1.24.4 à 2.5.4, matplotlib 3.6.3 à 3.11.2 : **toutes OK**. Les
+tests d'IHM étaient ignorés sur 5 d'entre elles, soit pour un artefact du banc (Python
+« standalone » ancien avec `_tkinter` intégré statiquement, absent sous Windows et SLES),
+soit parce que l'outil refuse proprement de démarrer avec matplotlib < 3.10 et Tk 9.
 
-<!-- RESULTATS_MATRICE -->
-| Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
-|---|---|---|---|---|---|---|
-| py310-min-tk86 | 3.10.14 | 8.6.12 | 1.24.4 | 3.6.3 | 120 tests : OK, 12 tests IHM ignorés | IHM ignorée : Python « standalone » ancien, `_tkinter` intégré statiquement (artefact du banc de test, absent sous Windows / SLES) |
-| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 120 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair : TkAgg de matplotlib 3.6 incompatible avec Tk 9 |
-| py311-ref-tk86 | 3.11.9 | 8.6.12 | 2.4.6 | 3.10.9 | 120 tests : OK, 12 tests IHM ignorés | IHM ignorée : même artefact du banc de test (matplotlib le signale lui-même) |
-| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 120 tests : OK |  |
-| py311-old-tk86 | 3.11.9 | 8.6.12 | 1.26.4 | 3.8.4 | 120 tests : OK, 12 tests IHM ignorés | IHM ignorée : même artefact du banc de test |
-| py311-mpl39-tk9 | 3.11.15 | 9.0.3 | 1.26.4 | 3.9.4 | 120 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair : TkAgg de matplotlib 3.9 incompatible avec Tk 9 (matplotlib ≥ 3.10 requis) |
-| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 120 tests : OK | Tk 8.6 « partagé » comme sous Windows (python.org, Spyder) et SLES |
-| py313-ref-tk9 | 3.13.14 | 9.0.3 | 2.4.6 | 3.10.9 | 120 tests : OK |  |
-| py314-ref-tk9 | 3.14.6 | 9.0.3 | 2.4.6 | 3.10.9 | 120 tests : OK |  |
-| py312-latest-tk9 | 3.12.13 | 9.0.3 | 2.5.4 | 3.11.2 | 120 tests : OK |  |
-| py314-latest-tk9 | 3.14.6 | 9.0.3 | 2.5.4 | 3.11.2 | 120 tests : OK |  |
-| py312-old-tk86 | 3.12.3 | 8.6.14 | 1.26.4 | 3.8.4 | 120 tests : OK | Tk 8.6 « partagé » comme sous Windows (python.org, Spyder) et SLES |
-
-Lecture : « 120 tests : OK » = lecture CSV, robustesse (fichiers abîmés), base de temps, curseurs, rendu, PDF, projet,
-architecture **et** 12 tests de l'interface réelle (fenêtres Tk pilotées). Quand l'IHM est
-ignorée, les 108 autres tests passent. La référence `requirements.txt` réussit intégralement
-avec Tk 8.6 (famille Windows / Spyder / SLES) et Tk 9.0, de Python 3.11 à 3.14. Les
-versions récentes (numpy 2.5.4, matplotlib 3.11.2) passent aussi : une future montée
-sera sans modification du code.
+En résumé, la référence `requirements.txt` réussit intégralement avec Tk 8.6 (famille
+Windows / Spyder / SLES) et Tk 9.0, de Python 3.11 à 3.14 ; les versions récentes
+(numpy 2.5.4, matplotlib 3.11.2) passent aussi : une future montée se fera sans
+modification du code.
 
 Vérification de disponibilité des wheels binaires (installation simulée par `pip
 install --dry-run --only-binary=:all:` avec les étiquettes de plateforme cibles) :

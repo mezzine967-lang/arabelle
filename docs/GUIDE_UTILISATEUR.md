@@ -1,8 +1,23 @@
-# Guide d'utilisation — VISU PTBG 2.5.0
+# Guide d'utilisation — VISU PTBG 2.5.1
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier
 d'aide, touche F1).
+
+| § | Sujet | On y trouve |
+|---|---|---|
+| 1 | Démarrer | lancement, zones de la fenêtre |
+| 2 | Ouvrir des données | format attendu, fichiers abîmés, paquets de données |
+| 3 | L'arbre des données | actions sur fichiers et variables, types |
+| 4 | Base de temps et TBM | contrôles, réglages, diagnostic, axe absolu |
+| 5 | Onglets et modèles | dispositions, zoom, Vue d'origine, légendes |
+| 6 | Curseurs | simple, double, global, horizontal, condition, X/Y |
+| 7 | Traitement conditionnel | statistiques pendant qu'une condition est vraie |
+| 8 | Rapports PDF | automatique, pas à pas, contenu d'une page |
+| 9 | Projet | enregistrer et rouvrir une analyse |
+| 10 | Information et préférences | menu Information, réglages |
+| 11 | En cas de problème | symptômes et solutions |
+| 12 | Raccourcis | clavier et souris en un coup d'œil |
 
 ## 1. Démarrer
 
@@ -107,11 +122,17 @@ trait mixte = changement de fréquence).
 **Masquer le TBM** n'est possible que si aucune base de temps affichée n'a
 d'avertissement ni d'erreur ; il réapparaît automatiquement si une alerte survient.
 
-**Base de temps > Configurer…** (ou double-clic sur le fichier) permet d'imposer :
-format, unité, **période nominale** et **tolérance** (diagnostic recalculé), **origine
-absolue** (date-heure du compteur 0, ou date du jour pour un horodatage hh:mm:ss),
-**décalage manuel** (aligner un PLC non synchronisé), un **affichage régularisé**
-facultatif et un **diagnostic opérateur** libre, imprimé dans le TBM et le rapport.
+**Base de temps > Configurer…** (ou double-clic sur le fichier) :
+
+| Réglage | Usage |
+|---|---|
+| Format, unité | imposer la lecture de la 1re colonne (compteur, heure, date-heure ; unité du compteur) |
+| Période nominale, tolérance | raster attendu ; le diagnostic est recalculé |
+| Origine absolue | date-heure du compteur 0, ou date du jour pour un horodatage hh:mm:ss |
+| Décalage manuel | aligner un PLC non synchronisé (affiché dans le TBM) |
+| Affichage régularisé | facultatif, voir ci-dessous |
+| Masquer les horodatages aberrants | retire des courbes les horodatages aberrants isolés (ils restent signalés) |
+| Diagnostic opérateur | texte libre, imprimé dans le TBM et le rapport |
 
 Par défaut les courbes sont tracées sur l'**horodatage brut** du fichier : rien n'est
 recalé. Le jitter qui reste dans la tolérance n'est pas compté comme anomalie, il est
@@ -146,8 +167,11 @@ redessin, dans le projet et dans le rapport PDF. Un clic sur un nom de la légen
 sélectionne cette courbe. Clic droit sur l'axe : masquer / afficher la légende, ou la
 remettre à sa place automatique.
 
-Fermer un onglet : croix **×** de son titre, clic molette sur le titre, clic droit sur le
-titre (renommer / fermer) ou Ctrl+W. S'il n'en reste aucun, un onglet vide est recréé.
+| Action sur un onglet | Comment |
+|---|---|
+| Fermer | croix **×** de son titre, clic molette sur le titre, clic droit sur le titre ou Ctrl+W ; s'il n'en reste aucun, un onglet vide est recréé |
+| Renommer | clic droit sur le titre |
+| Revenir à la vue de départ | bouton **Vue d'origine** ou Ctrl+0 |
 
 Un axe porte soit des courbes **analogiques** (Float), soit des **pistes logiques** (Bool,
 Texte, groupes binaires). Une variable de l'autre famille est placée automatiquement sur
@@ -190,11 +214,12 @@ condition est vraie. Copier ou exporter en CSV.
 
 ## 8. Rapports PDF
 
-- **Rapport > En-tête…** : nom du projet, unité / tranche, émetteur, référence.
-- **Rapport automatique** (Ctrl+P) : une page de l'onglet actif.
-- **Pas à pas** : **+ Page pas à pas** (Ctrl+K) capture la vue active (zoom, curseurs,
-  nuage X/Y, condition) avec un commentaire ; recommencer après chaque réglage ;
-  **Gérer les pages…** pour ordonner, commenter, supprimer, puis **Générer le PDF**.
+| Commande | Effet |
+|---|---|
+| **Rapport > En-tête…** | nom du projet, unité / tranche, émetteur, référence |
+| **Rapport automatique** (Ctrl+P) | une page de l'onglet actif |
+| **+ Page pas à pas** (Ctrl+K) | capture la vue active (zoom, curseurs, légendes, nuage X/Y, condition) avec un commentaire ; recommencer après chaque réglage |
+| **Gérer les pages…** | ordonner, commenter, supprimer les captures, puis **Générer le PDF** |
 
 Chaque page, au format des rapports de test du projet (police à chasse fixe, axes
 quadrillés, légendes à droite), comporte l'en-tête — à gauche : version de l'outil,
@@ -217,9 +242,16 @@ apparaît dans l'en-tête des rapports.
 
 Menu **Information** : version, historique des modifications, sources (empreinte de chaque
 module, versions de Python, Tk et des bibliothèques), cette aide, journal d'activité,
-traçabilité des requis. **Outils > Préférences** : taille maximale d'un CSV, tolérance par
-défaut, unité supposée d'un compteur, seuil de changement de fréquence, nombre de points
-affichés par courbe.
+traçabilité des requis.
+
+| Outils > Préférences | Valeur par défaut |
+|---|---|
+| Taille maximale d'un CSV (REQ 2310, « xxx Mo » à confirmer) | 500 Mo |
+| Tolérance par défaut de la période | 10 % |
+| Unité supposée d'un compteur sans unité | ms |
+| Intervalles consécutifs pour un changement de fréquence | 10 |
+| Écart d'un horodatage aberrant isolé | 10 périodes |
+| Points affichés par courbe avant réduction min/max | 4000 |
 
 ## 11. En cas de problème
 
@@ -232,3 +264,30 @@ affichés par courbe.
 | Rien ne s'affiche sous SLES à distance | se connecter avec `ssh -X` (session graphique requise) |
 | Message sur une bibliothèque au démarrage | versions différentes de celles testées : voir Information > Sources et docs/DEPENDANCES.md |
 | Lecture lente ou mémoire insuffisante sur de très gros fichiers | mesurer le poste avec `python tools/banc_performance.py fichier.csv` et ajuster la taille maximale (Outils > Préférences) |
+
+## 12. Raccourcis
+
+| Clavier | Action |
+|---|---|
+| Ctrl+O | ouvrir des fichiers CSV |
+| Ctrl+S | enregistrer le projet |
+| Ctrl+W | fermer l'onglet |
+| Ctrl+0 | vue d'origine (toute la durée, échelles automatiques) |
+| Ctrl+P | rapport automatique de l'onglet actif |
+| Ctrl+K | ajouter la vue active au rapport pas à pas |
+| F9 | afficher / masquer l'arbre des données |
+| F1 | cette aide |
+| Ctrl+Q | quitter |
+| Flèche gauche / droite | curseur sur l'échantillon précédent / suivant de la courbe sélectionnée |
+
+| Souris | Action |
+|---|---|
+| clic sur un axe | rend l'axe actif ; place le curseur |
+| glisser | déplace le curseur |
+| Maj + clic | niveau du curseur horizontal |
+| glisser une légende | la déplace (place conservée) |
+| clic sur un nom de la légende | sélectionne cette courbe |
+| clic droit sur un axe | menu de l'axe (curseurs, courbe sélectionnée, échelle, légende) |
+| double-clic sur une variable de l'arbre | l'ajoute à l'axe actif |
+| glisser une variable de l'arbre sur un axe | l'ajoute à cet axe |
+| clic molette sur le titre d'un onglet | ferme l'onglet |

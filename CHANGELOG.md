@@ -3,6 +3,37 @@
 Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
 Chaque version incrémente `ptbg/version.py` et ajoute une entrée ici.
 
+| Version | Date | En une ligne | Tests |
+|---|---|---|---|
+| 2.5.1 | 2026-10-29 | documentation réorganisée (tableaux, sommaires) ; questions ouvertes regroupées dans le récapitulatif Excel | 140 |
+| 2.5.0 | 2026-10-29 | vue d'origine, diagnostic lisible, légendes déplaçables | 140 |
+| 2.4.1 | 2026-10-29 | tableaux lisibles dans l'aide | 137 |
+| 2.4.0 | 2026-10-28 | rapports au format des rapports de test du projet, onglets fermables, axes quadrillés | 136 |
+| 2.3.0 | 2026-10-28 | statuts plus prudents, horodatages aberrants visibles | 132 |
+| 2.2.0 | 2026-10-28 | performances sur gros fichiers (lecture ≈ 2 fois plus rapide, curseurs fluides) | 131 |
+| 2.1.0 | 2026-10-28 | robustesse de la lecture et de la base de temps | 120 |
+| 2.0.0 | 2026-10-27 | réécriture complète | 90 |
+| 1.0.0 | — | prototype | — |
+
+## 2.5.1 — 2026-10-29 — documentation réorganisée
+
+- **Questions ouvertes** : `docs/POINTS_OUVERTS.md` est retiré ; ses 18 questions sont dans
+  le récapitulatif Excel (onglet « Points ouverts », colonne de réponse à remplir), seul
+  document à faire valider. La partie « qualification restant à faire » est reprise à la
+  fin de `docs/TRACABILITE_REQUIS.md`.
+- **README** : point d'entrée court, avec le tableau « quelle documentation lire ? »,
+  l'organisation du dossier et l'état des requis en tableaux.
+- **Traçabilité** : synthèse des statuts en tête, en tableau.
+- **Guide** : sommaire, réglages de la base de temps, actions sur les onglets, rapports et
+  préférences (avec leurs valeurs par défaut) en tableaux ; nouvelle section 12
+  « Raccourcis » (clavier et souris).
+- **Architecture** : flux de données en tableau (étape, module, ce qui se passe).
+- **Dépendances** : tableau « En bref » ; campagne de la 2.5.0 ajoutée ; campagne de la
+  2.1.0 résumée.
+- **Compatibilité** : l'essai de réception devient une fiche à remplir sur chaque poste
+  (action, résultat attendu, OK / remarque).
+- Code inchangé (seuls deux commentaires renvoient désormais à l'Excel).
+
 ## 2.5.0 — 2026-10-29 — vue d'origine, diagnostic lisible, légendes déplaçables
 
 - **Vue d'origine** : bouton de la barre de l'onglet (aussi Affichage > Vue d'origine,

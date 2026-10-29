@@ -5,6 +5,14 @@ Cibles : **SUSE Linux Enterprise Server 15 SP7** (Service Unit de perturbographi
 exécutable n'est produit : l'outil s'exécute depuis ses sources Python, identiques sur
 les deux systèmes (l'environnement Spyder étant figé, ce mode est le seul possible au poste).
 
+| Section | Contenu |
+|---|---|
+| § 1 | où sont isolées les différences Windows / SLES, sujet par sujet |
+| § 2 | comment lancer l'outil sur chaque cible |
+| § 3 | installation sur SLES 15 SP7 (en ligne ou hors ligne) |
+| § 4 | ce qui a déjà été vérifié ici |
+| § 5 | **fiche d'essai de réception** à remplir sur chaque poste cible |
+
 ## 1. Principe : un seul code, les différences isolées
 
 Toutes les différences entre systèmes sont regroupées dans **`ptbg/system/compat.py`**.
@@ -72,20 +80,17 @@ de chaque Python 3.11 à 3.14 ont été vérifiées disponibles.
 
 ## 5. Essai de réception à consigner sur chaque cible (≈ 15 minutes)
 
-1. Lancer l'outil (§ 2) ; vérifier dans la barre d'état l'utilisateur, la date, la
-   version et le message de démarrage (versions de Python, Tk, numpy, matplotlib).
-2. Information > Sources : relever le tableau des bibliothèques (statut OK attendu).
-3. Ouvrir le dossier `data/demo/` : 4 fichiers, dont `non_conforme_point_virgule.csv` en
-   ERREUR (séparateur) sans bloquer les autres.
-4. Afficher P_circuit_bar (PLC A) et P_mesure_B (PLC B) ; poser un double curseur, un
-   curseur global, activer le suivi souris ; vérifier le panneau de lecture.
-5. Tenter de masquer le TBM (refus attendu : PLC_B a des avertissements).
-6. Rapport > Rapport automatique : contrôler en-tête, TBM et page de traçabilité.
-7. Enregistrer le projet, fermer, le rouvrir ; vérifier onglets et curseurs.
-8. Sous SLES : refaire l'essai via `ssh -X` si le Service Unit est utilisé à distance.
-9. Lancer `python -m unittest discover -s tests -v` (aucun échec attendu) et archiver
-   la sortie avec celle de `python tools/audit_environnement.py`.
-10. Performances (REQ 2310, 4105) : `python tools/banc_performance.py` sur quelques vrais
-    fichiers PTBG (les plus gros disponibles), puis `python tools/banc_performance.py
-    --generer 500` (fichier de synthèse de 500 Mo) ; archiver la sortie (durées, débit,
-    mémoire). La taille maximale retenue doit laisser une marge de mémoire sur le poste.
+À imprimer ou recopier : une fiche par poste (Windows 11 / Spyder 6, Service Unit SLES 15 SP7).
+
+| # | Action | Résultat attendu | OK ? / remarque |
+|---|---|---|---|
+| 1 | Lancer l'outil (§ 2) | barre d'état : utilisateur, date, version ; message de démarrage avec les versions de Python, Tk, numpy, matplotlib | |
+| 2 | Information > Sources | tableau des bibliothèques, statut OK ; le relever | |
+| 3 | Fichier > Ouvrir un dossier de CSV > `data/demo/` | 4 fichiers ; `non_conforme_point_virgule.csv` en ERREUR (séparateur) sans bloquer les autres | |
+| 4 | Afficher P_circuit_bar (PLC A) et P_mesure_B (PLC B) ; double curseur, curseur global, suivi souris | curseurs posés, panneau de lecture rempli (instant, valeur, ligne CSV) | |
+| 5 | Bouton « Masquer le TBM » | refusé : PLC_B a des avertissements | |
+| 6 | Rapport > Rapport automatique | PDF ouvert : en-tête, TBM, page de traçabilité | |
+| 7 | Enregistrer le projet, fermer, le rouvrir | onglets et curseurs retrouvés | |
+| 8 | Sous SLES utilisé à distance : refaire l'essai via `ssh -X` | même comportement | |
+| 9 | `python -m unittest discover -s tests -v` puis `python tools/audit_environnement.py` | aucun échec ; archiver les deux sorties | |
+| 10 | Performances (REQ 2310, 4105) : `python tools/banc_performance.py` sur les plus gros vrais fichiers PTBG, puis `--generer 500` (fichier de synthèse de 500 Mo) | durées, débit et mémoire archivés ; la taille maximale retenue laisse une marge de mémoire sur le poste | |

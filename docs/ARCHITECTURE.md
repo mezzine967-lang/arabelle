@@ -1,4 +1,4 @@
-# Architecture de VISU PTBG 2.5.0 — pour reprendre le code
+# Architecture de VISU PTBG 2.5.1 — pour reprendre le code
 
 ## 1. Vue d'ensemble
 
@@ -52,7 +52,7 @@ tests/                       unittest : core, rendu, PDF, IHM réelle, architect
 tools/                       audit d'environnement, traçabilité, données de démonstration
 install/                     installation et lancement Windows / SLES
 data/exemples/               CSV reçus (inchangés) ; data/demo/ : CSV de démonstration
-docs/                        spécification, guide, dépendances, compatibilité, traçabilité
+docs/                        spécification, guide, dépendances, compatibilité, traçabilité, récapitulatif Excel
 ```
 
 Règle de dépendance (vérifiée par `tests/test_architecture.py`) :
@@ -68,39 +68,25 @@ jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interf
 
 ## 2. Flux de données
 
-1. **Lecture** (`gui/app.py::_load`, fil de travail) : `load_source()` →
-   `read_csv()` (contrôles 2300-2310 ; texte lu par blocs de 512 Ki caractères en
-   lignes physiques entières (`_line_blocks`) ; repérage de l'en-tête dans
-   `_locate_header` sur les 50 premières lignes ; dans chaque bloc, les suites de
-   lignes « ordinaires » de même largeur (`_ordinary_lines`) sont découpées d'un coup
-   (`take_run`), toute autre ligne passe par `_split_line` et `accept` ; chaque
-   cellule est classée vide / nombre / booléen / texte / non finie, colonne par
-   colonne (`_ColumnBuilder`))
-   → `convert_time_column()` (1re colonne → secondes + origine absolue, décodée pour
-   toute la colonne par `vector_parse.match_templates`) → `analyze()` (raster,
-   événements, horodatages aberrants, horodatage régularisé facultatif).
-   Règle des conversions en bloc : numpy convertit la colonne entière ; ce qu'il refuse
-   est repris par la fonction « une cellule / une ligne » d'origine (`_classify`,
-   `_time_of_day_ns`, `_parse_datetime_text`…) : le résultat est identique, seule la
-   vitesse change.
-   `load_source()` ne lève jamais d'exception (sauf annulation) : toute erreur devient
-   un constat ERREUR sur ce seul fichier (REQ 4105).
-2. **Interprétation** à la demande : `SourceFile.signal(nom)` applique le type (auto ou
-   forcé) sans relire le fichier ; résultat mis en cache, invalidé par `revision`.
-3. **Affichage** : un onglet est un `TabState` (données pures) ; `TabRenderer` le dessine
-   dans une figure Matplotlib. Le même `TabRenderer` dessine la page PDF.
-4. **Axe des temps** : `Workspace.timeline()` renvoie un `Timeline` (relatif ou absolu) ;
-   `Timeline.x(fichier)` donne les abscisses (mises en cache) de chaque échantillon.
-5. **Curseurs** : positions stockées dans `TabState` / `AxleState` ; `core/readings.py`
-   calcule les lectures (échantillon réel, jamais interpolé) sur une `TimeGrid` (abscisses
-   finies et leur ordre, préparées une fois par fichier et par axe des temps) ;
-   `TabRenderer.draw_cursors()` ne recrée que les curseurs, et `AnalysisTab.update_cursors()`
-   les redessine seuls sur le rendu figé du reste de la figure (« blitting », rendu
-   mémorisé à chaque dessin complet par `_on_draw`). Zoom : chaque courbe est une
-   `DisplayCurve` dont l'ordre des abscisses n'est analysé qu'une fois. Nuage X/Y et mots
-   binaires gardés en cache tant que leurs courbes ne changent pas.
-6. **Rapport** : une page est une copie figée du `TabState` (`ReportPage`) ;
-   `export_pdf()` dessine chaque page (en-tête + zone graphique + lectures) puis l'annexe.
+| Étape | Où | Ce qui se passe |
+|---|---|---|
+| 1. Lecture | `gui/app.py::_load` (fil de travail) → `core/data_package.py::load_source` → `core/csv_reader.py::read_csv` | contrôles 2300-2310 ; texte lu par blocs de 512 Ki caractères en lignes physiques entières (`_line_blocks`) ; en-tête repéré par `_locate_header` sur les 50 premières lignes ; les suites de lignes « ordinaires » de même largeur (`_ordinary_lines`) sont découpées d'un coup (`take_run`), toute autre ligne passe par `_split_line` et `accept` ; chaque cellule est classée vide / nombre / booléen / texte / non finie, colonne par colonne (`_ColumnBuilder`) |
+| 2. Base de temps | `core/time_parser.py::convert_time_column` puis `core/time_base.py::analyze` | 1re colonne → secondes + origine absolue, décodée pour toute la colonne par `vector_parse.match_templates` ; puis raster, événements, horodatages aberrants, horodatage régularisé facultatif |
+| 3. Interprétation (à la demande) | `SourceFile.signal(nom)` | applique le type (auto ou forcé) sans relire le fichier ; résultat mis en cache, invalidé par `revision` |
+| 4. Affichage | `core/arrangement.py::TabState` → `plotting/renderer.py::TabRenderer` | un onglet est un `TabState` (données pures) que `TabRenderer` dessine dans une figure Matplotlib ; le même `TabRenderer` dessine la page PDF |
+| 5. Axe des temps | `Workspace.timeline()` → `Timeline` | relatif ou absolu ; `Timeline.x(fichier)` donne les abscisses (mises en cache) de chaque échantillon |
+| 6. Curseurs | `TabState` / `AxleState` → `core/readings.py` → `TabRenderer.draw_cursors()` → `AnalysisTab.update_cursors()` | lectures sur l'échantillon réel, jamais interpolé, à partir d'une `TimeGrid` (abscisses finies et leur ordre, préparées une fois par fichier et par axe des temps) ; seuls les curseurs sont recréés puis redessinés sur le rendu figé du reste de la figure (« blitting », rendu mémorisé à chaque dessin complet par `_on_draw`) |
+| 7. Zoom | `core/sampling.py::DisplayCurve` | l'ordre des abscisses d'une courbe n'est analysé qu'une fois ; nuage X/Y et mots binaires gardés en cache tant que leurs courbes ne changent pas |
+| 8. Rapport | `core/project.py::ReportPage` → `report/pdf_report.py::export_pdf` | une page est une copie figée du `TabState` ; chaque page est dessinée (en-tête + zone graphique + lectures), puis l'annexe de traçabilité |
+
+Deux règles transversales :
+
+- **conversions en bloc** : numpy convertit la colonne entière ; ce qu'il refuse est
+  repris par la fonction « une cellule / une ligne » d'origine (`_classify`,
+  `_time_of_day_ns`, `_parse_datetime_text`…) : le résultat est identique, seule la
+  vitesse change ;
+- **aucune exception ne sort de `load_source()`** (sauf annulation) : toute erreur
+  devient un constat ERREUR sur ce seul fichier (REQ 4105).
 
 ## 3. Choix techniques et raisons
 

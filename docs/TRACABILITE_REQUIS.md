@@ -1,33 +1,34 @@
-# Matrice de traçabilité des requis — VISU PTBG 2.5.0
+# Matrice de traçabilité des requis — VISU PTBG 2.5.1
 
-Document de référence : **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026),
-fichier `docs/specification/NCS00ICOMMON----ES010_RevA.docx`.
-Le Word contient **64 lignes** de requis pour **63 identifiants** (REQ_COMMON_KH_2201
-apparaît deux fois : « Analog signal type : float » et « Binary group signal »).
+| | |
+|---|---|
+| Document de référence | **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026), `docs/specification/NCS00ICOMMON----ES010_RevA.docx` |
+| Contenu du Word | **64 lignes** de requis pour **63 identifiants** (REQ_COMMON_KH_2201 apparaît deux fois : « Analog signal type : float » et « Binary group signal ») |
+| Contrôle automatique | `python tools/verifier_tracabilite.py` (et `tests/test_architecture.py`) relit les identifiants **dans le Word** et vérifie que chacun est cité ici, dans le code et dans au moins un test |
+| Version tableur | `docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx`, avec l'onglet « Points ouverts » (questions à faire valider par le rédacteur de la spécification) |
 
-Contrôle automatique : `python tools/verifier_tracabilite.py` (et le test
-`tests/test_architecture.py`) relit les identifiants **dans le Word** et vérifie que
-chacun est cité ici, dans le code et dans au moins un test. Aucun requis n'est laissé de côté (aucun n'est oublié ; tous ne sont pas encore validés).
-Un test cité prouve que la fonction existe et qu'un cas représentatif est vérifié ; il ne
-prouve pas à lui seul que toute l'exigence est satisfaite : c'est la revue des énoncés (et
-des points ouverts) avec le rédacteur de la spécification qui le confirmera.
+## Synthèse
 
-Légende du statut :
+| Statut | Signification | Lignes |
+|---|---|---|
+| **Implémenté et testé** | fonction présente et vérifiée par un test automatique | 47 |
+| **Implémenté — interprétation à valider** | réalisé selon une interprétation ou une valeur par défaut ; la question correspondante est dans l'onglet « Points ouverts » de l'Excel | 14 |
+| **Proposition — énoncé vide** | l'énoncé de la Rev. A est vide ; une fonction est proposée, le requis ne peut pas être déclaré satisfait avant d'être rédigé | 1 |
+| **Implémenté — qualification … à faire** | réalisé et testé ici (Linux, données de test) ; l'essai sur les postes cibles ou sur les volumes réels reste à consigner (dernière section) | 2 |
+| **Total** | | **64** |
 
-- **Implémenté et testé** : fonction présente et vérifiée par un test automatique ;
-- **Implémenté — interprétation à valider** : réalisé selon une interprétation ou une
-  valeur par défaut documentée dans [POINTS_OUVERTS.md](POINTS_OUVERTS.md), à confirmer
-  par le rédacteur de la spécification ;
-- **Proposition — énoncé vide** : l'énoncé de la Rev. A est vide ; une fonction est
-  proposée, le requis ne peut pas être déclaré satisfait avant d'être rédigé ;
-- **Implémenté — qualification … à faire** : réalisé et testé ici (Linux, données de
-  test) ; l'essai sur les postes cibles (Windows 11 / SLES 15 SP7 réel) ou sur les volumes
-  réels de PTBG reste à consigner (procédure dans [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md)).
+Aucun requis n'est laissé de côté, mais tous ne sont pas encore validés. Un test cité
+prouve que la fonction existe et qu'un cas représentatif est vérifié ; il ne prouve pas à
+lui seul que toute l'exigence est satisfaite : c'est la revue des énoncés et des points
+ouverts avec le rédacteur de la spécification qui le confirmera. Le code est préparé pour
+Windows 11 et SLES 15 SP7 ; il ne pourra être dit officiellement compatible qu'après les
+essais sur ces postes.
 
-En résumé : **chaque requis a reçu une implémentation ou une proposition ; plusieurs règles
-métier restent à valider, et la compatibilité Windows / SLES ainsi que les performances
-sur les vrais fichiers ne sont pas encore qualifiées.** Le code est préparé pour les deux
-systèmes ; il ne pourra être dit officiellement compatible qu'après ces essais.
+Sections ci-dessous (numérotation du Word) : 2.1 Caractéristiques des sources ·
+2.2 Contenu des sources · 2.3 Caractéristiques des fichiers · 6 Architecture ·
+3.1 Base de temps · 4.1 Fenêtre principale · 4.2 Arbre des données · 4.3 Modèles ·
+4.4 Outils graphiques · 4.5 Traitement conditionnel · 5 Sortie (rapport) ·
+Qualification restant à faire.
 
 ## 2.1 Caractéristiques des sources
 
@@ -148,12 +149,9 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 | REQ_COMMON_KH_6004 | Pas à pas = génération séquentielle selon l'onglet actif (vue globale, analyse, curseurs, nuage X/Y…) | Captures figées successives (zoom, curseurs, X/Y, condition, commentaire), ordonnables | `gui/app.py` (`add_report_page`), `gui/dialogs/report_dialogs.py` (`PagesWindow`) | `test_gui.test_reports_and_project` | Implémenté et testé |
 | REQ_COMMON_KH_6005 | En-tête : version, émetteur, date, fichiers sources, projet et unité, référence ou empreinte du projet | Tous ces champs ; SHA-256 des sources et du fichier projet ; annexe de traçabilité | `report/pdf_report.py` (`build_header`) | `test_package_report.test_pdf_automatic_and_step_by_step`, `test_package_report.test_report_page_layout_like_project_test_reports` | Implémenté — interprétation à valider (fichier projet .ptbg.json) |
 
-## Synthèse
+## Qualification restant à faire
 
-| Statut | Lignes |
-|---|---|
-| Implémenté et testé | 47 |
-| Implémenté — interprétation à valider (voir POINTS_OUVERTS.md) | 14 |
-| Proposition — énoncé vide à rédiger | 1 |
-| Implémenté — qualification (cible ou volumes réels) à faire | 2 |
-| **Total** | **64** |
+| Essai | Requis | Comment | Repère actuel |
+|---|---|---|---|
+| Windows 11 / Spyder 6 au poste, et Service Unit SLES 15 SP7 réel | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | suite complète de tests verte sous Linux, Python 3.10 à 3.14, Tk 8.6 et 9 |
+| Volumes réels de PTBG (taille, nombre de colonnes, de fichiers) pour confirmer la valeur de REQ 2310 | REQ_COMMON_KH_2310, 4105 | `python tools/banc_performance.py` sur de vrais fichiers, puis `--generer 500` | banc Linux (Python 3.11, version 2.2.0) : 1 000 000 lignes × 21 colonnes lues et analysées en 4,7 s (115 Mo), 7,0 s (150 Mo, Bool true/false) et 6,7 s (157 Mo, heure hh:mm:ss.ns) ; 500 Mo (3,66 millions de lignes) en 32 s avec 1,6 Go de mémoire. Machine virtuelle aux allocations mémoire lentes : seul l'essai sur les postes cibles fait foi |

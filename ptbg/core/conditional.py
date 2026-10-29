@@ -9,7 +9,7 @@ termes « signal Bool = état attendu » par ET ou OU. Elle sert :
 - au traitement conditionnel (section 4.5, REQ_COMMON_KH_5500 dont l'énoncé
   est VIDE dans la Rev. A) : statistiques des signaux analogiques pendant les
   périodes où la condition est vraie. Ce comportement est une proposition à
-  valider (docs/POINTS_OUVERTS.md), construite uniquement sur 5407.
+  valider (onglet « Points ouverts » du récapitulatif Excel), construite uniquement sur 5407.
 
 Règles sans interpolation :
 - Bool du MÊME fichier : état lu sur la même ligne que la mesure analogique ;
