@@ -275,15 +275,22 @@ class TabRenderer:
                 if marks.size:
                     ax.plot(x[marks], curve.values[marks], "x", color=color, ms=7, mew=1.6)
         _bound_axes(ax, None, _representable_limits([curve.values for curve in curves]))
-        self._legend(ax)
+        self._legend(ax, axle)
 
-    def _legend(self, ax) -> None:
-        """Légende : dans l'axe à l'écran ; dans le rapport, à droite hors des courbes
-        (axes de la dernière colonne de la disposition)."""
-        if self._legend_outside:
-            ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0, fontsize=FONT_SMALL)
+    def _legend(self, ax, axle: AxleState) -> None:
+        """Légende de l'axe : masquée, à la place choisie à la souris, ou automatique
+        (dans l'axe à l'écran ; dans le rapport, à droite hors des courbes pour les
+        axes de la dernière colonne). À l'écran, elle se déplace à la souris."""
+        if axle.legend == "hidden":
+            return
+        if axle.legend == "free" and axle.legend_xy:
+            legend = ax.legend(loc=tuple(axle.legend_xy), fontsize=FONT_SMALL, framealpha=0.85)
+        elif self._legend_outside:
+            legend = ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0, fontsize=FONT_SMALL)
         else:
-            ax.legend(loc="best", fontsize=FONT_SMALL, framealpha=0.85)
+            legend = ax.legend(loc="best", fontsize=FONT_SMALL, framealpha=0.85)
+        if not self.for_print:
+            legend.set_draggable(True)
 
     def _draw_digital(self, index, ax, axle, curves: list[CurveData]) -> None:
         """Pistes logiques empilées de haut en bas, étiquetées à gauche."""
@@ -339,7 +346,7 @@ class TabRenderer:
             span = np.array([data.x.min(), data.x.max()])
             ax.plot(span, data.slope * span + data.intercept, "--", color="#555555", lw=1.0,
                     label=f"régression (r = {data.r:.4f})")
-            self._legend(ax)
+            self._legend(ax, axle)
         apply_grid(ax, minor_y=True)
         ax.set_xlabel(f"X : {axle.xy_x.name}", fontsize=FONT_SMALL)
         ax.set_ylabel(f"Y : {axle.xy_y.name}", fontsize=FONT_SMALL)

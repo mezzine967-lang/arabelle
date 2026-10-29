@@ -23,7 +23,7 @@ from ptbg.config import Settings
 from ptbg.core.arrangement import TEMPLATES
 from ptbg.core.csv_reader import ReadCancelled
 from ptbg.core.data_package import SourceFile, Workspace, configure_time, load_source
-from ptbg.core.diagnostic_report import file_report
+from ptbg.core.diagnostic_report import file_report, issue_line
 from ptbg.core.multi_source import compare_sources
 from ptbg.core.project import PROJECT_SUFFIX, ReportPage, load_project, save_project
 from ptbg.core.signals import BinaryGroup, SignalType
@@ -489,9 +489,15 @@ class Application:
         package = next((p for p in self.workspace.packages if p.id == package_id), self.workspace.active_package)
         issues = compare_sources(package.files, self.workspace.timeline())
         text = "\n".join([f"# Comparaison des sources — {package.name}", ""] +
-                         [f"- {issue.as_text()}" for issue in issues]) if issues else \
+                         [f"- {issue_line(issue)}" for issue in issues]) if issues else \
             f"# Comparaison des sources — {package.name}\n\nAu moins deux fichiers chargés sont nécessaires."
         TextWindow(self.root, "Comparaison des sources", text, markdown=True)
+
+    def reset_view(self) -> None:
+        """Vue d'origine de l'onglet actif (toute la durée, échelles automatiques)."""
+        tab = self.graph.active_tab()
+        if tab is not None:
+            tab.reset_view()
 
     def toggle_monitor(self) -> None:
         """Masque ou réaffiche le TBM de l'onglet actif (règle de REQ 4103)."""
@@ -573,6 +579,7 @@ class Application:
         menu = tk.Menu(self.root, tearoff=False)
         if axle.kind == "xy":
             menu.add_command(label="Choisir X et Y…", command=self.configure_xy)
+            self._legend_menu(menu, tab, index)
             return menu
         for value, label in (("single", "Curseur vertical simple"), ("double", "Double curseur"),
                              ("none", "Aucun curseur vertical")):
@@ -592,7 +599,23 @@ class Application:
             menu.add_command(label="Vider l'axe", command=tab.clear_axle)
         menu.add_command(label="Échelle Y automatique",
                          command=lambda: (setattr(axle, "ylim", None), tab.redraw()))
+        self._legend_menu(menu, tab, index)
         return menu
+
+    @staticmethod
+    def _legend_menu(menu, tab, index: int) -> None:
+        """Entrées « légende » du menu d'un axe qui en a une (courbes Float, nuage X/Y)."""
+        axle = tab.state.axles[index]
+        shown = tab.renderer is not None and tab.renderer.axes[index].get_legend() is not None
+        if not shown and axle.legend != "hidden":
+            return                             # pistes logiques : noms dans l'axe, pas de légende
+        menu.add_separator()
+        if axle.legend == "hidden":
+            menu.add_command(label="Afficher la légende", command=lambda: tab.set_legend(index, "auto"))
+            return
+        if axle.legend == "free":
+            menu.add_command(label="Légende à sa place automatique", command=lambda: tab.set_legend(index, "auto"))
+        menu.add_command(label="Masquer la légende", command=lambda: tab.set_legend(index, "hidden"))
 
     # --------------------------------------------------------------- rapport
     def edit_report_header(self) -> None:

@@ -13,8 +13,10 @@ Requis servis (l'état est dans ``TabState``, le dessin dans plotting/renderer) 
 - REQ_COMMON_KH_4103 : masquage du TBM refusé en cas d'alerte.
 
 Souris : clic = placer le curseur, glisser = le déplacer, Maj+clic = niveau
-du curseur horizontal, clic droit = menu de l'axe. Clavier : flèches gauche /
-droite = échantillon précédent / suivant de la courbe sélectionnée.
+du curseur horizontal, clic droit = menu de l'axe. Légende : glisser = la
+déplacer (place conservée à l'écran, dans le projet et le rapport), clic sur
+un nom = sélectionner cette courbe. Clavier : flèches gauche / droite =
+échantillon précédent / suivant de la courbe sélectionnée.
 Quand un outil de zoom ou de déplacement de la barre Matplotlib est actif,
 les clics lui sont réservés.
 """
@@ -54,6 +56,7 @@ class AnalysisTab(ttk.Frame):
         self.active_axle = 0
         self.renderer: TabRenderer | None = None
         self._drag: str | None = None
+        self._legend_press = None          # (axe, x, y) du clic sur une légende
         self._pending_motion = None
         self._resize_job = None
         self._refresh_job = None
@@ -102,6 +105,7 @@ class AnalysisTab(ttk.Frame):
         ttk.Button(second, text="Nuage X/Y…", command=self.controller.configure_xy).pack(side="left", padx=2)
         self.tbm_button = ttk.Button(second, text="Masquer le TBM", command=self.toggle_monitor)
         self.tbm_button.pack(side="left", padx=2)
+        ttk.Button(second, text="Vue d'origine", command=self.reset_view).pack(side="left", padx=2)
 
     def _build_body(self) -> None:
         """Figure Matplotlib intégrée à Tk, barre de zoom et panneau de lecture."""
@@ -117,11 +121,13 @@ class AnalysisTab(ttk.Frame):
         self.paned.add(holder, minsize=400, stretch="always")
         self.panel = ReadingPanel(self.paned)
         self.paned.add(self.panel, width=PANEL_WIDTH, minsize=150, stretch="never")
-        ttk.Label(self, foreground="#555555", padding=(4, 0),
-                  text="Clic : placer le curseur · Glisser : le déplacer · Maj+clic : niveau du curseur H · "
-                       "Flèches gauche/droite : échantillon voisin · Clic droit : menu de l'axe · Loupe/croix de la barre : "
-                       "zoom/déplacement").pack(
-            fill="x")
+        hint = ttk.Label(self, foreground="#555555", padding=(4, 0),
+                         text="Clic : placer le curseur · Glisser : le déplacer · Maj+clic : niveau du curseur H · "
+                              "Flèches gauche/droite : échantillon voisin · Légende : glisser pour la déplacer, "
+                              "clic sur un nom pour sélectionner la courbe · Clic droit : menu de l'axe · "
+                              "Loupe/croix de la barre : zoom/déplacement", justify="left")
+        hint.pack(fill="x")
+        hint.bind("<Configure>", lambda e: hint.configure(wraplength=max(e.width - 8, 200)))
         for name, handler in (("button_press_event", self._on_press), ("motion_notify_event", self._on_motion),
                               ("button_release_event", self._on_release), ("key_press_event", self._on_key),
                               ("draw_event", self._on_draw)):
@@ -205,6 +211,8 @@ class AnalysisTab(ttk.Frame):
     def _on_resize(self, _event) -> None:
         """Redimensionnement : redessin complet différé (évite les redessins en rafale)."""
         self._background = None                 # rendu figé d'une autre taille
+        if self.renderer is None:               # pas encore dessiné, ou onglet en cours de fermeture
+            return
         if self._resize_job is not None:
             self.after_cancel(self._resize_job)
         self._resize_job = self.after(400, self._after_resize)
@@ -384,6 +392,59 @@ class AnalysisTab(ttk.Frame):
         else:
             self.paned.forget(self.panel)
 
+    def reset_view(self) -> None:
+        """Revient à la vue d'origine : toute la durée des fichiers, échelles verticales
+        automatiques, légendes déplacées remises à leur place automatique. Les
+        courbes, curseurs et réglages de l'onglet sont conservés (une légende
+        masquée le reste)."""
+        self.state.xlim = None
+        for axle in self.state.axles:
+            axle.ylim = None
+            if axle.legend == "free":
+                axle.legend, axle.legend_xy = "auto", None
+        self.redraw()
+
+    def set_legend(self, index: int, mode: str) -> None:
+        """Légende de l'axe ``index`` : « auto » (place automatique) ou « hidden »."""
+        axle = self.state.axles[index]
+        axle.legend, axle.legend_xy = mode, None
+        self.redraw()
+
+    def _legend_under(self, event) -> int | None:
+        """Indice de l'axe dont la légende est sous la souris."""
+        for index, ax in enumerate(self.renderer.axes):
+            legend = ax.get_legend()
+            if legend is not None and legend.contains(event)[0]:
+                return index
+        return None
+
+    def _legend_released(self, event) -> None:
+        """Fin d'un clic sur une légende : elle a été déplacée (sa place est
+        mémorisée) ou simplement cliquée (le nom visé devient la courbe sélectionnée)."""
+        index, x0, y0 = self._legend_press
+        self._legend_press = None
+        ax = self.renderer.axes[index]
+        legend = ax.get_legend()
+        if legend is None:
+            return
+        axle = self.state.axles[index]
+        if abs(event.x - x0) + abs(event.y - y0) > 3:
+            # Glissée par Matplotlib : on retient son coin bas-gauche en fraction de l'axe,
+            # ramené dans la figure pour qu'une légende lâchée au bord ne soit jamais perdue.
+            box, figure = legend.get_window_extent(), self.figure.bbox
+            left = min(max(box.x0, figure.x0), max(figure.x1 - box.width, figure.x0))
+            bottom = min(max(box.y0, figure.y0), max(figure.y1 - box.height, figure.y0))
+            x, y = ax.transAxes.inverted().transform((left, bottom))
+            axle.legend, axle.legend_xy = "free", [float(x), float(y)]
+            return
+        if axle.kind != "time":
+            return
+        for position, text in enumerate(legend.get_texts()):
+            if text.contains(event)[0]:
+                self.set_active_axle(index)
+                self._select_curve(position)
+                return
+
     def toggle_monitor(self) -> None:
         """REQ 4103 : masquage possible seulement sans avertissement ni erreur."""
         if self.state.tbm_visible:
@@ -428,8 +489,15 @@ class AnalysisTab(ttk.Frame):
         self.update_cursors()
 
     def _on_press(self, event) -> None:
-        """Clic : axe actif, menu contextuel, ou prise d'un curseur / d'un point X/Y."""
-        if self.renderer is None or event.inaxes is None or self.toolbar.mode:
+        """Clic : légende, axe actif, menu contextuel, ou prise d'un curseur / d'un point X/Y."""
+        if self.renderer is None or self.toolbar.mode:
+            return
+        if event.button == 1:
+            index = self._legend_under(event)
+            if index is not None:              # Matplotlib la déplace ; rien d'autre ne bouge
+                self._legend_press = (index, event.x, event.y)
+                return
+        if event.inaxes is None:
             return
         index = self.renderer.axle_index_of(event.inaxes)
         if event.inaxes is self.renderer.tbm_plot:
@@ -471,7 +539,7 @@ class AnalysisTab(ttk.Frame):
 
     def _on_motion(self, event) -> None:
         """Mouvement : glisser un curseur ou suivi souris, regroupés par ``after_idle``."""
-        if self.renderer is None or event.inaxes is None or self.toolbar.mode:
+        if self.renderer is None or event.inaxes is None or self.toolbar.mode or self._legend_press:
             return
         if self._drag:
             self._pending_motion = (self._drag, event)
@@ -494,9 +562,11 @@ class AnalysisTab(ttk.Frame):
             self._pending_motion = None
             self._move(target, event)
 
-    def _on_release(self, _event) -> None:
-        """Fin du glisser."""
+    def _on_release(self, event) -> None:
+        """Fin du glisser (curseur ou légende)."""
         self._drag = None
+        if self._legend_press is not None and self.renderer is not None:
+            self._legend_released(event)
 
     def _on_key(self, event) -> None:
         """Flèches : déplace le curseur actif à l'échantillon voisin de la courbe sélectionnée."""
@@ -517,6 +587,7 @@ class AnalysisTab(ttk.Frame):
     def dispose(self) -> None:
         """Annule les rafraîchissements différés avant destruction de l'onglet
         (évite les « invalid command name … » de Tk et du dessin Matplotlib)."""
+        self.renderer = None                # plus aucun redessin planifié à partir d'ici
         for job in (self._resize_job, self._refresh_job):
             if job is not None:
                 self.after_cancel(job)

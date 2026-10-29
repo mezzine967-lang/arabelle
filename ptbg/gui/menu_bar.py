@@ -48,6 +48,7 @@ class MenuBar:
         view.add_cascade(label="Nouvel onglet (modèle)", menu=templates)
         view.add_command(label="Renommer l'onglet…", command=c.rename_tab)
         view.add_command(label="Fermer l'onglet", accelerator="Ctrl+W", command=c.close_tab)
+        view.add_command(label="Vue d'origine (toute la durée)", accelerator="Ctrl+0", command=c.reset_view)
         view.add_separator()
         view.add_radiobutton(label="Axe des temps relatif (s)", value="relative",
                              variable=self.time_mode, command=lambda: c.set_time_mode("relative"))
@@ -99,7 +100,7 @@ class MenuBar:
 
         # Raccourcis clavier valables dans toute l'application.
         for sequence, action in (("<Control-o>", c.open_files), ("<Control-s>", c.save_project),
-                                 ("<Control-q>", c.quit), ("<Control-w>", c.close_tab),
+                                 ("<Control-q>", c.quit), ("<Control-w>", c.close_tab), ("<Control-0>", c.reset_view),
                                  ("<Control-p>", c.automatic_report), ("<Control-k>", c.add_report_page),
                                  ("<F9>", c.toggle_tree), ("<F1>", c.show_help)):
             root.bind_all(sequence, lambda _event, action=action: action())

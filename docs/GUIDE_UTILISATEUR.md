@@ -1,4 +1,4 @@
-# Guide d'utilisation — VISU PTBG 2.4.1
+# Guide d'utilisation — VISU PTBG 2.5.0
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier
@@ -119,7 +119,13 @@ mesuré et affiché (« jitter max »). L'option « Affichage régularisé » re
 par une droite ajustée sur le raster (les trous restent visibles, aucune mesure n'est
 créée) ; le TBM indique toujours lequel des deux affichages est utilisé.
 
-**Base de temps > Diagnostic complet** liste chaque anomalie avec sa ligne dans le CSV.
+**Base de temps > Diagnostic complet** (ou double-clic sur le nœud Diagnostic) s'ouvre sur
+un **bilan en une phrase** et la liste des **points à vérifier**, erreurs d'abord ; suivent
+l'identité du fichier, la lecture, la base de temps (réglages, contrôles, portions à période
+constante), le tableau des événements avec leur **ligne dans le CSV**, et les valeurs.
+Chaque constat commence par sa gravité en couleur : [ERREUR] donnée non fiable,
+[AVERTISSEMENT] à vérifier, [INFO] information, [OK] conforme. « Copier tout » et
+« Enregistrer sous… » donnent le même texte.
 **Base de temps > Comparer les sources** compare les PLC du paquet : recouvrement, fin de
 flux décalée, fréquences, déphasage entre grilles d'échantillonnage.
 
@@ -130,8 +136,15 @@ flux décalée, fréquences, déphasage entre grilles d'échantillonnage.
 
 **Nouvel onglet** (barre rapide ou menu Affichage) propose 7 modèles : 1, 2, 3 ou 4 axes,
 analogique + logique, grille 2 × 2, temporel + nuage X/Y. Les axes temporels d'un onglet
-partagent le même temps : zoom et déplacement (loupe et croix de la barre d'outils, maison
-= vue complète) s'appliquent à tous.
+partagent le même temps : zoom et déplacement (loupe et croix de la barre d'outils)
+s'appliquent à tous. Le bouton **Vue d'origine** (aussi Affichage > Vue d'origine, Ctrl+0)
+réaffiche toute la durée des fichiers avec les échelles verticales automatiques et remet les
+légendes déplacées à leur place ; courbes et curseurs sont conservés.
+
+**Légendes** : glisser une légende avec la souris la déplace ; elle garde sa place après un
+redessin, dans le projet et dans le rapport PDF. Un clic sur un nom de la légende
+sélectionne cette courbe. Clic droit sur l'axe : masquer / afficher la légende, ou la
+remettre à sa place automatique.
 
 Fermer un onglet : croix **×** de son titre, clic molette sur le titre, clic droit sur le
 titre (renommer / fermer) ou Ctrl+W. S'il n'en reste aucun, un onglet vide est recréé.

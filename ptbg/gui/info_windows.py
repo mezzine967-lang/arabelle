@@ -7,7 +7,8 @@
 - Fichier d'aide (docs/GUIDE_UTILISATEUR.md).
 
 Les documents Markdown sont affichés par un rendu simple dans un widget Text
-(titres, listes, blocs de code, tableaux dessinés en colonnes alignées) :
+(titres, listes en retrait, gras, blocs de code, tableaux dessinés en colonnes
+alignées, gravités [ERREUR] / [AVERTISSEMENT] / [INFO] / [OK] en couleur) :
 aucune bibliothèque ni navigateur requis, identique sous Windows et SLES.
 """
 from __future__ import annotations
@@ -20,13 +21,18 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from tkinter import font as tkfont
 
+from ptbg.core.diagnostics import Severity
 from ptbg.gui.icons import bold_font
+from ptbg.plotting.styles import SEVERITY_COLORS
 from ptbg.system.compat import project_root
 from ptbg.system.environment import collect_environment
 from ptbg.version import MIN_PYTHON, SPECIFICATION, TOOL_DATE, full_name
 
 TABLE_WIDTH = 118        # largeur maximale d'un tableau (caractères à chasse fixe)
 MIN_COLUMN = 8           # largeur minimale d'une colonne avant retour à la ligne
+INDENT_PX = 18           # retrait d'un niveau de liste (pixels)
+# Gravités repérées dans le texte : « [OK] », « [INFO] »… et les mots ERREUR / AVERTISSEMENT seuls.
+SEVERITY_WORDS = re.compile(r"\[(" + "|".join(s.label for s in Severity) + r")\]|\b(ERREUR|AVERTISSEMENT)\b")
 
 
 def _inline(text: str) -> str:
@@ -88,7 +94,11 @@ class TextWindow(tk.Toplevel):
         ttk.Button(bar, text="Copier tout", command=self.copy).pack(side="right", padx=4)
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True)
-        self.text = tk.Text(body, wrap="word", padx=10, pady=8)
+        # Texte courant en police proportionnelle (plus lisible) ; tableaux et code à chasse fixe.
+        self.body_font = tkfont.nametofont("TkDefaultFont").copy()
+        size = self.body_font.cget("size")
+        self.body_font.configure(size=size + 1 if size > 0 else size - 1)
+        self.text = tk.Text(body, wrap="word", padx=10, pady=8, font=self.body_font)
         scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
         self.text.configure(yscrollcommand=scroll.set)
         self.text.pack(side="left", fill="both", expand=True)
@@ -103,6 +113,17 @@ class TextWindow(tk.Toplevel):
         self.table_bold.configure(weight="bold")
         self.text.tag_configure("table", font=self.table_font, wrap="none")
         self.text.tag_configure("table_head", font=self.table_bold, wrap="none")
+        self.text.tag_configure("strong", font=self.fonts[2])
+        self.text.tag_configure("rule", foreground="#9e9e9e")
+        for severity in Severity:
+            self.text.tag_configure(f"sev_{severity.label}", foreground=SEVERITY_COLORS[severity],
+                                    font=self.fonts[2])
+            # Dans un tableau : couleur seule, la chasse fixe garde les colonnes alignées.
+            self.text.tag_configure(f"fg_{severity.label}", foreground=SEVERITY_COLORS[severity])
+        bullet = self.body_font.measure("• ")
+        for depth in range(4):                         # listes : les lignes suivantes restent en retrait
+            self.text.tag_configure(f"li{depth}", lmargin1=depth * INDENT_PX,
+                                    lmargin2=depth * INDENT_PX + bullet)
         self.text.tag_configure("found", background="#ffeb3b")
         self._raw = text
         if markdown:
@@ -111,8 +132,19 @@ class TextWindow(tk.Toplevel):
             self.text.insert("1.0", text, "mono")
         self.text.configure(state="disabled")
 
+    def _insert(self, text: str, *tags: str) -> None:
+        """Insère une ligne ; les gravités qu'elle contient sont colorées."""
+        position = 0
+        for match in SEVERITY_WORDS.finditer(text):
+            self.text.insert("end", text[position:match.start()], tags)
+            label = match.group(1) or match.group(2)
+            kind = "fg" if {"table", "table_head"} & set(tags) else "sev"
+            self.text.insert("end", match.group(0), tags + (f"{kind}_{label}",))
+            position = match.end()
+        self.text.insert("end", text[position:] + "\n", tags)
+
     def _render_markdown(self, text: str) -> None:
-        """Rendu simple : titres, listes, blocs de code et tableaux en colonnes."""
+        """Rendu simple : titres, listes, gras, blocs de code et tableaux en colonnes."""
         in_code, table = False, []
         for line in text.splitlines() + [""]:
             if not in_code and line.lstrip().startswith("|"):
@@ -120,7 +152,7 @@ class TextWindow(tk.Toplevel):
                 continue
             if table:
                 for row, header in markdown_table(table):
-                    self.text.insert("end", row + "\n", "table_head" if header else "table")
+                    self._insert(row, "table_head" if header else "table")
                 table = []
             if line.strip().startswith("```"):
                 in_code = not in_code
@@ -128,15 +160,22 @@ class TextWindow(tk.Toplevel):
             if in_code or line.startswith("    "):
                 self.text.insert("end", line + "\n", "mono")
                 continue
+            if re.fullmatch(r"\s*(-{3,}|\*{3,})\s*", line):
+                self.text.insert("end", "─" * 60 + "\n", "rule")
+                continue
+            strong = re.fullmatch(r"\s*\*\*(.+)\*\*\s*", line) is not None
             clean = _inline(line)
             for prefix, tag in (("### ", "h3"), ("## ", "h2"), ("# ", "h1")):
                 if clean.startswith(prefix):
                     self.text.insert("end", clean[len(prefix):] + "\n", tag)
                     break
             else:
-                if re.match(r"^\s*[-*] ", clean):
-                    clean = re.sub(r"^(\s*)[-*] ", r"\1• ", clean)
-                self.text.insert("end", clean + "\n")
+                item = re.match(r"^(\s*)[-*] ", clean)
+                if item:
+                    depth = min(len(item.group(1)) // 2, 3)
+                    self._insert("• " + clean[item.end():], f"li{depth}")
+                else:
+                    self._insert(clean, *(("strong",) if strong else ()))
 
     def find_next(self) -> None:
         """Surligne l'occurrence suivante du texte recherché."""

@@ -3,6 +3,31 @@
 Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
 Chaque version incrémente `ptbg/version.py` et ajoute une entrée ici.
 
+## 2.5.0 — 2026-10-29 — vue d'origine, diagnostic lisible, légendes déplaçables
+
+- **Vue d'origine** : bouton de la barre de l'onglet (aussi Affichage > Vue d'origine,
+  Ctrl+0) qui réaffiche toute la durée des fichiers avec les échelles verticales
+  automatiques après un zoom ou un déplacement, et remet les légendes déplacées à leur place
+  automatique. La « maison » de la barre Matplotlib ne revenait qu'à la dernière vue
+  mémorisée. Courbes, curseurs et réglages de l'onglet sont conservés.
+- **Diagnostic complet** (Base de temps > Diagnostic, nœud Diagnostic de l'arbre) réorganisé
+  pour être lu d'un coup d'œil : bilan en une phrase, liste des points à vérifier (erreurs
+  d'abord), puis sections numérotées (identité du fichier, lecture, base de temps, événements,
+  valeurs). Identité, réglages, portions à période constante et événements sont en
+  tableaux ; chaque constat commence par sa gravité ([ERREUR], [AVERTISSEMENT], [INFO], [OK])
+  en couleur ; les mesures de stabilité sont détaillées une par ligne. Même présentation
+  des constats dans la comparaison des sources.
+- **Fenêtres de texte** (diagnostic, aide, historique) : texte courant en police
+  proportionnelle, listes en retrait, gras, gravités en couleur ; tableaux et code à
+  chasse fixe.
+- **Légendes** : elles se déplacent à la souris (glisser) et gardent leur place après un
+  redessin, dans le projet enregistré et dans le rapport PDF ; une légende lâchée au bord
+  reste dans la figure. Un clic sur un nom de la légende sélectionne cette courbe. Menu de
+  l'axe (clic droit) : masquer / afficher la légende, la remettre à sa place automatique.
+- Fermeture d'un onglet : plus de message « invalid command name … _after_resize » dans
+  la console (redimensionnement planifié pendant la fermeture).
+- 140 tests (nouveaux : vue d'origine, fenêtre de diagnostic, légendes).
+
 ## 2.4.1 — 2026-10-29 — tableaux lisibles dans l'aide
 
 - Fenêtres Information (aide F1, historique, traçabilité) : les tableaux Markdown

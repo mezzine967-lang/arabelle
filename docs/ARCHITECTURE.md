@@ -1,4 +1,4 @@
-# Architecture de VISU PTBG 2.4.1 — pour reprendre le code
+# Architecture de VISU PTBG 2.5.0 — pour reprendre le code
 
 ## 1. Vue d'ensemble
 
@@ -27,7 +27,7 @@ ptbg/
 │   ├── readings.py          lectures des curseurs (panneau droit et PDF)
 │   ├── arrangement.py       modèles de disposition et état d'un onglet (REQ 5300)
 │   ├── project.py           fichier projet .ptbg.json, pages de rapport
-│   └── diagnostic_report.py texte du diagnostic complet d'un fichier
+│   └── diagnostic_report.py diagnostic complet d'un fichier (bilan, points à vérifier, tableaux)
 ├── plotting/                dessin Matplotlib, commun écran et PDF
 │   ├── renderer.py          rendu d'un onglet : axes, courbes, curseurs, X/Y
 │   ├── monitor.py           Time Base Monitor (REQ 4102-4104)

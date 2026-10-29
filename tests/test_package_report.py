@@ -103,7 +103,11 @@ class PackageTests(unittest.TestCase):
         self.assertIs(source.signal("failure_plc").type, SignalType.BOOL)
         report = file_report(source, self.ws.timeline())
         self.assertIn("Horodatage dupliqué", report)
-        self.assertIn("ligne 1009", report)
+        self.assertIn("| 1009 | ", report)                   # ligne du CSV de l'événement
+        # Lisible d'un coup d'œil : bilan en clair, puis les points à vérifier, erreurs d'abord.
+        self.assertTrue(report.splitlines()[2].startswith("**Bilan : [ERREUR]"))
+        points = report.split("## Points à vérifier")[1].split("## 1.")[0]
+        self.assertLess(points.index("[ERREUR] Croissance continue"), points.index("[AVERTISSEMENT]"))
 
     def test_project_roundtrip_with_relative_paths(self):
         """REQ 3005 : chemins relatifs portables ; état des onglets conservé."""

@@ -216,6 +216,93 @@ class InterfaceTests(unittest.TestCase):
         tab.add_curves([(source.id, "output", False)], 0)
         self.assertTrue(tab.float_curve_selected())
 
+    def test_reset_view_returns_to_full_duration(self):
+        """REQ 5106 / 5405 : après un zoom et un déplacement vertical, « Vue d'origine »
+        réaffiche toute la durée avec les échelles automatiques ; les courbes restent."""
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "output", False)], 0)
+        self.root.update()
+        full = tab.renderer.axes_time_master().get_xlim()
+        tab.renderer.axes_time_master().set_xlim(5.0, 6.0)          # zoom mémorisé dans l'onglet
+        tab.state.axles[0].ylim = [1000.0, 2000.0]                   # vue déplacée verticalement
+        tab.redraw()
+        self.assertEqual(tuple(tab.renderer.axes_time_master().get_xlim()), (5.0, 6.0))
+        self.ctl.reset_view()
+        self.root.update()
+        self.assertEqual(tuple(tab.renderer.axes_time_master().get_xlim()), tuple(full))
+        self.assertIsNone(tab.state.axles[0].ylim)
+        self.assertEqual(len(tab.state.axles[0].curves), 1)
+
+    def test_diagnostic_window_is_readable(self):
+        """REQ 4101 / 2300 : la fenêtre Diagnostic se lit sans balisage : gravités en
+        couleur, sous-points en retrait, tableaux en colonnes à chasse fixe."""
+        from ptbg.gui.info_windows import TextWindow
+        (source,) = self.load(EXAMPLES / "simulation10_execution1.csv")
+        self.ctl.show_diagnostic(source)
+        window = [w for w in self.root.winfo_children() if isinstance(w, TextWindow)][-1]
+        text = window.text
+        content = text.get("1.0", "end")
+        self.assertNotIn("**", content)
+        self.assertNotIn("|---", content)
+        self.assertIn("┌", content)
+        for tag_name in ("sev_ERREUR", "sev_AVERTISSEMENT", "sev_OK", "fg_ERREUR", "li1", "strong"):
+            self.assertTrue(text.tag_ranges(tag_name), tag_name)
+        start = text.tag_ranges("fg_ERREUR")[0]
+        self.assertIn("table", text.tag_names(start))         # couleur sans changer la police du tableau
+        window.destroy()
+
+    def test_legend_can_be_moved_hidden_and_picks_curves(self):
+        """REQ 5106 / 6001 : la légende se glisse à la souris et garde sa place (redessin,
+        projet, rapport) ; un clic sur un nom sélectionne la courbe ; elle se masque
+        par le menu de l'axe ; « Vue d'origine » la remet à sa place automatique."""
+        from matplotlib.backend_bases import MouseEvent
+        from ptbg.core.arrangement import TabState
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, name, False) for name in source.float_names()[:2]], 0)
+        self.root.update()
+        tab.canvas.draw()
+        axle = tab.state.axles[0]
+
+        def mouse(kind, x, y):
+            """Événement souris envoyé à la figure comme par Tk."""
+            tab.canvas.callbacks.process(kind, MouseEvent(kind, tab.canvas, x, y, button=1))
+
+        box = tab.renderer.axes[0].get_legend().get_window_extent()
+        x0, y0 = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
+        mouse("button_press_event", x0, y0)
+        mouse("motion_notify_event", x0 - 120, y0 - 70)
+        mouse("button_release_event", x0 - 120, y0 - 70)
+        self.assertEqual(axle.legend, "free")
+        self.assertIsNone(axle.t1, "le clic sur la légende ne doit pas poser de curseur")
+        tab.redraw()
+        tab.canvas.draw()
+        moved = tab.renderer.axes[0].get_legend().get_window_extent()
+        self.assertAlmostEqual(moved.x0, box.x0 - 120, delta=3)
+        self.assertAlmostEqual(moved.y0, box.y0 - 70, delta=3)
+        self.assertEqual(TabState.from_dict(tab.state.to_dict()).axles[0].legend_xy, axle.legend_xy)
+        # Clic simple sur le 2e nom : la 2e courbe devient la courbe sélectionnée.
+        name = tab.renderer.axes[0].get_legend().get_texts()[1].get_window_extent()
+        x1, y1 = (name.x0 + name.x1) / 2, (name.y0 + name.y1) / 2
+        mouse("button_press_event", x1, y1)
+        mouse("button_release_event", x1, y1)
+        self.assertEqual(axle.selected, 1)
+        self.assertEqual(axle.legend_xy, TabState.from_dict(tab.state.to_dict()).axles[0].legend_xy)
+        menu = self.ctl.axle_context_menu(tab, 0)
+        labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)
+                  if menu.type(i) == "command"]
+        self.assertIn("Masquer la légende", labels)
+        self.assertIn("Légende à sa place automatique", labels)
+        tab.set_legend(0, "hidden")
+        self.assertIsNone(tab.renderer.axes[0].get_legend())
+        tab.set_legend(0, "auto")
+        mouse("button_press_event", x0, y0)       # replacée puis déplacée à nouveau
+        tab.state.axles[0].legend, tab.state.axles[0].legend_xy = "free", [0.1, 0.1]
+        self.ctl.reset_view()
+        self.assertEqual((axle.legend, axle.legend_xy), ("auto", None))
+        self.assertIsNotNone(tab.renderer.axes[0].get_legend())
+
     def test_tabs_close_with_their_cross(self):
         """REQ 5106 : chaque onglet se ferme par la croix de son titre (ou clic molette,
         clic droit, Ctrl+W) ; il reste toujours au moins un onglet."""

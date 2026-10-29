@@ -88,6 +88,8 @@ class AxleState:
     xy_mode: str = "two_cursors"          # "two_cursors" | "cross_point"
     xy_t: float | None = None             # instant du point désigné
     ylim: list | None = None              # None = échelle automatique
+    legend: str = "auto"                  # "auto" | "free" (placée à la souris) | "hidden"
+    legend_xy: list | None = None         # coin bas-gauche de la légende placée (fraction de l'axe)
 
     def selected_curve(self) -> CurveRef | None:
         if not self.curves:
