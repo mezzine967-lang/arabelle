@@ -247,7 +247,7 @@ class ValueAndTimeRobustnessTests(unittest.TestCase):
 
     def test_isolated_forward_clock_value_does_not_shift_the_rest_by_a_day(self):
         """REQ 2306 : « 23:59:59 » isolé au milieu d'un essai à 00 h 10 n'est pas un passage de
-        minuit (jusqu'à la 2.1.0, la mesure suivante décalait tout le reste du fichier d'un jour)."""
+        minuit (sinon la mesure suivante décalerait tout le reste du fichier d'un jour)."""
         raw = [f"00:10:{i * 0.01:012.9f}" for i in range(200)]
         raw[100] = "23:59:59.000000000"
         conversion = convert_time_column(raw, "heure", TimeBaseSettings())

@@ -1,4 +1,4 @@
-# Architecture de VISU PTBG 2.5.1 — pour reprendre le code
+# Architecture de VISU PTBG 1.0.0 — pour reprendre le code
 
 ## 1. Vue d'ensemble
 
@@ -99,7 +99,7 @@ Deux règles transversales :
 | Réduction min/max des points | courbes de millions de points fluides ; les pics restent visibles ; les curseurs lisent les vrais échantillons |
 | Aucune interpolation, aucune valeur inventée | traçabilité d'un outil d'analyse d'anomalies : une cellule vide reste vide (croix), un trou de temps interrompt la courbe |
 | Lecture ligne par ligne (et non `csv.reader` sur tout le fichier) | un guillemet non fermé ne peut plus avaler la suite du fichier ; numéros de ligne exacts ; découpage direct à la virgule plus rapide, module `csv` en mode strict seulement pour les lignes à guillemets |
-| Blocs de lignes ordinaires découpés d'un coup, conversions de colonnes entières | un fichier de 500 Mo se lit en quelques dizaines de secondes ; les lignes et cellules particulières gardent leur traitement une à une, d'où des résultats identiques (vérifiés par comparaison automatique avec la 2.1.0) |
+| Blocs de lignes ordinaires découpés d'un coup, conversions de colonnes entières | un fichier de 500 Mo se lit en quelques dizaines de secondes ; les lignes et cellules particulières gardent leur traitement une à une, d'où des résultats identiques (vérifiés par comparaison automatique avec le traitement ligne par ligne) |
 | Valeurs lues non modifiables et partagées par les variables | la règle « aucune valeur modifiée » est garantie par numpy (écriture refusée) ; pas de copie par variable, mémoire réduite |
 | Curseurs « animés » (blitting) | un mouvement de souris ne redessine que les curseurs : fluidité avec des millions de points ; le PDF dessine les curseurs normalement |
 | Ligne au mauvais nombre de champs rejetée, jamais complétée | sa dernière valeur pourrait être tronquée : mieux vaut un trou signalé qu'une valeur fausse |

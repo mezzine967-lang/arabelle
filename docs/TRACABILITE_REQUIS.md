@@ -1,4 +1,4 @@
-# Matrice de traçabilité des requis — VISU PTBG 2.5.1
+# Matrice de traçabilité des requis — VISU PTBG 1.0.0
 
 | | |
 |---|---|
@@ -154,4 +154,4 @@ Qualification restant à faire.
 | Essai | Requis | Comment | Repère actuel |
 |---|---|---|---|
 | Windows 11 / Spyder 6 au poste, et Service Unit SLES 15 SP7 réel | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | suite complète de tests verte sous Linux, Python 3.10 à 3.14, Tk 8.6 et 9 |
-| Volumes réels de PTBG (taille, nombre de colonnes, de fichiers) pour confirmer la valeur de REQ 2310 | REQ_COMMON_KH_2310, 4105 | `python tools/banc_performance.py` sur de vrais fichiers, puis `--generer 500` | banc Linux (Python 3.11, version 2.2.0) : 1 000 000 lignes × 21 colonnes lues et analysées en 4,7 s (115 Mo), 7,0 s (150 Mo, Bool true/false) et 6,7 s (157 Mo, heure hh:mm:ss.ns) ; 500 Mo (3,66 millions de lignes) en 32 s avec 1,6 Go de mémoire. Machine virtuelle aux allocations mémoire lentes : seul l'essai sur les postes cibles fait foi |
+| Volumes réels de PTBG (taille, nombre de colonnes, de fichiers) pour confirmer la valeur de REQ 2310 | REQ_COMMON_KH_2310, 4105 | `python tools/banc_performance.py` sur de vrais fichiers, puis `--generer 500` | banc Linux (Python 3.11) : 1 000 000 lignes × 21 colonnes lues et analysées en 4,7 s (115 Mo), 7,0 s (150 Mo, Bool true/false) et 6,7 s (157 Mo, heure hh:mm:ss.ns) ; 500 Mo (3,66 millions de lignes) en 32 s avec 1,6 Go de mémoire. Machine virtuelle aux allocations mémoire lentes : seul l'essai sur les postes cibles fait foi |

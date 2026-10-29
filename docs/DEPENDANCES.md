@@ -100,7 +100,7 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 Suite complète (`python -m unittest discover -s tests`, IHM réelle sous Xvfb incluse),
 chaque ligne dans un environnement virtuel neuf.
 
-**Versions 2.5.0 et 2.5.1 (140 tests)** — dernière campagne :
+**Campagne de la version 1.0.0 (140 tests)** :
 
 | Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
 |---|---|---|---|---|---|---|
@@ -108,8 +108,8 @@ chaque ligne dans un environnement virtuel neuf.
 | py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 140 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
 | py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 140 tests : OK, 16 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
 
-**Version 2.2.0 (131 tests)** — la mise à jour rapide des curseurs (blitting) a été
-vérifiée avec Tk 8.6 « partagé » (famille Windows / Spyder / SLES) et Tk 9.0, image
+**Campagne élargie pendant le développement (suite alors de 131 tests)** — la mise à jour
+rapide des curseurs (blitting) a été vérifiée avec Tk 8.6 « partagé » (famille Windows / Spyder / SLES) et Tk 9.0, image
 identique au pixel près à un rendu complet :
 
 | Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
@@ -122,11 +122,11 @@ identique au pixel près à un rendu complet :
 | py313-ref-tk9 | 3.13.14 | 9.0.3 | 2.4.6 | 3.10.9 | 131 tests : OK |  |
 | py314-latest-tk9 | 3.14.6 | 9.0.3 | 2.5.4 | 3.11.2 | 131 tests : OK | versions les plus récentes |
 
-Les conversions accélérées de la 2.2.0 ont en outre été comparées résultat par résultat
-à celles de la 2.1.0 (plus de 10 000 fichiers et séries abîmés générés au hasard) avec
+Les conversions accélérées (colonnes entières) ont en outre été comparées résultat par
+résultat au traitement ligne par ligne (plus de 10 000 fichiers et séries abîmés générés au hasard) avec
 numpy 2.4.6 et numpy 1.24.4 : aucune différence.
 
-**Version 2.1.0 (120 tests)** : 12 combinaisons, de Python 3.10 à 3.14, Tk 8.6.12,
+**Campagne antérieure (suite de 120 tests)** : 12 combinaisons, de Python 3.10 à 3.14, Tk 8.6.12,
 8.6.14 et 9.0.3, numpy 1.24.4 à 2.5.4, matplotlib 3.6.3 à 3.11.2 : **toutes OK**. Les
 tests d'IHM étaient ignorés sur 5 d'entre elles, soit pour un artefact du banc (Python
 « standalone » ancien avec `_tkinter` intégré statiquement, absent sous Windows et SLES),

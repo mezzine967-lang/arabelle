@@ -1,4 +1,4 @@
-# VISU PTBG 2.5.1 — analyseur graphique de perturbographie
+# VISU PTBG 1.0.0 — analyseur graphique de perturbographie
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
 Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
@@ -77,7 +77,7 @@ Les 64 lignes de la spécification sont tracées dans
 |---|---|---|
 | Dépendances | Python **3.11** (référence ; vérifié de 3.10 à 3.14), Tkinter, **numpy** et **matplotlib**, rien d'autre ; versions figées dans `requirements.txt`, identiques Windows et SLES | [DEPENDANCES.md](docs/DEPENDANCES.md), [COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
 | Robustesse | un fichier abîmé (ligne tronquée ou en trop, guillemet non fermé, octets nuls, en-tête absent ou répété, encodage non UTF-8, horodatage aberrant…) est lu sans exception, sans perte silencieuse ni valeur inventée ; chaque anomalie est citée avec sa ligne | guide § 2 ; `tests/test_robustesse.py` |
-| Performances (banc Linux, Python 3.11) | 1 million de lignes × 21 colonnes (115 à 157 Mo) lues et analysées en 5 à 7 s, en arrière-plan ; curseurs fluides (moins de 30 ms par mouvement) sur des courbes d'un million de points | [CHANGELOG.md](CHANGELOG.md), version 2.2.0 |
+| Performances (banc Linux, Python 3.11) | 1 million de lignes × 21 colonnes (115 à 157 Mo) lues et analysées en 5 à 7 s, en arrière-plan ; curseurs fluides (moins de 30 ms par mouvement) sur des courbes d'un million de points | [TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md), dernière section |
 
 ## 6. Vérifier
 
