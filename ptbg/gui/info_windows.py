@@ -7,21 +7,65 @@
 - Fichier d'aide (docs/GUIDE_UTILISATEUR.md).
 
 Les documents Markdown sont affichés par un rendu simple dans un widget Text
-(titres, listes, blocs de code, tableaux en police fixe) : aucune
-bibliothèque ni navigateur requis, identique sous Windows et SLES.
+(titres, listes, blocs de code, tableaux dessinés en colonnes alignées) :
+aucune bibliothèque ni navigateur requis, identique sous Windows et SLES.
 """
 from __future__ import annotations
 
 import hashlib
 import re
+import textwrap
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, ttk
+from tkinter import font as tkfont
 
 from ptbg.gui.icons import bold_font
 from ptbg.system.compat import project_root
 from ptbg.system.environment import collect_environment
 from ptbg.version import MIN_PYTHON, SPECIFICATION, TOOL_DATE, full_name
+
+TABLE_WIDTH = 118        # largeur maximale d'un tableau (caractères à chasse fixe)
+MIN_COLUMN = 8           # largeur minimale d'une colonne avant retour à la ligne
+
+
+def _inline(text: str) -> str:
+    """Texte Markdown d'une ligne rendu lisible : gras, code et liens sans balisage."""
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text).replace("`", "")
+    return re.sub(r"\[(.+?)\]\((.+?)\)", r"\1 (\2)", text)
+
+
+def markdown_table(lines: list[str], width: int = TABLE_WIDTH) -> list[tuple[str, bool]]:
+    """Tableau Markdown (lignes « | a | b | ») dessiné en colonnes alignées.
+
+    Renvoie les lignes à afficher et, pour chacune, si elle appartient à
+    l'en-tête. Les cellules trop longues passent à la ligne dans leur colonne ;
+    la ligne de séparation « |---| » est remplacée par un trait."""
+    rows = []
+    for line in lines:
+        cells = [_inline(cell.strip().replace("\x00", "|"))
+                 for cell in line.strip().replace("\\|", "\x00").strip("|").split("|")]
+        if all(re.fullmatch(r":?-{2,}:?", cell) for cell in cells if cell):
+            continue                                   # ligne de séparation de l'en-tête
+        rows.append(cells)
+    if not rows:
+        return []
+    count = max(len(row) for row in rows)
+    rows = [row + [""] * (count - len(row)) for row in rows]
+    widths = [max(max(len(row[col]) for row in rows), 1) for col in range(count)]
+    budget = width - 3 * count - 1                     # bordures et marges des cellules
+    while sum(widths) > budget and max(widths) > MIN_COLUMN:
+        widths[widths.index(max(widths))] -= 1         # on rétrécit la colonne la plus large
+    rule = "─"
+    out = [("┌" + "┬".join(rule * (w + 2) for w in widths) + "┐", True)]
+    for number, row in enumerate(rows):
+        wrapped = [textwrap.wrap(cell, w) or [""] for cell, w in zip(row, widths)]
+        for depth in range(max(len(cell) for cell in wrapped)):
+            parts = [(cell[depth] if depth < len(cell) else "").ljust(w) for cell, w in zip(wrapped, widths)]
+            out.append(("│ " + " │ ".join(parts) + " │", number == 0))
+        joint = ("├", "┼", "┤") if number < len(rows) - 1 else ("└", "┴", "┘")
+        out.append((joint[0] + joint[1].join(rule * (w + 2) for w in widths) + joint[2], number == 0))
+    return out
 
 
 class TextWindow(tk.Toplevel):
@@ -54,6 +98,11 @@ class TextWindow(tk.Toplevel):
         self.text.tag_configure("h2", font=self.fonts[1], spacing1=8, spacing3=4, foreground="#1565c0")
         self.text.tag_configure("h3", font=self.fonts[2], spacing1=6)
         self.text.tag_configure("mono", font="TkFixedFont", background="#f5f5f5")
+        self.table_font = tkfont.nametofont("TkFixedFont").copy()
+        self.table_bold = tkfont.nametofont("TkFixedFont").copy()
+        self.table_bold.configure(weight="bold")
+        self.text.tag_configure("table", font=self.table_font, wrap="none")
+        self.text.tag_configure("table_head", font=self.table_bold, wrap="none")
         self.text.tag_configure("found", background="#ffeb3b")
         self._raw = text
         if markdown:
@@ -63,17 +112,23 @@ class TextWindow(tk.Toplevel):
         self.text.configure(state="disabled")
 
     def _render_markdown(self, text: str) -> None:
-        """Rendu simple : titres, listes, blocs de code et tableaux en police fixe."""
-        in_code = False
-        for line in text.splitlines():
+        """Rendu simple : titres, listes, blocs de code et tableaux en colonnes."""
+        in_code, table = False, []
+        for line in text.splitlines() + [""]:
+            if not in_code and line.lstrip().startswith("|"):
+                table.append(line)                     # tableau : rendu quand il se termine
+                continue
+            if table:
+                for row, header in markdown_table(table):
+                    self.text.insert("end", row + "\n", "table_head" if header else "table")
+                table = []
             if line.strip().startswith("```"):
                 in_code = not in_code
                 continue
-            if in_code or line.startswith("|") or line.startswith("    "):
+            if in_code or line.startswith("    "):
                 self.text.insert("end", line + "\n", "mono")
                 continue
-            clean = re.sub(r"\*\*(.+?)\*\*", r"\1", line).replace("`", "")
-            clean = re.sub(r"\[(.+?)\]\((.+?)\)", r"\1 (\2)", clean)
+            clean = _inline(line)
             for prefix, tag in (("### ", "h3"), ("## ", "h2"), ("# ", "h1")):
                 if clean.startswith(prefix):
                     self.text.insert("end", clean[len(prefix):] + "\n", tag)

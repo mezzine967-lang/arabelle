@@ -1,4 +1,4 @@
-# VISU PTBG 2.4.0 — analyseur graphique de perturbographie
+# VISU PTBG 2.4.1 — analyseur graphique de perturbographie
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
 Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
@@ -57,7 +57,7 @@ ptbg/plotting/     dessin commun écran et PDF, Time Base Monitor
 ptbg/report/       rapport PDF
 ptbg/gui/          interface Tkinter : contrôleur, arbre, onglets, dialogues
 ptbg/system/       compatibilité Windows / SLES, environnement, journal
-tests/             136 tests automatisés (dont l'interface réelle et la robustesse)
+tests/             137 tests automatisés (dont l'interface réelle et la robustesse)
 tools/             audit d'environnement, banc de performance, traçabilité, données de démo
 install/           installation et lancement Windows / SLES
 data/demo/         CSV de démonstration (3 PLC + 1 fichier non conforme)

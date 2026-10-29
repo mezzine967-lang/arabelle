@@ -1,4 +1,4 @@
-# Matrice de traçabilité des requis — VISU PTBG 2.4.0
+# Matrice de traçabilité des requis — VISU PTBG 2.4.1
 
 Document de référence : **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026),
 fichier `docs/specification/NCS00ICOMMON----ES010_RevA.docx`.
@@ -95,7 +95,7 @@ systèmes ; il ne pourra être dit officiellement compatible qu'après ces essai
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
 | REQ_COMMON_KH_5100 | Barre supérieure avec menu principal et chemin | Menus Fichier / Affichage / Base de temps / Outils / Rapport / Information + barre de chemin « paquet > fichier > variable » | `gui/menu_bar.py`, `gui/path_bar.py` | `test_gui.test_main_window_layout` | Implémenté et testé |
-| REQ_COMMON_KH_5101 | Section Information : version, historique, sources, aide | Menu Information : version, CHANGELOG, sources (empreintes du code, bibliothèques, fichiers), aide, journal, traçabilité | `gui/info_windows.py` | `test_gui.test_information_windows_and_tree_toggle` | Implémenté et testé |
+| REQ_COMMON_KH_5101 | Section Information : version, historique, sources, aide | Menu Information : version, CHANGELOG, sources (empreintes du code, bibliothèques, fichiers), aide, journal, traçabilité | `gui/info_windows.py` | `test_gui.test_information_windows_and_tree_toggle`, `test_gui.test_markdown_tables_are_drawn_as_columns` | Implémenté et testé |
 | REQ_COMMON_KH_5102 | Barre inférieure : utilisateur, date, journal, version | Barre d'état avec horloge, dernier message (clic = journal complet), version, avancement | `gui/status_bar.py`, `system/activity_log.py` | `test_gui.test_main_window_layout` | Implémenté et testé |
 | REQ_COMMON_KH_5103 | Zone gauche = arbre des données | Arbre à gauche | `MAIN.py`, `gui/tree_panel.py` | `test_gui.test_main_window_layout` | Implémenté et testé |
 | REQ_COMMON_KH_5104 | Zone droite principale et plus large | Zone graphique à droite, seule à s'étirer | `MAIN.py`, `gui/graph_area.py` | `test_gui.test_main_window_layout` | Implémenté et testé |

@@ -3,6 +3,13 @@
 Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
 Chaque version incrémente `ptbg/version.py` et ajoute une entrée ici.
 
+## 2.4.1 — 2026-10-29 — tableaux lisibles dans l'aide
+
+- Fenêtres Information (aide F1, historique, traçabilité) : les tableaux Markdown
+  s'affichaient en texte brut (« | Symptôme | Cause… | ») ; ils sont maintenant dessinés
+  en colonnes alignées, en-tête en gras, cellules longues repliées dans leur colonne.
+- 137 tests.
+
 ## 2.4.0 — 2026-10-28 — rapports au format des rapports de test, onglets fermables
 
 Retours d'utilisation au poste :

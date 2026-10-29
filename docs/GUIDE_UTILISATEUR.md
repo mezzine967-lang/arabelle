@@ -1,4 +1,4 @@
-# Guide d'utilisation — VISU PTBG 2.4.0
+# Guide d'utilisation — VISU PTBG 2.4.1
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier

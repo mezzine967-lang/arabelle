@@ -39,6 +39,23 @@ def pump(root, condition, timeout=30.0):
     raise AssertionError("délai dépassé")
 
 
+class HelpViewerTests(unittest.TestCase):
+    def test_markdown_tables_are_drawn_as_columns(self):
+        """REQ 5101 : dans l'aide et l'historique, un tableau Markdown est dessiné en
+        colonnes alignées (et non affiché en texte brut « | a | b | »)."""
+        from ptbg.gui.info_windows import markdown_table
+        lines = ["| Symptôme | Cause et solution |", "|---|---|",
+                 "| Fichier `ILLISIBLE` | voir **Diagnostic** : " + "séparateur, encodage " * 8 + "|",
+                 "| Séparateur \\| | barre échappée |"]
+        rows = markdown_table(lines, width=80)
+        texts = [text for text, _ in rows]
+        self.assertTrue(all(len(text) == len(texts[0]) <= 80 for text in texts))   # colonnes alignées
+        self.assertFalse(any("---" in text or "**" in text or "`" in text for text in texts))
+        self.assertTrue(rows[1][1] and "Symptôme" in rows[1][0])                    # en-tête en gras
+        self.assertGreater(sum("encodage" in text for text in texts), 1)            # cellule longue repliée
+        self.assertTrue(any("Séparateur |" in text for text in texts))
+
+
 @unittest.skipIf(NO_DISPLAY, f"pas d'affichage : {NO_DISPLAY}")
 class InterfaceTests(unittest.TestCase):
     def setUp(self):
