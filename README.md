@@ -38,7 +38,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | la même chose en **tableur** : versions, dépendances, sensibilités, tests, relevé des postes | [docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx](docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx) |
 | **reprendre ou modifier le code** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | voir **ce qui a changé** d'une version à l'autre | [CHANGELOG.md](CHANGELOG.md) |
-| voir un **exemple de rapport** PDF | [docs/exemples/rapport_exemple_demo.pdf](docs/exemples/rapport_exemple_demo.pdf) |
+| obtenir un **exemple de rapport** PDF | dans l'outil : Fichier > Ouvrir un dossier de CSV > `data/demo/`, afficher des courbes, puis Rapport > Rapport automatique |
 | voir des **captures** | [nuage X/Y](docs/captures/02_nuage_xy.png), [diagnostic](docs/captures/03_diagnostic.png), [base de temps](docs/captures/04_configuration_base_de_temps.png), [axe absolu passant minuit](docs/captures/05_axe_absolu_minuit.png) |
 
 ## 3. Organisation du dossier
@@ -57,7 +57,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | `data/demo/` | CSV de démonstration (3 PLC + 1 fichier non conforme) |
 | `data/exemples/` | CSV reçus du projet (inchangés) |
 | `data/references_simulation/` | scripts de simulation de référence reçus (inchangés, hors outil) |
-| `docs/` | documents ci-dessus, spécification (Word), récapitulatif Excel, captures, rapport exemple |
+| `docs/` | documents ci-dessus, spécification (Word), récapitulatifs Excel, captures |
 
 ## 4. État des requis
 
@@ -76,9 +76,9 @@ Les 64 lignes de la spécification sont tracées dans
 
 | Sujet | En bref | Détail |
 |---|---|---|
-| Dépendances | Python **3.11** (référence ; vérifié de 3.10 à 3.14), Tkinter, **numpy** et **matplotlib**, rien d'autre ; versions figées dans `requirements.txt`, identiques Windows et SLES | [DEPENDANCES.md](docs/DEPENDANCES.md), [COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
+| Dépendances | Python **3.11** (référence ; code prévu pour 3.10 à 3.14), Tkinter, **numpy** et **matplotlib**, rien d'autre ; versions figées dans `requirements.txt`, identiques Windows et SLES | [DEPENDANCES.md](docs/DEPENDANCES.md), [COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
 | Robustesse | un fichier abîmé (ligne tronquée ou en trop, guillemet non fermé, octets nuls, en-tête absent ou répété, encodage non UTF-8, horodatage aberrant…) est lu sans exception, sans perte silencieuse ni valeur inventée ; chaque anomalie est citée avec sa ligne | guide § 2 ; `tests/test_robustesse.py` |
-| Performances (banc Linux, Python 3.11) | 1 million de lignes × 21 colonnes (115 à 157 Mo) lues et analysées en 5 à 7 s, en arrière-plan ; curseurs fluides (moins de 30 ms par mouvement) sur des courbes d'un million de points | [TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md), dernière section |
+| Performances | à mesurer sur les postes cibles avec `tools/banc_performance.py` (vrais fichiers PTBG, ou fichier de synthèse de 500 Mo) | [TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md), dernière section |
 
 ## 6. Vérifier
 

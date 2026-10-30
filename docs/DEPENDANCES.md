@@ -13,20 +13,20 @@ SLES se limite à un environnement virtuel avec 11 wheels binaires (aucune compi
 
 | Question | Réponse | Section |
 |---|---|---|
-| Quel Python ? | **3.11** (référence) ; code vérifié de 3.10 à 3.14 ; 64 bits | § 1 |
+| Quel Python ? | **3.11** (référence) ; code prévu pour 3.10 à 3.14 ; 64 bits | § 1 |
 | Quelles bibliothèques ? | numpy 2.4.6 et matplotlib 3.10.9 (directes) + 9 transitives de matplotlib, toutes figées dans `requirements.txt` | § 2 |
 | Et la bibliothèque standard ? | liste complète des modules utilisés et de leur rôle | § 3 |
-| Qu'est-ce qui a été testé ? | suite complète sur 3 à 12 combinaisons Python / Tk / numpy / matplotlib à chaque version | § 4 |
+| Que faut-il tester ? | la suite de tests sur le poste Windows / Spyder et sur la VM Linux SLES 15 SP7 fournie par l'entreprise | § 4 |
 | Que faire avant une montée de version ? | effets connus et procédure d'analyse d'impact en 5 étapes | § 5 |
 | Installer sans Internet ? | wheels préparées sur un poste connecté | § 6 |
-| Version tableur ? | `docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx` : lisez-moi, ce que l'outil utilise (avec le risque de chaque élément), ce qui se passe si on change une version, ce qui a été testé, procédure de montée et relevé des postes à remplir | — |
+| Version tableur ? | `docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx` : lisez-moi, ce que l'outil utilise (avec le risque de chaque élément), ce qui se passe si on change une version, tests à réaliser, procédure de montée et relevé des postes à remplir | — |
 
 ## 1. Interpréteur Python
 
 | Élément | Valeur |
 |---|---|
 | Version de référence (développement) | **Python 3.11** (Spyder 6 au poste Windows ; `python311` du module Python 3 de SLES 15 SP7) |
-| Versions vérifiées (suite de tests complète, IHM comprise) | 3.10, 3.11, 3.12, 3.13, 3.14 — voir § 4 |
+| Versions prévues | 3.10 à 3.14 (versions de Python acceptées par les bibliothèques figées) ; à confirmer par les tests (§ 4) |
 | Version minimale acceptée par le code | 3.10 (`ptbg/version.py`, `MIN_PYTHON`) — contrôlée au lancement par `MAIN.py` |
 | Architecture | 64 bits (Windows 11 x64 et SLES x86-64, les cibles du projet). Des wheels 32 bits existent pour certains paquets, mais ce mode n'est ni ciblé ni testé |
 | Python 3.6 (REQ 3001) | Non retenu : fin de vie en décembre 2021, dernières versions compatibles numpy 1.19 / matplotlib 3.3 ; le relecteur indique qu'un Python 3.11 est disponible sur SLES 15. Question ouverte n° 3 du récapitulatif Excel (onglet « Points ouverts »). |
@@ -96,67 +96,25 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 | SLES 15 SP7 | `glibc` ≥ 2.28 (2.38 fournie) | requis par les wheels manylinux de numpy, contourpy, pillow |
 | SLES 15 SP7 | session graphique X11 (bureau ou `ssh -X`) ; `xdg-utils` (facultatif) | affichage ; ouverture du PDF généré |
 
-## 4. Campagne de compatibilité exécutée (banc Linux Ubuntu 24.04, x86-64)
+## 4. Tests à réaliser
 
-Suite complète (`python -m unittest discover -s tests`, IHM réelle sous Xvfb incluse),
-chaque ligne dans un environnement virtuel neuf. Le banc est un Linux Ubuntu 24.04 64 bits,
-pas le Service Unit SLES 15 SP7 : il montre que le code tourne sous Linux ; l'essai sur le
-SLES réel et l'exécution des tests sur le poste Windows restent à consigner.
+La suite complète (`python -m unittest discover -s tests -v`, 145 tests, interface comprise)
+est à lancer sur chaque poste, puis la fiche d'essai de COMPATIBILITE_OS.md § 5.
 
-**Campagne de la version 1.0.0 (145 tests)** :
+| Poste | Python | Tcl/Tk | numpy | matplotlib | État |
+|---|---|---|---|---|---|
+| Windows 11 / Spyder 6 (relevé du 30/10/2026) | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | outil lancé, CSV du projet ouvert ; tests à lancer depuis la console Spyder |
+| VM Linux SLES 15 SP7 fournie par l'entreprise | 3.11 (`python311`) | 8.6 (`python311-tk`) | 2.4.6 | 3.10.9 | à faire après installation (`install/installer_sles.sh`) |
 
-| Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
-|---|---|---|---|---|---|---|
-| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 145 tests : OK | référence `requirements.txt` |
-| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 145 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
-| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 145 tests : OK, 20 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
+Versions de l'environnement Spyder du poste (relevé Information > Sources) : contourpy 1.3.1,
+cycler 0.12.1, fonttools 4.55.2, kiwisolver 1.4.7, packaging 24.2, pillow 11.0.0,
+pyparsing 3.2.0, python-dateutil 2.9.0.post0, six 1.17.0. Elles diffèrent de
+`requirements.txt` pour 8 paquets : le résultat des tests sur ce poste dira si elles
+conviennent.
 
-**Versions du poste Windows 11 / Spyder 6** (relevées le 30/10/2026 dans Information >
-Sources : Python 3.11.10, Tk 8.6.13, numpy 2.2.0, matplotlib 3.9.3, contourpy 1.3.1,
-fonttools 4.55.2, kiwisolver 1.4.7, packaging 24.2, pillow 11.0.0, pyparsing 3.2.0) :
-
-| Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
-|---|---|---|---|---|---|---|
-| poste Windows 11 / Spyder 6 | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | utilisation réelle : OK | outil lancé, CSV du projet chargé (statut OK) |
-| py312-poste-tk86 | 3.12.3 | 8.6.14 | 2.2.0 | 3.9.3 | 145 tests : OK | mêmes bibliothèques que le poste, interface comprise |
-| py311-poste | 3.11.15 | 9.0.3 | 2.2.0 | 3.9.3 | 145 tests : OK, 20 tests IHM ignorés | même Python que le poste ; IHM refusée proprement avec Tk 9 (le poste a Tk 8.6) |
-
-**Campagne élargie pendant le développement (suite alors de 131 tests)** — la mise à jour
-rapide des curseurs (blitting) a été vérifiée avec Tk 8.6 « partagé » (famille Windows / Spyder / SLES) et Tk 9.0, image
-identique au pixel près à un rendu complet :
-
-| Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
-|---|---|---|---|---|---|---|
-| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 131 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
-| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 131 tests : OK | référence `requirements.txt` |
-| py311-mpl39-tk9 | 3.11.15 | 9.0.3 | 1.26.4 | 3.9.4 | 131 tests : OK, 12 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
-| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 131 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
-| py312-old-tk86 | 3.12.3 | 8.6.14 | 1.26.4 | 3.8.4 | 131 tests : OK | idem, bibliothèques anciennes |
-| py313-ref-tk9 | 3.13.14 | 9.0.3 | 2.4.6 | 3.10.9 | 131 tests : OK |  |
-| py314-latest-tk9 | 3.14.6 | 9.0.3 | 2.5.4 | 3.11.2 | 131 tests : OK | versions les plus récentes |
-
-Les conversions accélérées (colonnes entières) ont en outre été comparées résultat par
-résultat au traitement ligne par ligne (plus de 10 000 fichiers et séries abîmés générés au hasard) avec
-numpy 2.4.6 et numpy 1.24.4 : aucune différence.
-
-**Campagne antérieure (suite de 120 tests)** : 12 combinaisons, de Python 3.10 à 3.14, Tk 8.6.12,
-8.6.14 et 9.0.3, numpy 1.24.4 à 2.5.4, matplotlib 3.6.3 à 3.11.2 : **toutes OK**. Les
-tests d'IHM étaient ignorés sur 5 d'entre elles, soit pour un artefact du banc (Python
-« standalone » ancien avec `_tkinter` intégré statiquement, absent sous Windows et SLES),
-soit parce que l'outil refuse proprement de démarrer avec matplotlib < 3.10 et Tk 9.
-
-En résumé, la référence `requirements.txt` réussit intégralement avec Tk 8.6 (famille
-Windows / Spyder / SLES) et Tk 9.0, de Python 3.11 à 3.14 ; les versions récentes
-(numpy 2.5.4, matplotlib 3.11.2) passent aussi : une future montée se fera sans
-modification du code.
-
-Vérification de disponibilité des wheels binaires (installation simulée par `pip
-install --dry-run --only-binary=:all:` avec les étiquettes de plateforme cibles) :
-`requirements.txt` s'installe **sans compilation** pour Python 3.11, 3.12, 3.13 et 3.14,
-en `win_amd64` (Windows 11) comme en `manylinux` x86-64 (SLES 15 SP7).
-
-Les tests ont été exécutés sous Linux. L'exécution sous Windows 11 / Spyder 6 et sur le
-Service Unit SLES 15 SP7 réel reste à consigner (procédure : COMPATIBILITE_OS.md § 5).
+Disponibilité des wheels binaires : des wheels de chaque version figée existent pour
+Python 3.11 à 3.14, en `win_amd64` (Windows 11) et en `manylinux` x86-64 (SLES 15 SP7) ;
+à contrôler avec `pip download --only-binary=:all:` (§ 5.3, étape 2).
 
 ## 5. Montée de version : ce qui change et comment l'analyser
 
@@ -164,25 +122,25 @@ Service Unit SLES 15 SP7 réel reste à consigner (procédure : COMPATIBILITE_OS
 
 | Si l'on passe à… | numpy | matplotlib | Transitives | Code VISU PTBG |
 |---|---|---|---|---|
-| Python 3.12 ou 3.13 | inchangé (2.4.6) | inchangé (3.10.9) | inchangées | aucun changement (testé) |
-| Python 3.14 | inchangé (2.4.6) | inchangé (3.10.9) | inchangées | aucun changement (testé) |
+| Python 3.12 ou 3.13 | inchangé (2.4.6) | inchangé (3.10.9) | inchangées | aucun changement prévu (à confirmer par les tests) |
+| Python 3.14 | inchangé (2.4.6) | inchangé (3.10.9) | inchangées | aucun changement prévu (à confirmer par les tests) |
 | Python 3.15 | **≥ 2.5.2** (premières wheels cp315) | **≥ 3.11.2** (3.10.x n'a pas de wheel cp315) | contourpy ≥ 1.4.0 ; pillow 12.3.0 convient ; vérifier kiwisolver et fonttools (§ 5.3, étape 2) | à requalifier (suite de tests) |
-| Retour à Python 3.10 | **≤ 2.2.x** (numpy 2.3+ exige 3.11) | 3.10.9 possible | contourpy ≤ 1.3.2, fonttools ≤ 4.65 | code compatible (testé avec numpy 1.24) |
+| Retour à Python 3.10 | **≤ 2.2.x** (numpy 2.3+ exige 3.11) | 3.10.9 possible | contourpy ≤ 1.3.2, fonttools ≤ 4.65 | code écrit pour numpy ≥ 1.24 (à confirmer par les tests) |
 
 ### 5.2 Effets connus d'une montée de bibliothèque
 
 | Montée | Conséquence |
 |---|---|
-| numpy 2.5.x | **abandonne Python 3.11** (exige ≥ 3.12) : incompatible avec la référence 3.11 ; code VISU testé compatible avec 2.5.4 sous 3.12 et 3.14 |
-| matplotlib 3.11.x | abandonne Python 3.10 ; code VISU testé compatible (3.11.2) |
+| numpy 2.5.x | **abandonne Python 3.11** (exige ≥ 3.12) : incompatible avec la référence 3.11 ; à tester si l'on passe à Python 3.12 ou plus |
+| matplotlib 3.11.x | abandonne Python 3.10 ; à tester avant adoption |
 | contourpy 1.4.x | exige Python ≥ 3.12 |
 | fonttools ≥ 4.66 | exige Python ≥ 3.11 |
 | pillow 13.x | exige Python ≥ 3.11 |
 | python-dateutil 3.0.0 (octobre 2026) | **ajoute une nouvelle dépendance `tzdata`** : à évaluer avant adoption (non retenu) |
-| numpy 1.x (environnement Spyder plus ancien) | code compatible à partir de numpy 1.24 (testé 1.24.4 et 1.26.4) |
-| matplotlib 3.6 à 3.9 | traitements, rendu et PDF compatibles (testés) ; IHM validée avec Tk 8.6 ; **avec Tk 9.0, l'intégration TkAgg de matplotlib < 3.10 échoue** (« Failed to load Tcl_SetVar ») : l'outil le détecte au démarrage et affiche un message clair |
+| numpy 1.x (environnement Spyder plus ancien) | code écrit pour numpy ≥ 1.24 ; à tester |
+| matplotlib 3.6 à 3.9 | traitements, rendu et PDF prévus pour fonctionner (le poste Spyder a matplotlib 3.9.3 et Tk 8.6 : l'outil s'y lance) ; **avec Tk 9.0, l'intégration TkAgg de matplotlib < 3.10 échoue** (« Failed to load Tcl_SetVar ») : l'outil le détecte au démarrage et affiche un message clair |
 | pyparsing ≥ 3.3 avec un matplotlib ancien (< 3.9) | avertissements `PyparsingDeprecationWarning` émis par matplotlib (pas par VISU PTBG) ; sans effet fonctionnel |
-| Tcl/Tk 9.0 (Python récents « standalone », certaines distributions) | exige **matplotlib ≥ 3.10** (testé 3.10.9 et 3.11.2) ; Windows python.org 3.11, Spyder et SLES 15 SP7 fournissent Tk 8.6 |
+| Tcl/Tk 9.0 (Python récents « standalone », certaines distributions) | exige **matplotlib ≥ 3.10** ; Windows python.org 3.11, Spyder et SLES 15 SP7 fournissent Tk 8.6 |
 
 ### 5.3 Procédure d'analyse d'impact (à suivre avant toute montée)
 

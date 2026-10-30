@@ -30,9 +30,10 @@ les 18 questions à faire valider.
 | Traitement conditionnel (§ 4.5) | statistiques des signaux pendant qu'une condition Bool est vraie, export CSV (proposition, énoncé 5500 vide) |
 | Rapports (§ 5) | PDF automatique ou pas à pas, en-tête complet (REQ 6005), Time Base Monitor, lectures, page de traçabilité |
 | Projet | fichier `.ptbg.json` (chemins relatifs, réglages, onglets, curseurs, pages du rapport) |
-| Architecture (§ 6) | Python 3.11 de référence (3.10 à 3.14 vérifiés), stdlib + numpy + matplotlib ; Windows 11 et SLES 15 SP7 depuis les mêmes sources, différences isolées dans `ptbg/system/compat.py` ; classeur des versions et dépendances (`docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx`) ; versions du poste Spyder 6 vérifiées |
-| Qualité | 145 tests automatisés (dont l'interface réelle et un banc de fichiers abîmés) ; contrôle automatique de la traçabilité ; performances : 1 million de lignes × 21 colonnes lues et analysées en 5 à 7 s sur le banc Linux |
+| Architecture (§ 6) | Python 3.11 de référence (code prévu pour 3.10 à 3.14), stdlib + numpy + matplotlib ; Windows 11 et SLES 15 SP7 depuis les mêmes sources, différences isolées dans `ptbg/system/compat.py` ; classeur des versions et dépendances (`docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx`) ; versions du poste Spyder 6 relevées |
+| Qualité | 145 tests automatisés (dont l'interface réelle et un banc de fichiers abîmés) ; contrôle automatique de la traçabilité ; banc de mesure des performances (`tools/banc_performance.py`) |
 
-Reste à faire avant de déclarer l'outil qualifié : réponses aux points ouverts, essai de
-réception sur Windows 11 / Spyder 6 et sur le Service Unit SLES 15 SP7, essai sur les
-volumes réels de PTBG (voir la fin de `docs/TRACABILITE_REQUIS.md`).
+Reste à faire avant de déclarer l'outil qualifié : réponses aux points ouverts ; tests
+automatiques et essai de réception sur le poste Windows 11 / Spyder 6, puis sur la
+VM Linux SLES 15 SP7 fournie par l'entreprise ; essai sur les volumes réels de PTBG (voir la fin de
+`docs/TRACABILITE_REQUIS.md`).

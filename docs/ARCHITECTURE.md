@@ -9,7 +9,7 @@ ptbg/
 ├── config.py                préférences persistantes (taille max, tolérance, en-tête…)
 ├── system/                  dépendances au système (REQ 3000, 3004, 3005)
 │   ├── compat.py            TOUTES les différences Windows / SLES
-│   ├── environment.py       relevé Python / Tk / bibliothèques, plages testées
+│   ├── environment.py       relevé Python / Tk / bibliothèques, plages de versions prévues
 │   └── activity_log.py      journal d'activité (mémoire + fichier)
 ├── core/                    traitements purs : ni Tk ni Matplotlib (REQ 3003)
 │   ├── diagnostics.py       gravités et constats
@@ -101,11 +101,11 @@ Deux règles transversales :
 | Réduction min/max des points | courbes de millions de points fluides ; les pics restent visibles ; les curseurs lisent les vrais échantillons |
 | Aucune interpolation, aucune valeur inventée | traçabilité d'un outil d'analyse d'anomalies : une cellule vide reste vide (croix), un trou de temps interrompt la courbe |
 | Lecture ligne par ligne (et non `csv.reader` sur tout le fichier) | un guillemet non fermé ne peut plus avaler la suite du fichier ; numéros de ligne exacts ; découpage direct à la virgule plus rapide, module `csv` en mode strict seulement pour les lignes à guillemets |
-| Blocs de lignes ordinaires découpés d'un coup, conversions de colonnes entières | un fichier de 500 Mo se lit en quelques dizaines de secondes ; les lignes et cellules particulières gardent leur traitement une à une, d'où des résultats identiques (vérifiés par comparaison automatique avec le traitement ligne par ligne) |
+| Blocs de lignes ordinaires découpés d'un coup, conversions de colonnes entières | lecture des gros fichiers bien plus rapide ; les lignes et cellules particulières gardent leur traitement une à une, d'où des résultats identiques (contrôlé par `test_mixed_columns_converted_like_cell_by_cell` et `test_block_boundaries_never_change_the_result`) |
 | Valeurs lues non modifiables et partagées par les variables | la règle « aucune valeur modifiée » est garantie par numpy (écriture refusée) ; pas de copie par variable, mémoire réduite |
 | Curseurs « animés » (blitting) | un mouvement de souris ne redessine que les curseurs : fluidité avec des millions de points ; le PDF dessine les curseurs normalement |
 | Ligne au mauvais nombre de champs rejetée, jamais complétée | sa dernière valeur pourrait être tronquée : mieux vaut un trou signalé qu'une valeur fausse |
-| Robustesse vérifiée par un banc de fichiers abîmés | `tests/test_robustesse.py` : lignes tronquées ou en trop, guillemets, octets nuls, encodages, en-têtes absents ou répétés, horodatages aberrants, valeurs extrêmes, 40 corruptions aléatoires |
+| Robustesse vérifiée par des tests de fichiers abîmés | `tests/test_robustesse.py` : lignes tronquées ou en trop, guillemets, octets nuls, encodages, en-têtes absents ou répétés, horodatages aberrants, valeurs extrêmes, 40 corruptions aléatoires |
 | Nanosecondes entières pour les dates | pas d'arrondi flottant sur des horodatages absolus à la nanoseconde (REQ 2306) |
 | État des onglets en données pures | captures de rapport, projet JSON et tests sans écran |
 

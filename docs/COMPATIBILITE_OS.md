@@ -10,7 +10,7 @@ les deux systèmes (l'environnement Spyder étant figé, ce mode est le seul pos
 | § 1 | où sont isolées les différences Windows / SLES, sujet par sujet |
 | § 2 | comment lancer l'outil sur chaque cible |
 | § 3 | installation sur SLES 15 SP7 (en ligne ou hors ligne) |
-| § 4 | ce qui a déjà été vérifié ici |
+| § 4 | ce qui reste à vérifier, et où (poste Windows, VM Linux) |
 | § 5 | **fiche d'essai de réception** à remplir sur chaque poste cible |
 
 ## 1. Principe : un seul code, les différences isolées
@@ -22,7 +22,7 @@ Aucun autre module ne teste le système d'exploitation (contrôle automatique :
 | Sujet | Windows 11 | SLES 15 SP7 | Mécanisme |
 |---|---|---|---|
 | Interpréteur | Spyder 6 (Python intégré) ou python.org 3.11 x64 | `python311` (module Python 3) | même code ; version vérifiée par `MAIN.py` |
-| Interface graphique | Tk 8.6 fourni avec Python | `python311-tk` (Tk 8.6) | Tkinter (bibliothèque standard) ; Tk 9 également testé (exige matplotlib ≥ 3.10) ; compatibilité matplotlib / Tk vérifiée au démarrage (`tkagg_problem`) |
+| Interface graphique | Tk 8.6 fourni avec Python | `python311-tk` (Tk 8.6) | Tkinter (bibliothèque standard) ; Tk 9 également pris en charge (exige matplotlib ≥ 3.10) ; compatibilité matplotlib / Tk vérifiée au démarrage (`tkagg_problem`) |
 | Bibliothèques | celles de Spyder (rien à installer) ou `requirements.txt` | `requirements.txt` dans un venv (en ligne ou hors ligne) | mêmes wheels (win_amd64 / manylinux) ; versions relevées au démarrage |
 | Chemins | `C:\...`, lecteurs, UNC | `/home/...` | `pathlib` partout ; aucun séparateur codé en dur |
 | Chemins du projet | — | — | stockés relatifs au fichier projet avec « / » : un projet Windows se rouvre sous SLES (`core/project.py`) |
@@ -68,17 +68,20 @@ install/lancer_sles.sh
 Hors ligne : préparer les wheels sur un poste connecté (`install/preparer_paquets_hors_ligne.sh`,
 voir DEPENDANCES.md § 6) puis `install/installer_sles.sh --hors-ligne wheels_sles`.
 
-Prérequis vérifiés pour SP7 : glibc 2.38 (les wheels exigent ≥ 2.28), Python 3.11 et
+Prérequis pour SP7 : glibc ≥ 2.28 exigée par les wheels (SP7 fournit 2.38), Python 3.11 et
 Tk disponibles dans le module Python 3 de SLES. Une version antérieure de SLES 15
 (SP3 et avant, glibc 2.26) ne permettrait pas d'installer numpy 2.x en wheel.
 
-## 4. Qualification réalisée ici
+## 4. Qualification à faire
 
-Banc Linux Ubuntu 24.04 x86-64 (pas le SLES cible), Python 3.10 à 3.14, Tk 8.6.14 et Tk 9.0.3, plusieurs versions de numpy et
-matplotlib : voir DEPENDANCES.md § 4. Les wheels Windows (win_amd64) et SLES (manylinux)
-de chaque Python 3.11 à 3.14 ont été vérifiées disponibles. Les versions de l'environnement
-Spyder 6 du poste Windows 11 (numpy 2.2.0, matplotlib 3.9.3…) ont passé toute la suite de
-tests, et l'outil a été lancé sur ce poste avec un CSV du projet (DEPENDANCES.md § 4).
+| Poste | Ce qui est déjà constaté | Ce qui reste à faire |
+|---|---|---|
+| Windows 11 / Spyder 6 (poste de l'alternance) | l'outil se lance et ouvre un CSV du projet (relevé Information > Sources du 30/10/2026 : Python 3.11.10, Tk 8.6.13, numpy 2.2.0, matplotlib 3.9.3) | lancer les 145 tests depuis la console Spyder (`import sys`, `%cd <dossier de l'outil>`, puis `!"{sys.executable}" -m unittest discover -s tests -v`), puis la fiche d'essai du § 5 |
+| VM Linux SLES 15 SP7 fournie par l'entreprise | — | installer (§ 3), lancer les tests (`python -m unittest discover -s tests -v`), puis la fiche d'essai du § 5 |
+
+Des wheels de chaque bibliothèque figée existent pour Windows 11 (win_amd64) et pour
+SLES (manylinux x86-64) ; leur disponibilité se contrôle avec la commande de
+DEPENDANCES.md § 5.3, étape 2.
 
 ## 5. Essai de réception à consigner sur chaque cible (≈ 15 minutes)
 
