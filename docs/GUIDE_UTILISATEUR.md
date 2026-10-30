@@ -164,10 +164,14 @@ s'appliquent à tous. Le bouton **Vue d'origine** (aussi Affichage > Vue d'origi
 réaffiche toute la durée des fichiers avec les échelles verticales automatiques et remet les
 légendes déplacées à leur place ; courbes et curseurs sont conservés.
 
-**Légendes** : glisser une légende avec la souris la déplace ; elle garde sa place après un
-redessin, dans le projet et dans le rapport PDF. Un clic sur un nom de la légende
-sélectionne cette courbe. Clic droit sur l'axe : masquer / afficher la légende, ou la
-remettre à sa place automatique.
+**Légendes et étiquettes** : tout ce qui est écrit sur le graphique se déplace à la souris
+(glisser) : légende d'un axe, légende du Time Base Monitor, noms des pistes logiques,
+étiquettes des curseurs (C1, C2, Global, Δt, curseur horizontal, point du nuage X/Y). Chaque
+élément garde sa place après un redessin, dans le projet et dans le rapport PDF (à la même
+place par rapport aux courbes). Déplacer une étiquette ne déplace pas le curseur. Un clic sur
+un nom de la légende sélectionne cette courbe. Clic droit sur l'axe : masquer / afficher la
+légende, la remettre à sa place automatique, remettre les étiquettes à leur place ;
+**Vue d'origine** remet tout à sa place.
 
 | Action sur un onglet | Comment |
 |---|---|
@@ -292,7 +296,7 @@ traçabilité des requis.
 | clic sur un axe | rend l'axe actif ; place le curseur |
 | glisser | déplace le curseur |
 | Maj + clic | niveau du curseur horizontal |
-| glisser une légende | la déplace (place conservée) |
+| glisser une légende, un nom de piste ou une étiquette de curseur | le déplace (place conservée, curseur inchangé) |
 | clic sur un nom de la légende | sélectionne cette courbe |
 | clic droit sur un axe | menu de l'axe (curseurs, courbe sélectionnée, échelle, légende) |
 | double-clic sur une variable de l'arbre | l'ajoute à l'axe actif |

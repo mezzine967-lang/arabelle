@@ -580,6 +580,9 @@ class Application:
             menu.add_command(label="Choisir X et Y…", command=self.configure_xy)
             self._legend_menu(menu, tab, index)
             return menu
+        if axle.label_offsets:
+            menu.add_command(label="Remettre les étiquettes à leur place", command=lambda: tab.reset_labels(index))
+            menu.add_separator()
         for value, label in (("single", "Curseur vertical simple"), ("double", "Double curseur"),
                              ("none", "Aucun curseur vertical")):
             menu.add_command(label=label, command=lambda v=value: tab.set_cursor_mode(v))

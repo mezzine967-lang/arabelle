@@ -116,6 +116,8 @@ class TabRenderer:
         self._cursor_artists: list = []
         self._h_cache: dict = {}
         self._legend_outside = False        # légende de l'axe en cours de dessin hors du graphique
+        self._movables: list = []           # étiquettes déplaçables du dessin : (élément, axe, clé, décalage auto)
+        self._cursor_movables: list = []    # idem pour les étiquettes des curseurs (refaites à chaque mouvement)
         self._time_labels = True            # graduations de temps écrites sur l'axe en cours de dessin
 
     # ------------------------------------------------------------------ build
@@ -137,6 +139,7 @@ class TabRenderer:
         self.container.clear()
         self.axes, self._lines, self._lanes, self._h_cache = [], [], {}, {}
         self._digital_axles, self._cursor_artists, self.tbm_plot = set(), [], None
+        self._movables, self._cursor_movables = [], []
         tpl = self.tab.template
         sources = self.sources_in_tab()
         with_tbm = self.tab.tbm_visible
@@ -195,8 +198,10 @@ class TabRenderer:
             text_ax = self.container.add_subplot(band[0])
             self.tbm_plot = self.container.add_subplot(band[1], sharex=master)
             for line, x, y in monitor.draw_monitor(text_ax, self.tbm_plot, sources, self.timeline, chars,
-                                                   outside=self.for_print):
+                                                   outside=self.for_print, legend_xy=self.tab.tbm_legend_xy):
                 self._lines.append((self.tbm_plot, line, DisplayCurve(x, y)))
+            if self.tbm_plot.get_legend() is not None and not self.for_print:
+                self.tbm_plot.get_legend().set_draggable(True)
             apply_time_axis(self.tbm_plot, self.timeline, True)
             self.tbm_plot.set_xlabel(axis_title(self.timeline), fontsize=FONT_SMALL)
         elif with_note:
@@ -362,12 +367,12 @@ class TabRenderer:
                 self._lanes[(index, position)] = (base, scale)
                 # Nom de la piste DANS l'axe : les noms longs ne sont pas tronqués.
                 # Découpé au cadre de l'axe : un nom ne déborde pas quand on déplace la vue.
-                ax.text(0.003, base + (LANE_HEIGHT / 2 if compact else LANE_HEIGHT + 0.05),
-                        ("► " if selected else "") + name,
-                        transform=blended_transform_factory(ax.transAxes, ax.transData),
-                        fontsize=FONT_SMALL - (1 if compact else 0), color=color,
-                        va="center" if compact else "bottom", ha="left", clip_on=True,
-                        bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.5))
+                self._label(ax, index, f"piste:{name}", ("► " if selected else "") + name,
+                            (0.003, base + (LANE_HEIGHT / 2 if compact else LANE_HEIGHT + 0.05)),
+                            blended_transform_factory(ax.transAxes, ax.transData),
+                            fontsize=FONT_SMALL - (1 if compact else 0), color=color,
+                            va="center" if compact else "bottom", ha="left", clip_on=True,
+                            bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.5))
                 ticks += [base, base + LANE_HEIGHT]
                 lane += 1
         ax.set_yticks(ticks)
@@ -426,11 +431,11 @@ class TabRenderer:
         """Redessine uniquement les curseurs (appelé à chaque mouvement)."""
         for artist in self._cursor_artists:
             artist.remove()
-        self._cursor_artists = []
+        self._cursor_artists, self._cursor_movables = [], []
         for index, (ax, axle) in enumerate(zip(self.axes, self.tab.axles)):
             try:
                 if axle.kind == "xy":
-                    self._draw_xy_cursor(ax, axle)
+                    self._draw_xy_cursor(index, ax, axle)
                     continue
                 self._draw_vertical_cursors(index, ax, axle)
                 self._draw_horizontal_cursor(index, ax, axle)
@@ -439,6 +444,34 @@ class TabRenderer:
                                    ha="center", va="bottom", fontsize=FONT_SMALL, color="#c62828"))
         if self.tbm_plot is not None and self.tab.global_cursor and self.tab.t_global is not None:
             self._keep(self.tbm_plot.axvline(self.tab.t_global, color=CURSOR_COLORS["Global"], ls="--", lw=1.1))
+
+    def _label(self, ax, index: int, key: str, text: str, xy, xycoords, offset=(0.0, 0.0),
+               cursor: bool = False, **style):
+        """Étiquette du graphique que l'utilisateur peut déplacer à la souris (écran).
+
+        Sa place = place automatique (``offset``, en points) + déplacement choisi,
+        mémorisé dans l'axe (``label_offsets``, en fraction de la largeur et de la
+        hauteur de l'axe : même place par rapport aux courbes à l'écran et dans le
+        rapport, où l'axe est plus petit) ; conservé au redessin et dans le projet. ``cursor`` : étiquette de curseur (refaite à
+        chaque mouvement, dessinée par-dessus le rendu figé)."""
+        fx, fy = self.tab.axles[index].label_offsets.get(key, (0.0, 0.0))
+        dx, dy = fx * self._width_pt(ax), fy * _height_pt(ax)
+        style.setdefault("annotation_clip", False)
+        artist = ax.annotate(text, xy=xy, xycoords=xycoords, xytext=(offset[0] + dx, offset[1] + dy),
+                             textcoords="offset points", **style)
+        if not self.for_print:
+            artist.draggable(True)
+        (self._cursor_movables if cursor else self._movables).append((artist, index, key, tuple(offset)))
+        if cursor:
+            self._keep(artist)
+        return artist
+
+    def movable_at(self, event):
+        """Étiquette déplaçable sous la souris : (élément, axe, clé, décalage auto) ou None."""
+        for item in reversed(self._cursor_movables + self._movables):
+            if item[0].get_visible() and item[0].contains(event)[0]:
+                return item
+        return None
 
     def _keep(self, artist):
         """Mémorise un élément de curseur pour l'effacer au prochain redessin. À
@@ -482,22 +515,21 @@ class TabRenderer:
             used = max((row + 1 for row in placed), default=0)
             if depth == 1 or used * (depth * LINE_PT * FONT_SMALL + 5) <= height:
                 break
-        for (position, color, lines), row in zip(labels, placed):
+        for (position, color, lines), row, (key, _) in zip(labels, placed, cursor_positions(self.tab, axle)):
             text = "\n".join(lines[:depth])
             left, right = ax.get_xlim()
             flip = self._label_width(text) > (right - position) / (right - left) * self._width_pt(ax)
-            self._keep(ax.annotate(text, xy=(position, 1.0), xycoords=to_axes, va="top",
-                                   xytext=(-3 if flip else 3, -2 - row * (depth * LINE_PT * FONT_SMALL + 5)),
-                                   textcoords="offset points", ha="right" if flip else "left",
-                                   fontsize=FONT_SMALL, color=color, zorder=5, annotation_clip=False,
-                                   bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.6, pad=1.5)))
+            self._label(ax, index, key, text, (position, 1.0), to_axes,
+                        (-3 if flip else 3, -2 - row * (depth * LINE_PT * FONT_SMALL + 5)), cursor=True,
+                        va="top", ha="right" if flip else "left", fontsize=FONT_SMALL, color=color, zorder=5,
+                        bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.6, pad=1.5))
         if double:
             delta = axle.t2 - axle.t1
             self._keep(ax.annotate("", xy=(axle.t2, 0.06), xytext=(axle.t1, 0.06), xycoords=to_axes,
                                    arrowprops=dict(arrowstyle="<->", color="#333333", lw=1.0)))
-            self._keep(ax.text((axle.t1 + axle.t2) / 2, 0.09, f"Δt = {delta:.9g} s", transform=to_axes,
-                               ha="center", va="bottom", fontsize=FONT_SMALL,
-                               bbox=dict(fc="#fffde7", ec="#999999", lw=0.5, pad=1.2)))
+            self._label(ax, index, "Δt", f"Δt = {delta:.9g} s", ((axle.t1 + axle.t2) / 2, 0.09), to_axes,
+                        cursor=True, ha="center", va="bottom", fontsize=FONT_SMALL,
+                        bbox=dict(fc="#fffde7", ec="#999999", lw=0.5, pad=1.2))
 
     @staticmethod
     def _label_width(text: str) -> float:
@@ -564,12 +596,12 @@ class TabRenderer:
             fx = np.array([c.x for c in found[:MAX_MARKERS]])
             self._keep(ax.plot(fx, np.full(fx.size, axle.h_level), "|", ms=10, mew=1.5, color=color)[0])
         condition = f"\nsi {axle.h_condition.describe()}" if axle.h_condition and axle.h_condition.terms else ""
-        self._keep(ax.text(0.995, axle.h_level, f"H = {axle.h_level:.6g} : {len(found)} franchissement(s){condition}",
-                           transform=blended_transform_factory(ax.transAxes, ax.transData), ha="right",
-                           va="top", fontsize=FONT_SMALL, color=color, zorder=6,
-                           bbox=dict(fc="white", ec=color, alpha=0.85, lw=0.5, pad=1.2)))
+        self._label(ax, index, "H", f"H = {axle.h_level:.6g} : {len(found)} franchissement(s){condition}",
+                    (0.995, axle.h_level), blended_transform_factory(ax.transAxes, ax.transData), cursor=True,
+                    ha="right", va="top", fontsize=FONT_SMALL, color=color, zorder=6,
+                    bbox=dict(fc="white", ec=color, alpha=0.85, lw=0.5, pad=1.2))
 
-    def _draw_xy_cursor(self, ax, axle: AxleState) -> None:
+    def _draw_xy_cursor(self, index: int, ax, axle: AxleState) -> None:
         """Point désigné du nuage : deux curseurs (X et Y) ou point de croisement seul."""
         data = xy_data(axle, self.workspace, self.timeline)
         if data is None:
@@ -592,9 +624,9 @@ class TabRenderer:
                 self._keep(ax.axvline(px, color=color, lw=1.0))
                 self._keep(ax.axhline(py, color=color, lw=1.0))
             self._keep(ax.plot(px, py, "o", ms=9 if label == "X/Y" else 6, mfc="none", mec=color, mew=1.8)[0])
-            self._keep(ax.annotate(f"{label} {self.timeline.format(data.t[point])}\nX = {px:.6g}\nY = {py:.6g}",
-                                   (px, py), xytext=(8, 8), textcoords="offset points", fontsize=FONT_SMALL,
-                                   color=color, bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.5, pad=1.2)))
+            self._label(ax, index, f"xy:{label}", f"{label} {self.timeline.format(data.t[point])}\nX = {px:.6g}"
+                        f"\nY = {py:.6g}", (px, py), "data", (8, 8), cursor=True, fontsize=FONT_SMALL,
+                        color=color, bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.5, pad=1.2))
 
     # ------------------------------------------------------------- utilitaires
     def axle_index_of(self, mpl_axes) -> int | None:

@@ -100,13 +100,13 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 Suite complète (`python -m unittest discover -s tests`, IHM réelle sous Xvfb incluse),
 chaque ligne dans un environnement virtuel neuf.
 
-**Campagne de la version 1.0.0 (144 tests)** :
+**Campagne de la version 1.0.0 (145 tests)** :
 
 | Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
 |---|---|---|---|---|---|---|
-| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 144 tests : OK | référence `requirements.txt` |
-| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 144 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
-| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 144 tests : OK, 19 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
+| py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 145 tests : OK | référence `requirements.txt` |
+| py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 145 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
+| py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 145 tests : OK, 20 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
 
 **Campagne élargie pendant le développement (suite alors de 131 tests)** — la mise à jour
 rapide des curseurs (blitting) a été vérifiée avec Tk 8.6 « partagé » (famille Windows / Spyder / SLES) et Tk 9.0, image

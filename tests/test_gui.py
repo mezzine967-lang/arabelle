@@ -217,6 +217,69 @@ class InterfaceTests(unittest.TestCase):
         tab.add_curves([(source.id, "output", False)], 0)
         self.assertTrue(tab.float_curve_selected())
 
+    def test_labels_and_monitor_legend_can_be_moved(self):
+        """REQ 5106 / 5401 / 4102 / 6001 : noms des pistes logiques, étiquettes des curseurs
+        et légende du TBM se déplacent à la souris ; la place est gardée au redessin, dans le
+        projet et dans le rapport ; le curseur lui-même ne bouge pas ; « Vue d'origine » et le
+        menu de l'axe remettent les étiquettes à leur place."""
+        from matplotlib.backend_bases import MouseEvent
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from ptbg.core.arrangement import TabState
+        from ptbg.plotting.renderer import TabRenderer
+        a, b = self.load(DEMO / "PLC_A_10ms_pretrig.csv", DEMO / "PLC_B_20ms_dephase.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(a.id, "P_circuit_bar", False)], 0)
+        tab.add_curves([(a.id, "Pompe_ON", False), (a.id, "Alarme_P_haute", False)], 1)
+        tab.set_active_axle(0)
+        tab.set_cursor_mode("double")
+        self.root.update()
+        tab.canvas.draw()
+
+        def drag(artist, dx, dy):
+            """Glisse un élément de (dx, dy) pixels comme le ferait la souris."""
+            box = artist.get_window_extent()
+            x, y = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2
+            for kind, px, py in (("button_press_event", x, y), ("motion_notify_event", x + dx, y + dy),
+                                 ("button_release_event", x + dx, y + dy)):
+                tab.canvas.callbacks.process(kind, MouseEvent(kind, tab.canvas, px, py, button=1))
+
+        def label(key):
+            """Étiquette déplaçable de clé ``key`` dans le dessin courant."""
+            return next(item[0] for item in tab.renderer._cursor_movables + tab.renderer._movables
+                        if item[2] == key)
+
+        t1 = tab.state.axles[0].t1
+        for key, axle, (dx, dy) in (("piste:Alarme_P_haute", 1, (150, 0)), ("C1", 0, (80, -40))):
+            before = label(key).get_window_extent()
+            drag(label(key), dx, dy)
+            self.assertIn(key, tab.state.axles[axle].label_offsets)
+            tab.redraw()
+            tab.canvas.draw()
+            after = label(key).get_window_extent()
+            self.assertAlmostEqual(after.x0 - before.x0, dx, delta=2)
+            self.assertAlmostEqual(after.y0 - before.y0, dy, delta=2)
+        self.assertEqual(tab.state.axles[0].t1, t1)                         # le curseur n'a pas bougé
+        drag(tab.renderer.tbm_plot.get_legend(), 60, 0)
+        self.assertIsNotNone(tab.state.tbm_legend_xy)
+        copy = TabState.from_dict(tab.state.to_dict())                      # projet
+        self.assertEqual(copy.axles[0].label_offsets, tab.state.axles[0].label_offsets)
+        self.assertEqual(copy.tbm_legend_xy, tab.state.tbm_legend_xy)
+        page = Figure(figsize=(11.69, 4.6))                                 # rapport
+        FigureCanvasAgg(page)
+        printed = TabRenderer(page, copy, self.ctl.workspace, self.ctl.workspace.timeline(), 2000, for_print=True)
+        printed.draw()
+        moved = next(item for item in printed._cursor_movables if item[2] == "C1")
+        self.assertGreater(moved[0].xyann[0], moved[3][0] + 1)               # décalé comme à l'écran
+        menu = self.ctl.axle_context_menu(tab, 1)
+        labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1) if menu.type(i) == "command"]
+        self.assertIn("Remettre les étiquettes à leur place", labels)
+        tab.reset_labels(1)
+        self.assertFalse(tab.state.axles[1].label_offsets)
+        self.ctl.reset_view()
+        self.assertFalse(tab.state.axles[0].label_offsets)
+        self.assertIsNone(tab.state.tbm_legend_xy)
+
     def test_dialogs_speak_french(self):
         """REQ 5100 : les dialogues de l'outil affichent « OK » / « Annuler » (et non
         « Cancel ») ; la saisie de texte (renommer, commentaire) en fait partie."""

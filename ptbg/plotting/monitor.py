@@ -90,11 +90,12 @@ def confirmation_text(sources: list[SourceFile], chars: int) -> str:
 
 
 def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline, chars: int,
-                 outside: bool = False) -> list:
+                 outside: bool = False, legend_xy=None) -> list:
     """Dessine le TBM : bandeau de texte (conversion/statut) + courbe des Δt.
 
     Description coupée à ``chars`` caractères par ligne. Légende des anomalies : une entrée par sorte d'anomalie (total des
-    fichiers) ; ``outside`` (rapport) la place à droite de la courbe.
+    fichiers) ; ``outside`` (rapport) la place à droite de la courbe ; ``legend_xy`` :
+    place choisie à la souris (coin bas-gauche, fraction de la courbe).
     Renvoie les (ligne, x, y) des courbes de Δt pour que le rendu les réduise
     au zoom comme les autres courbes."""
     status = monitor_status(sources) if sources else Severity.OK
@@ -126,16 +127,20 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     for position, source in enumerate(loaded):
         lines.append(_draw_source(plot_ax, source, timeline, CURVE_COLORS[position % len(CURVE_COLORS)],
                                   top, position, relative))
+    wrap = outside and not legend_xy        # libellés coupés seulement dans la marge du rapport
     totals = {kind: sum(s.analysis.event_counts[kind] for s in loaded) for kind in EVENT_STYLE
               if kind is not EventKind.FREQUENCY}
     handles = [Line2D([], [], marker=EVENT_STYLE[kind][0], ls="none", ms=6, color=EVENT_STYLE[kind][1],
-                      mec="white", mew=0.5, label=_legend_label(f"{kind.label} ({count})", outside))
+                      mec="white", mew=0.5, label=_legend_label(f"{kind.label} ({count})", wrap))
                for kind, count in totals.items() if count]
     changes = sum(s.analysis.event_counts[EventKind.FREQUENCY] for s in loaded)
     if changes:
         handles.append(Line2D([], [], color=EVENT_STYLE[EventKind.FREQUENCY][1], ls="-.", lw=1.2,
-                              label=_legend_label(f"{EventKind.FREQUENCY.label} ({changes})", outside)))
-    if handles and outside:
+                              label=_legend_label(f"{EventKind.FREQUENCY.label} ({changes})", wrap)))
+    if handles and legend_xy:
+        plot_ax.legend(handles=handles, loc=tuple(legend_xy), fontsize=FONT_SMALL - 1, framealpha=0.8,
+                       ncol=len(handles))
+    elif handles and outside:
         plot_ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
                        fontsize=FONT_SMALL - 1, frameon=False)
     elif handles:
@@ -145,9 +150,9 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     return lines
 
 
-def _legend_label(text: str, outside: bool) -> str:
-    """Libellé de légende ; à droite de la courbe (rapport), coupé pour tenir dans la marge."""
-    return "\n".join(textwrap.wrap(text, LEGEND_WIDTH)) if outside else text
+def _legend_label(text: str, wrap: bool) -> str:
+    """Libellé de légende ; ``wrap`` (légende dans la marge du rapport) : coupé pour y tenir."""
+    return "\n".join(textwrap.wrap(text, LEGEND_WIDTH)) if wrap else text
 
 
 def _readable_neighbour_x(x_all: np.ndarray, indices: list[int]) -> np.ndarray:

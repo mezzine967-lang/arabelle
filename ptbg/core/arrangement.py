@@ -90,6 +90,7 @@ class AxleState:
     ylim: list | None = None              # None = échelle automatique
     legend: str = "auto"                  # "auto" | "free" (placée à la souris) | "hidden"
     legend_xy: list | None = None         # coin bas-gauche de la légende placée (fraction de l'axe)
+    label_offsets: dict = field(default_factory=dict)   # étiquette -> [dx, dy] choisi à la souris (fraction de l'axe)
 
     def selected_curve(self) -> CurveRef | None:
         if not self.curves:
@@ -109,6 +110,7 @@ class TabState:
     xlim: list | None = None              # zoom temporel commun
     tbm_visible: bool = True              # REQ 4103
     comment: str = ""                     # commentaire de page (rapport pas à pas)
+    tbm_legend_xy: list | None = None     # légende du TBM placée à la souris (fraction de sa courbe)
 
     @classmethod
     def from_template(cls, key: str, title: str) -> "TabState":
