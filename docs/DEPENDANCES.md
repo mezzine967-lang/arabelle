@@ -19,7 +19,7 @@ SLES se limite à un environnement virtuel avec 11 wheels binaires (aucune compi
 | Qu'est-ce qui a été testé ? | suite complète sur 3 à 12 combinaisons Python / Tk / numpy / matplotlib à chaque version | § 4 |
 | Que faire avant une montée de version ? | effets connus et procédure d'analyse d'impact en 5 étapes | § 5 |
 | Installer sans Internet ? | wheels préparées sur un poste connecté | § 6 |
-| Version tableur ? | `docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx` : bibliothèques, arbre des dépendances, sensibilités (Python, OS, 32/64 bits), campagnes, impacts, procédure et relevé des postes à remplir | — |
+| Version tableur ? | `docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx` : lisez-moi, ce que l'outil utilise (avec le risque de chaque élément), ce qui se passe si on change une version, ce qui a été testé, procédure de montée et relevé des postes à remplir | — |
 
 ## 1. Interpréteur Python
 
@@ -96,10 +96,12 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 | SLES 15 SP7 | `glibc` ≥ 2.28 (2.38 fournie) | requis par les wheels manylinux de numpy, contourpy, pillow |
 | SLES 15 SP7 | session graphique X11 (bureau ou `ssh -X`) ; `xdg-utils` (facultatif) | affichage ; ouverture du PDF généré |
 
-## 4. Campagne de compatibilité exécutée (Linux x86-64)
+## 4. Campagne de compatibilité exécutée (banc Linux Ubuntu 24.04, x86-64)
 
 Suite complète (`python -m unittest discover -s tests`, IHM réelle sous Xvfb incluse),
-chaque ligne dans un environnement virtuel neuf.
+chaque ligne dans un environnement virtuel neuf. Le banc est un Linux Ubuntu 24.04 64 bits,
+pas le Service Unit SLES 15 SP7 : il montre que le code tourne sous Linux ; l'essai sur le
+SLES réel et l'exécution des tests sur le poste Windows restent à consigner.
 
 **Campagne de la version 1.0.0 (145 tests)** :
 
