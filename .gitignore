@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+# Environnements virtuels et wheels hors ligne (install/)
+.venv/
+wheels_sles/
+wheels_win/
+# Fichiers temporaires de l'outil (PDF en cours d'écriture)
+*.partiel
