@@ -76,7 +76,7 @@ Tk disponibles dans le module Python 3 de SLES. Une version antérieure de SLES 
 
 | Poste | Ce qui est déjà constaté | Ce qui reste à faire |
 |---|---|---|
-| Windows 11 / Spyder 6 (poste de l'alternance) | l'outil se lance et ouvre un CSV du projet (relevé Information > Sources du 30/10/2026 : Python 3.11.10, Tk 8.6.13, numpy 2.2.0, matplotlib 3.9.3) | lancer les 145 tests depuis la console Spyder (`import sys`, `%cd <dossier de l'outil>`, puis `!"{sys.executable}" -m unittest discover -s tests -v`), puis la fiche d'essai du § 5 |
+| Windows 11 / Spyder 6 (poste de l'alternance) | l'outil se lance et ouvre un CSV du projet (relevé Information > Sources du 30/10/2026 : Python 3.11.10, Tk 8.6.13, numpy 2.2.0, matplotlib 3.9.3) ; tests lancés le 30/10/2026 depuis la console Spyder : 145 tests, 144 OK ; le seul en erreur cherchait le Word de la spécification, absent du dossier (corrigé depuis : ce test est sauté sans le Word) | relancer les tests avec cette version (`import sys`, `%cd <dossier de l'outil>`, puis `!"{sys.executable}" -m unittest discover -s tests -v` ; attendu : « OK », avec « skipped=1 » si le Word n'est pas dans `docs/specification/`), puis la fiche d'essai du § 5 |
 | VM Linux SLES 15 SP7 fournie par l'entreprise | — | installer (§ 3), lancer les tests (`python -m unittest discover -s tests -v`), puis la fiche d'essai du § 5 |
 
 Des wheels de chaque bibliothèque figée existent pour Windows 11 (win_amd64) et pour

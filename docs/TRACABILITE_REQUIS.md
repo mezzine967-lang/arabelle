@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Document de référence | **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026), `docs/specification/NCS00ICOMMON----ES010_RevA.docx` |
+| Document de référence | **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026), `docs/specification/NCS00ICOMMON----ES010_RevA.docx` (à y placer s'il n'est pas présent) |
 | Contenu du Word | **64 lignes** de requis pour **63 identifiants** (REQ_COMMON_KH_2201 apparaît deux fois : « Analog signal type : float » et « Binary group signal ») |
 | Contrôle automatique | `python tools/verifier_tracabilite.py` (et `tests/test_architecture.py`) relit les identifiants **dans le Word** et vérifie que chacun est cité ici, dans le code et dans au moins un test |
 | Version tableur | `docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx`, avec l'onglet « Points ouverts » (questions à faire valider par le rédacteur de la spécification) |
@@ -153,5 +153,5 @@ Qualification restant à faire.
 
 | Essai | Requis | Comment | Repère actuel |
 |---|---|---|---|
-| Windows 11 / Spyder 6 au poste, et VM Linux SLES 15 SP7 fournie par l'entreprise | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | outil lancé sur le poste Windows 11 / Spyder 6 avec un CSV du projet (30/10/2026) ; tests automatiques à lancer sur ce poste puis sur la VM |
+| Windows 11 / Spyder 6 au poste, et VM Linux SLES 15 SP7 fournie par l'entreprise | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | poste Windows 11 / Spyder 6 : outil lancé avec un CSV du projet et tests automatiques lancés le 30/10/2026 (144 sur 145 OK, le dernier cherchait le Word de la spécification, absent du dossier ; corrigé), essai de 15 minutes à faire ; VM : tests et essai à faire |
 | Volumes réels de PTBG (taille, nombre de colonnes, de fichiers) pour confirmer la valeur de REQ 2310 | REQ_COMMON_KH_2310, 4105 | `python tools/banc_performance.py` sur de vrais fichiers, puis `--generer 500` | à mesurer sur les postes cibles (pas de valeur retenue à ce jour) |

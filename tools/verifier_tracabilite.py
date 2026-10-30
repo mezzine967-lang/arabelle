@@ -10,7 +10,9 @@ zipfile + expressions régulières), le script contrôle qu'il est cité :
 2. dans le code (ptbg/ ou MAIN.py) — sauf requis purement documentaires ;
 3. dans au moins un test (tests/).
 
-Code de sortie 0 si tout est tracé, 1 sinon (utilisable en intégration).
+Code de sortie 0 si tout est tracé, 1 sinon (utilisable en intégration), 2 si le
+document Word n'a pas été placé dans docs/specification/ (il n'est pas toujours
+fourni avec l'outil : c'est le document de la spécification elle-même).
 """
 from __future__ import annotations
 
@@ -61,6 +63,9 @@ def check() -> list[str]:
 
 
 if __name__ == "__main__":
+    if not SPEC.exists():
+        print(f"Spécification absente : placer {SPEC.name} dans docs/specification/ pour lancer le contrôle.")
+        sys.exit(2)
     requirements = spec_requirements()
     problems = check()
     print(f"{len(requirements)} identifiants ({sum(requirements.values())} lignes) dans {SPEC.name}")

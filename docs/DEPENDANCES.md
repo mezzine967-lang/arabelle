@@ -103,14 +103,13 @@ est à lancer sur chaque poste, puis la fiche d'essai de COMPATIBILITE_OS.md § 
 
 | Poste | Python | Tcl/Tk | numpy | matplotlib | État |
 |---|---|---|---|---|---|
-| Windows 11 / Spyder 6 (relevé du 30/10/2026) | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | outil lancé, CSV du projet ouvert ; tests à lancer depuis la console Spyder |
+| Windows 11 / Spyder 6 (relevé du 30/10/2026) | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | outil lancé, CSV du projet ouvert ; tests lancés le 30/10/2026 depuis la console Spyder : 145 tests, 144 OK ; le seul en erreur cherchait le Word de la spécification, absent du dossier (corrigé depuis : ce test est sauté sans le Word) |
 | VM Linux SLES 15 SP7 fournie par l'entreprise | 3.11 (`python311`) | 8.6 (`python311-tk`) | 2.4.6 | 3.10.9 | à faire après installation (`install/installer_sles.sh`) |
 
 Versions de l'environnement Spyder du poste (relevé Information > Sources) : contourpy 1.3.1,
 cycler 0.12.1, fonttools 4.55.2, kiwisolver 1.4.7, packaging 24.2, pillow 11.0.0,
 pyparsing 3.2.0, python-dateutil 2.9.0.post0, six 1.17.0. Elles diffèrent de
-`requirements.txt` pour 8 paquets : le résultat des tests sur ce poste dira si elles
-conviennent.
+`requirements.txt` pour 8 paquets ; les tests passent avec ces versions (ci-dessus).
 
 Disponibilité des wheels binaires : des wheels de chaque version figée existent pour
 Python 3.11 à 3.14, en `win_amd64` (Windows 11) et en `manylinux` x86-64 (SLES 15 SP7) ;

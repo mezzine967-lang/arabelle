@@ -1,0 +1,6 @@
+Placer ici le document Word de la spécification :
+NCS00ICOMMON----ES010_RevA.docx (NCS/00/I/COMMON----/ES/010 Rev. A).
+
+Il sert au contrôle automatique de traçabilité (tools/verifier_tracabilite.py et
+le test test_architecture.test_every_requirement_is_traced). Sans lui, l'outil
+fonctionne normalement ; seul ce contrôle est sauté.

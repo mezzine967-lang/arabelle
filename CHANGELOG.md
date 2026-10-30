@@ -33,7 +33,11 @@ les 18 questions à faire valider.
 | Architecture (§ 6) | Python 3.11 de référence (code prévu pour 3.10 à 3.14), stdlib + numpy + matplotlib ; Windows 11 et SLES 15 SP7 depuis les mêmes sources, différences isolées dans `ptbg/system/compat.py` ; classeur des versions et dépendances (`docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx`) ; versions du poste Spyder 6 relevées |
 | Qualité | 145 tests automatisés (dont l'interface réelle et un banc de fichiers abîmés) ; contrôle automatique de la traçabilité ; banc de mesure des performances (`tools/banc_performance.py`) |
 
-Reste à faire avant de déclarer l'outil qualifié : réponses aux points ouverts ; tests
-automatiques et essai de réception sur le poste Windows 11 / Spyder 6, puis sur la
+Tests automatiques lancés sur le poste Windows 11 / Spyder 6 le 30/10/2026 : 144 sur 145
+OK ; le seul en erreur cherchait le Word de la spécification, absent du dossier (corrigé :
+ce contrôle est sauté quand le Word n'est pas dans `docs/specification/`).
+
+Reste à faire avant de déclarer l'outil qualifié : réponses aux points ouverts ; essai de
+réception sur le poste Windows 11 / Spyder 6 ; tests et essai de réception sur la
 VM Linux SLES 15 SP7 fournie par l'entreprise ; essai sur les volumes réels de PTBG (voir la fin de
 `docs/TRACABILITE_REQUIS.md`).
