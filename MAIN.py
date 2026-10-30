@@ -3,18 +3,12 @@
 REQ_COMMON_KH_3002 : ce script est consacré UNIQUEMENT à la génération de
 l'interface. Il vérifie que l'environnement permet d'ouvrir une fenêtre, puis
 assemble les zones de la fenêtre principale (section 4.1 « Main GUI ») :
-
-    ┌──────────────────────────────────────────────────────────────┐
-    │ Barre de menus (REQ 5100) + barre de chemin / accès rapides  │
-    ├───────────────┬──────────────────────────────────────────────┤
-    │ Arbre des     │ Zone graphique à onglets (REQ 5104, 5106)    │
-    │ données       │  - axes du modèle choisi (REQ 5300)          │
-    │ (REQ 5103,    │  - Time Base Monitor automatique (REQ 4102)  │
-    │  masquable    │  - panneau de lecture des curseurs (REQ 5402)│
-    │  REQ 5105)    │                                              │
-    ├───────────────┴──────────────────────────────────────────────┤
-    │ Barre d'état : utilisateur, date, journal, version (REQ 5102)│
-    └──────────────────────────────────────────────────────────────┘
+- en haut : barre de menus (REQ 5100) et barre de chemin / accès rapides ;
+- à gauche : arbre des données (REQ 5103), masquable (REQ 5105) ;
+- au centre : zone graphique à onglets (REQ 5104, 5106), avec les axes du modèle
+  choisi (REQ 5300), le Time Base Monitor (REQ 4102) et le panneau de lecture des
+  curseurs (REQ 5402) ;
+- en bas : barre d'état avec utilisateur, date, journal, version (REQ 5102).
 
 Toutes les actions sont déléguées au contrôleur ``ptbg.gui.app.Application``
 et aux modules de ``ptbg/`` (REQ_COMMON_KH_3003).

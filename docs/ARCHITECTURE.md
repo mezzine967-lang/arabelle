@@ -57,13 +57,9 @@ data/exemples/               CSV reçus (inchangés) ; data/demo/ : CSV de démo
 docs/                        spécification, guide, dépendances, compatibilité, traçabilité, récapitulatif Excel
 ```
 
-Règle de dépendance (vérifiée par `tests/test_architecture.py`) :
-
-```
-gui  ──►  plotting, report  ──►  core  ──►  numpy
- │                                 ▲
- └─────────────────────────────────┘        system : utilisable par tous
-```
+Règle de dépendance (vérifiée par `tests/test_architecture.py`) : `gui` utilise
+`plotting`, `report` et `core` ; `plotting` et `report` utilisent `core` ; `core`
+n'utilise que numpy. `system` peut être utilisé par tous.
 
 `core` n'importe jamais `tkinter` ni `matplotlib` ; `plotting` et `report` n'importent
 jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interface.
