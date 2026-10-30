@@ -35,6 +35,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | la même chose en **tableur**, avec les **questions ouvertes** à faire valider | [docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx](docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx) (onglet « Points ouverts ») |
 | **installer ou qualifier** l'outil sur Windows 11 ou SLES 15 SP7 | [docs/COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
 | connaître les **bibliothèques**, leurs licences, l'impact d'une **montée de version** | [docs/DEPENDANCES.md](docs/DEPENDANCES.md) |
+| la même chose en **tableur** : versions, dépendances, sensibilités, tests, relevé des postes | [docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx](docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx) |
 | **reprendre ou modifier le code** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | voir **ce qui a changé** d'une version à l'autre | [CHANGELOG.md](CHANGELOG.md) |
 | voir un **exemple de rapport** PDF | [docs/exemples/rapport_exemple_demo.pdf](docs/exemples/rapport_exemple_demo.pdf) |

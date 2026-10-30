@@ -19,6 +19,7 @@ SLES se limite à un environnement virtuel avec 11 wheels binaires (aucune compi
 | Qu'est-ce qui a été testé ? | suite complète sur 3 à 12 combinaisons Python / Tk / numpy / matplotlib à chaque version | § 4 |
 | Que faire avant une montée de version ? | effets connus et procédure d'analyse d'impact en 5 étapes | § 5 |
 | Installer sans Internet ? | wheels préparées sur un poste connecté | § 6 |
+| Version tableur ? | `docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx` : bibliothèques, arbre des dépendances, sensibilités (Python, OS, 32/64 bits), campagnes, impacts, procédure et relevé des postes à remplir | — |
 
 ## 1. Interpréteur Python
 
@@ -107,6 +108,16 @@ chaque ligne dans un environnement virtuel neuf.
 | py311-ref-tk9 | 3.11.15 | 9.0.3 | 2.4.6 | 3.10.9 | 145 tests : OK | référence `requirements.txt` |
 | py312-ref-tk86 | 3.12.3 | 8.6.14 | 2.4.6 | 3.10.9 | 145 tests : OK | Tk 8.6 « partagé » comme sous Windows et SLES |
 | py310-min-tk9 | 3.10.20 | 9.0.3 | 1.24.4 | 3.6.3 | 145 tests : OK, 20 tests IHM ignorés | IHM refusée au démarrage avec message clair (matplotlib < 3.10 avec Tk 9) |
+
+**Versions du poste Windows 11 / Spyder 6** (relevées le 30/10/2026 dans Information >
+Sources : Python 3.11.10, Tk 8.6.13, numpy 2.2.0, matplotlib 3.9.3, contourpy 1.3.1,
+fonttools 4.55.2, kiwisolver 1.4.7, packaging 24.2, pillow 11.0.0, pyparsing 3.2.0) :
+
+| Combinaison | Python | Tcl/Tk | numpy | matplotlib | Résultat | Remarque |
+|---|---|---|---|---|---|---|
+| poste Windows 11 / Spyder 6 | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | utilisation réelle : OK | outil lancé, CSV du projet chargé (statut OK) |
+| py312-poste-tk86 | 3.12.3 | 8.6.14 | 2.2.0 | 3.9.3 | 145 tests : OK | mêmes bibliothèques que le poste, interface comprise |
+| py311-poste | 3.11.15 | 9.0.3 | 2.2.0 | 3.9.3 | 145 tests : OK, 20 tests IHM ignorés | même Python que le poste ; IHM refusée proprement avec Tk 9 (le poste a Tk 8.6) |
 
 **Campagne élargie pendant le développement (suite alors de 131 tests)** — la mise à jour
 rapide des curseurs (blitting) a été vérifiée avec Tk 8.6 « partagé » (famille Windows / Spyder / SLES) et Tk 9.0, image

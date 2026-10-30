@@ -76,7 +76,9 @@ Tk disponibles dans le module Python 3 de SLES. Une version antérieure de SLES 
 
 Linux x86-64, Python 3.10 à 3.14, Tk 8.6.14 et Tk 9.0.3, plusieurs versions de numpy et
 matplotlib : voir DEPENDANCES.md § 4. Les wheels Windows (win_amd64) et SLES (manylinux)
-de chaque Python 3.11 à 3.14 ont été vérifiées disponibles.
+de chaque Python 3.11 à 3.14 ont été vérifiées disponibles. Les versions de l'environnement
+Spyder 6 du poste Windows 11 (numpy 2.2.0, matplotlib 3.9.3…) ont passé toute la suite de
+tests, et l'outil a été lancé sur ce poste avec un CSV du projet (DEPENDANCES.md § 4).
 
 ## 5. Essai de réception à consigner sur chaque cible (≈ 15 minutes)
 
