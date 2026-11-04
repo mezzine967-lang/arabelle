@@ -4,6 +4,8 @@
 - ``HorizontalCursorDialog``     : curseur horizontal (REQ 5406) conditionné par
                                    un ou plusieurs Bool (REQ 5407) ;
 - ``XYDialog``                   : nuage X/Y et mode du curseur X/Y (REQ 5408) ;
+- ``CurveStyleDialog``           : aspect d'une courbe (couleur, épaisseur, trait),
+                                   demandé par le relecteur ;
 - ``ConditionalProcessingWindow``: statistiques sous condition (section 4.5,
                                    REQ 5500 sans énoncé : proposition documentée).
 """
@@ -11,9 +13,9 @@ from __future__ import annotations
 
 import csv
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import colorchooser, filedialog, messagebox, ttk
 
-from ptbg.core.arrangement import AxleState, CurveRef
+from ptbg.core.arrangement import LINE_STYLES, AxleState, CurveRef
 from ptbg.core.conditional import (STATS_HEADER, Condition, ConditionTerm, conditional_statistics, evaluate)
 from ptbg.core.data_package import SourceFile, Workspace
 from ptbg.gui.dialogs.base import Dialog
@@ -234,6 +236,57 @@ class XYDialog(Dialog):
     def apply(self) -> None:
         """Résultat : (référence X, référence Y, mode du curseur X/Y)."""
         self.result = (self._refs[0], self._refs[1], self.mode.get())
+
+
+class CurveStyleDialog(Dialog):
+    """Aspect d'une courbe ; result = (couleur, épaisseur en points, style de trait)."""
+
+    def __init__(self, parent, ref: CurveRef, color: str) -> None:
+        """``color`` : couleur actuellement affichée (automatique si la courbe n'en a pas)."""
+        self.ref, self.color = ref, color
+        super().__init__(parent, f"Aspect de la courbe {ref.name}")
+
+    def body(self, master):
+        """Couleur (nuancier du système), épaisseur et style de trait."""
+        ttk.Label(master, text="Couleur :").grid(row=0, column=0, sticky="w")
+        self.swatch = tk.Label(master, width=6, background=self.color, relief="solid", borderwidth=1)
+        self.swatch.grid(row=0, column=1, sticky="w", padx=4, pady=2)
+        ttk.Button(master, text="Choisir…", command=self._pick).grid(row=0, column=2, sticky="w")
+        ttk.Label(master, text="Épaisseur (points) :").grid(row=1, column=0, sticky="w")
+        self.width = tk.StringVar(value=f"{self.ref.width or 1.0:g}")
+        ttk.Spinbox(master, from_=0.5, to=6.0, increment=0.5, width=6, textvariable=self.width).grid(
+            row=1, column=1, sticky="w", padx=4, pady=2)
+        ttk.Label(master, text="Trait :").grid(row=2, column=0, sticky="w")
+        names = [name for _, name in LINE_STYLES]
+        self.style = tk.StringVar(value=dict(LINE_STYLES).get(self.ref.linestyle or "-", names[0]))
+        ttk.Combobox(master, textvariable=self.style, values=names, state="readonly", width=14).grid(
+            row=2, column=1, columnspan=2, sticky="w", padx=4, pady=2)
+        ttk.Label(master, foreground="#555555", text="La courbe sélectionnée reste un peu plus épaisse.").grid(
+            row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
+    def _pick(self) -> None:
+        """Nuancier de couleurs (tkinter.colorchooser, bibliothèque standard)."""
+        chosen = colorchooser.askcolor(self.color, parent=self, title="Couleur de la courbe")[1]
+        if chosen:
+            self.color = chosen
+            self.swatch.configure(background=chosen)
+
+    def validate(self) -> bool:
+        """Épaisseur numérique entre 0,5 et 6 points."""
+        try:
+            value = float(self.width.get().replace(",", "."))
+        except ValueError:
+            value = -1.0
+        if not 0.5 <= value <= 6.0:
+            messagebox.showerror("Aspect de la courbe", "Épaisseur entre 0,5 et 6 points.", parent=self)
+            return False
+        self._width = value
+        return True
+
+    def apply(self) -> None:
+        """Résultat : (couleur, épaisseur, code Matplotlib du trait)."""
+        code = next(code for code, name in LINE_STYLES if name == self.style.get())
+        self.result = (self.color, self._width, code)
 
 
 class ConditionalProcessingWindow(tk.Toplevel):

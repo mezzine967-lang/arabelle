@@ -292,5 +292,39 @@ class RenderAndReportTests(unittest.TestCase):
         self.assertFalse((self.files.path / "rapport.pdf.partiel").exists())
 
 
+    def test_portrait_report_and_tab_on_a_single_page(self):
+        """Remarques du relecteur (REQ 6001) : rapport en paysage ou en portrait ; l'onglet
+        tient sur sa page, lectures comprises (20 lectures ne partent plus en annexe)."""
+        import re
+        from ptbg.report.pdf_report import _reading_layout
+        for height in (8.27, 11.69):
+            self.assertEqual(_reading_layout(20, height)[0], 20)
+        tab = TabState.from_template("2A", "Portrait")
+        tab.axles[0].curves.append(CurveRef(self.ok.id, "output"))
+        tab.axles[0].cursor_mode, tab.axles[0].t1 = "single", 1.0
+        pages = [ReportPage(tab, "relative", None)]
+        header = build_header(self.settings, self.ws, pages, None, "")
+        for orientation, box in (("portrait", (595.44, 841.68)), ("landscape", (841.68, 595.44))):
+            self.settings.report_orientation = orientation
+            target = self.files.path / f"{orientation}.pdf"
+            export_pdf(target, pages, header, self.ws, self.settings)
+            sizes = re.findall(rb"/MediaBox \[ ?0 0 ([\d.]+) ([\d.]+) ?\]", target.read_bytes())
+            self.assertEqual({(float(w), float(h)) for w, h in sizes}, {box})
+
+    def test_legend_names_variable_only_unless_ambiguous(self):
+        """Remarque du relecteur : légende = nom de la variable ; le fichier n'est ajouté que si
+        deux fichiers de l'axe ont une variable du même nom."""
+        other = load_source(EXAMPLES / "Test_PID_P_AS_scenari0045.csv", self.settings, file_id="autre")
+        self.ws.active_package.files.append(other)
+        tab = TabState.from_template("1A", "Légende")
+        tab.axles[0].curves = [CurveRef(self.ok.id, "output"), CurveRef(self.ok.id, "pv")]
+        _, renderer = self._render(tab)
+        self.assertEqual([t.get_text() for t in renderer.axes[0].get_legend().get_texts()], ["► output", "pv"])
+        tab.axles[0].curves.append(CurveRef(other.id, "output"))
+        _, renderer = self._render(tab)
+        texts = [t.get_text() for t in renderer.axes[0].get_legend().get_texts()]
+        self.assertEqual(texts[1], "pv")
+        self.assertIn(f"output [{other.name}]", texts[2])
+
 if __name__ == "__main__":
     unittest.main()

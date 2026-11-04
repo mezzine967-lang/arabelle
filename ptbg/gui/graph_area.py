@@ -73,7 +73,10 @@ class GraphArea(ttk.Frame):
         self.notebook.bind("<Button-3>", self._on_context_menu, add=True)
 
     def new_tab(self, key: str, state: TabState | None = None) -> AnalysisTab:
-        """Crée un onglet depuis un modèle (ou un état sauvegardé)."""
+        """Crée un onglet depuis un modèle (ou un état sauvegardé) ; quand tous les onglets
+        ont été fermés, la numérotation repart de 1."""
+        if not self.tabs:
+            self._counter = 0
         self._counter += 1
         state = state or TabState.from_template(key, f"Analyse {self._counter} — {template(key).name}")
         tab = AnalysisTab(self.notebook, self.controller, state)

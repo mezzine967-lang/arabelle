@@ -16,6 +16,13 @@
 Une dernière page « Traçabilité » donne les empreintes SHA-256 complètes, le
 diagnostic de base de temps de chaque fichier et l'environnement d'exécution.
 
+Mise en page (remarques du relecteur) : pages A4 en paysage ou en portrait
+(Rapport > Pages en paysage / portrait) ; chaque onglet tient sur SA page,
+graphique et tableau des lectures compris : le tableau prend la place qu'il
+lui faut (jusqu'à ``TABLE_SHARE`` de la hauteur, police réduite si besoin).
+Seul un nombre de lectures qui ne tiendrait pas même ainsi renvoie la suite
+en annexe, ce qui est signalé sur la page.
+
 Le PDF est d'abord écrit dans un fichier temporaire du même dossier puis
 renommé : un export interrompu ne laisse jamais un PDF partiel.
 """
@@ -43,9 +50,17 @@ from ptbg.plotting.styles import REPORT_FONT
 from ptbg.system.environment import collect_environment
 from ptbg.version import SPECIFICATION, full_name
 
-PAGE_SIZE = (11.69, 8.27)       # A4 paysage, en pouces
-MAX_READING_ROWS = 14           # lignes de lecture imprimées sous le graphique
-CROWDED_READING_ROWS = 8        # idem quand 3 axes ou plus se partagent la hauteur (suite en annexe)
+A4_IN = (11.69, 8.27)           # format A4 (grand côté, petit côté), en pouces
+HEADER_IN = 1.5                 # hauteur de l'en-tête et du titre de page
+FOOTER_IN = 0.35                # pied de page
+TABLE_SHARE = 0.34              # part maximale de la hauteur laissée au tableau des lectures
+CHAR_IN = 0.6 / 72              # largeur d'un caractère à chasse fixe, par point de police (pouces)
+TABLE_COLUMNS = (0.06, 0.07, 0.33, 0.2, 0.26, 0.08)   # largeur des colonnes des lectures (fraction)
+
+
+def page_size(orientation: str) -> tuple[float, float]:
+    """(largeur, hauteur) en pouces d'une page A4 « landscape » ou « portrait »."""
+    return A4_IN if orientation != "portrait" else (A4_IN[1], A4_IN[0])
 
 
 @dataclass
@@ -80,21 +95,36 @@ def build_header(settings: Settings, workspace: Workspace, pages: list[ReportPag
 def _draw_header(fig: Figure, header: ReportHeader, summary: list[str]) -> None:
     """En-tête en deux blocs de texte à chasse fixe (texte sélectionnable dans le PDF),
     sur le modèle des rapports de test du projet : identification à gauche (REQ 6005),
-    bilan de la page à droite."""
+    bilan de la page à droite ; les lignes longues sont raccourcies à la largeur de la page."""
+    width_in, height_in = fig.get_size_inches()
     sources = [f"{name} (SHA-256 {digest[:16]}…)" for name, digest in header.sources] or ["aucune"]
     left = [("Outil", header.tool), ("Émetteur", header.issuer), ("Date", header.date),
             ("Projet", header.project_name), ("Unité", header.project_unit),
             ("Référence", header.project_reference), ("Empreinte projet", header.project_hash),
-            ("Source(s)", textwrap.shorten(" ; ".join(sources), 150))]
+            ("Source(s)", " ; ".join(sources))]
     width = max(len(label) for label, _ in left)
-    fig.text(0.03, 0.975, "\n".join(f"{label:<{width}} : {value}" for label, value in left),
+    chars = int(width_in * 0.7 / (7 * CHAR_IN)) - width - 3     # bloc de gauche : 70 % de la largeur
+    fig.text(0.03, 1 - 0.2 / height_in,
+             "\n".join(f"{label:<{width}} : {textwrap.shorten(value, max(chars, 30))}" for label, value in left),
              va="top", ha="left", fontsize=7, family=REPORT_FONT, linespacing=1.25)
-    fig.text(0.97, 0.975, "\n".join(summary), va="top", ha="right",
+    fig.text(0.97, 1 - 0.2 / height_in, "\n".join(summary), va="top", ha="right",
              fontsize=7, family=REPORT_FONT, linespacing=1.25)
-    fig.add_artist(Line2D([0.03, 0.97], [0.858, 0.858], color="#555555", lw=0.6))
+    line = 1 - 1.18 / height_in
+    fig.add_artist(Line2D([0.03, 0.97], [line, line], color="#555555", lw=0.6))
 
 
-def _draw_readings(fig: Figure, rows, bottom: float, height: float, limit: int) -> None:
+def _reading_layout(count: int, height_in: float) -> tuple[int, float, float]:
+    """(lignes imprimées, taille de police, hauteur d'une ligne en pouces) pour ``count``
+    lectures : police normale si elles tiennent dans ``TABLE_SHARE`` de la page, sinon
+    réduite, sinon le maximum de lignes à la police réduite (suite en annexe)."""
+    room = TABLE_SHARE * height_in - 0.1
+    for font, row_in in ((6.5, 0.15), (5.5, 0.125)):
+        if (count + 1) * row_in <= room:
+            return count, font, row_in
+    return max(int(room / 0.125) - 2, 4), 5.5, 0.125
+
+
+def _draw_readings(fig: Figure, rows, bottom: float, height: float, limit: int, font: float) -> None:
     """Tableau des lectures de curseurs sous le graphique (``limit`` lignes, suite en annexe)."""
     ax = fig.add_axes([0.03, bottom, 0.94, height])
     ax.set_axis_off()
@@ -102,18 +132,23 @@ def _draw_readings(fig: Figure, rows, bottom: float, height: float, limit: int) 
     if len(rows) > limit:
         shown.append(("…", "", f"{len(rows) - limit} lecture(s) supplémentaire(s) en annexe",
                       "", "", ""))
-    table = ax.table(cellText=[[textwrap.shorten(str(c), 60) for c in r] for r in shown],
-                     colLabels=READING_HEADER, loc="upper center", cellLoc="left",
-                     colWidths=[0.06, 0.07, 0.33, 0.2, 0.26, 0.08])
+    # Texte de chaque cellule raccourci à la largeur de sa colonne.
+    table_in = fig.get_size_inches()[0] * 0.94
+    chars = [max(int(share * table_in / (font * CHAR_IN)) - 1, 6) for share in TABLE_COLUMNS]
+    table = ax.table(cellText=[[textwrap.shorten(str(c), n) for c, n in zip(r, chars)] for r in shown],
+                     colLabels=READING_HEADER, loc="upper center", cellLoc="left", colWidths=list(TABLE_COLUMNS))
     table.auto_set_font_size(False)
-    table.set_fontsize(6.5)
-    table.scale(1, 0.95)
+    table.set_fontsize(font)
+    for cell in table.get_celld().values():
+        cell.set_height(1.0 / (len(shown) + 1))
 
 
 def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspace: Workspace,
                  settings: Settings, number: int, count: int) -> list:
-    """Une page : en-tête, titre, zone graphique, lectures, pied de page."""
-    fig = Figure(figsize=PAGE_SIZE, dpi=100)
+    """Une page : en-tête, titre, zone graphique, lectures, pied de page ; tout l'onglet
+    tient sur la page (voir l'en-tête du module)."""
+    width_in, height_in = page_size(settings.report_orientation)
+    fig = Figure(figsize=(width_in, height_in), dpi=100)
     loaded = workspace.loaded_files()
     timeline = Timeline(page.time_mode, page.ref_ns,
                         all(s.conversion.date_known for s in loaded) if loaded else True)
@@ -125,33 +160,35 @@ def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspac
                                f"Courbes : {curves}", f"Lectures de curseurs : {len(rows)}",
                                f"Base de temps : {monitor_status(files).label if files else '—'}"])
     title = f"{page.tab.title} — capture du {page.captured_at}"
-    fig.text(0.5, 0.835, title, fontsize=10, fontweight="bold", ha="center", family=REPORT_FONT)
+    title_chars = int(width_in * 0.94 / (10 * CHAR_IN))
+    fig.text(0.5, 1 - 1.36 / height_in, textwrap.shorten(title, title_chars), fontsize=10, fontweight="bold",
+             ha="center", family=REPORT_FONT)
     if page.tab.comment:
-        fig.text(0.5, 0.815, textwrap.shorten(page.tab.comment, 220), fontsize=7.5, style="italic",
-                 ha="center", family=REPORT_FONT)
-    # Disposition chargée (3 axes ou plus) : moins de lignes sous le graphique, qui garde
-    # assez de hauteur pour rester lisible ; les autres lectures vont en annexe.
-    limit = CROWDED_READING_ROWS if page.tab.template.nrows >= 3 else MAX_READING_ROWS
-    table_height = 0.0 if not rows else min(0.035 + 0.018 * min(len(rows), limit + 1), 0.30)
-    graph_bottom = 0.04 + table_height
+        fig.text(0.5, 1 - 1.52 / height_in, textwrap.shorten(page.tab.comment, int(title_chars * 1.3)),
+                 fontsize=7.5, style="italic", ha="center", family=REPORT_FONT)
+    limit, font, row_in = _reading_layout(len(rows), height_in)
+    table_in = 0.0 if not rows else (min(len(rows), limit + 1) + 1) * row_in + 0.1
+    top_in = HEADER_IN + (0.15 if page.tab.comment else 0.0)
+    graph_in = height_in - top_in - FOOTER_IN - table_in
     # Une sous-figure n'utilise que les RATIOS de sa grille (pas top/bottom) :
-    # 3 bandes = en-tête (masqué ici), zone graphique, tableau des lectures.
-    bands = fig.add_gridspec(3, 1, height_ratios=[0.20, 0.80 - graph_bottom, graph_bottom])
+    # 3 bandes = en-tête (masqué ici), zone graphique, tableau des lectures et pied de page.
+    bands = fig.add_gridspec(3, 1, height_ratios=[top_in, graph_in, FOOTER_IN + table_in], hspace=0)
     area = fig.add_subfigure(bands[1])
     TabRenderer(area, page.tab, workspace, timeline, settings.max_points_per_curve * 2, for_print=True,
-                height_in=PAGE_SIZE[1] * (0.80 - graph_bottom)).draw()
+                height_in=graph_in).draw()
     if rows:
-        _draw_readings(fig, rows, 0.035, table_height, limit)
-    fig.text(0.5, 0.012, f"{header.tool} — {SPECIFICATION}", ha="center", fontsize=6.5, color="#555555",
-             family=REPORT_FONT)
+        _draw_readings(fig, rows, (FOOTER_IN - 0.05) / height_in, table_in / height_in, limit, font)
+    fig.text(0.5, 0.1 / height_in, f"{header.tool} — {SPECIFICATION}", ha="center", fontsize=6.5,
+             color="#555555", family=REPORT_FONT)
     pdf.savefig(fig)
     return rows[limit:]
 
 
-def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, pages: list[ReportPage],
-                  extra_rows: list, number: int, count: int) -> None:
+def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, settings: Settings,
+                  pages: list[ReportPage], extra_rows: list, number: int, count: int) -> None:
     """Page de traçabilité : empreintes, diagnostics de base de temps, environnement."""
-    fig = Figure(figsize=PAGE_SIZE, dpi=100)
+    width_in, height_in = page_size(settings.report_orientation)
+    fig = Figure(figsize=(width_in, height_in), dpi=100)
     lines = ["TRAÇABILITÉ DES SOURCES ET DE LA BASE DE TEMPS", ""]
     names = {name for name, _ in header.sources}
     files = [s for s in workspace.files() if s.name in names]
@@ -180,8 +217,10 @@ def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, pag
     lines.append("Bibliothèques : " + ", ".join(f"{p.name} {p.installed}" for p in environment.packages if p.installed))
     wrapped = []
     for line in lines:
-        wrapped += textwrap.wrap(line, 175, subsequent_indent="      ") or [""]
-    fig.text(0.03, 0.83, "\n".join(wrapped[:62]), fontsize=6.5, va="top", family="DejaVu Sans Mono")
+        wrapped += textwrap.wrap(line, int(width_in * 0.94 / (6.5 * CHAR_IN)), subsequent_indent="      ") or [""]
+    room = int((height_in - HEADER_IN - FOOTER_IN) * 72 / (6.5 * 1.2))       # lignes qui tiennent
+    fig.text(0.03, 1 - (HEADER_IN - 0.1) / height_in, "\n".join(wrapped[:room]), fontsize=6.5, va="top",
+             family="DejaVu Sans Mono")
     pdf.savefig(fig)
 
 
@@ -207,7 +246,7 @@ def export_pdf(path: Path, pages: list[ReportPage], header: ReportHeader, worksp
                 extra += _render_page(pdf, page, header, workspace, settings, number, count)
                 if progress:
                     progress(number, count)
-            _render_annex(pdf, header, workspace, pages, extra, count, count)
+            _render_annex(pdf, header, workspace, settings, pages, extra, count, count)
         os.replace(temporary, path)
     finally:
         if temporary.exists():

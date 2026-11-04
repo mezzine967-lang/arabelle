@@ -98,12 +98,12 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 
 ## 4. Tests à réaliser
 
-La suite complète (`python -m unittest discover -s tests -v`, 145 tests, interface comprise)
+La suite complète (`python -m unittest discover -s tests -v`, 154 tests, interface comprise)
 est à lancer sur chaque poste, puis la fiche d'essai de COMPATIBILITE_OS.md § 5.
 
 | Poste | Python | Tcl/Tk | numpy | matplotlib | État |
 |---|---|---|---|---|---|
-| Windows 11 / Spyder 6 (relevé du 30/10/2026) | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | outil lancé, CSV du projet ouvert ; tests lancés le 30/10/2026 depuis la console Spyder : 145 tests, 144 OK ; le seul en erreur cherchait le Word de la spécification, absent du dossier (corrigé depuis : ce test est sauté sans le Word) |
+| Windows 11 / Spyder 6 (relevé du 30/10/2026) | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | outil lancé, CSV du projet ouvert ; tests de la version 1.0.0 lancés le 30/10/2026 depuis la console Spyder : 145 tests, 144 OK ; le seul en erreur cherchait le Word de la spécification, absent du dossier (corrigé depuis : ce test est sauté sans le Word) ; tests de la version 1.1.0 à relancer |
 | VM Linux SLES 15 SP7 fournie par l'entreprise | 3.11 (`python311`) | 8.6 (`python311-tk`) | 2.4.6 | 3.10.9 | à faire après installation (`install/installer_sles.sh`) |
 
 Versions de l'environnement Spyder du poste (relevé Information > Sources) : contourpy 1.3.1,

@@ -62,13 +62,19 @@ def template(key: str) -> Template:
     return next((t for t in TEMPLATES if t.key == key), TEMPLATES[0])
 
 
+LINE_STYLES = (("-", "Continu"), ("--", "Tirets"), (":", "Pointillés"), ("-.", "Tirets-points"))
+
+
 @dataclass
 class CurveRef:
-    """Courbe d'un axe : variable (ou groupe binaire) d'un fichier."""
+    """Courbe d'un axe : variable (ou groupe binaire) d'un fichier, et son aspect
+    (couleur, épaisseur en points, style de trait ; vide ou 0 = automatique)."""
     file_id: str
     name: str
     is_group: bool = False
     color: str = ""
+    width: float = 0.0
+    linestyle: str = "-"
 
 
 @dataclass
@@ -91,6 +97,13 @@ class AxleState:
     legend: str = "auto"                  # "auto" | "free" (placée à la souris) | "hidden"
     legend_xy: list | None = None         # coin bas-gauche de la légende placée (fraction de l'axe)
     label_offsets: dict = field(default_factory=dict)   # étiquette -> [dx, dy] choisi à la souris (fraction de l'axe)
+    title: str = ""                       # titre choisi (vide = « Axe n »)
+    unit: str = ""                        # unité des valeurs (le CSV n'en porte pas, REQ 2303)
+    height: float = 1.0                   # hauteur relative de l'axe (1 = celle du modèle)
+
+    def display_title(self, index: int) -> str:
+        """Titre affiché : celui choisi par l'utilisateur, sinon « Axe n »."""
+        return self.title.strip() or f"Axe {index + 1}"
 
     def selected_curve(self) -> CurveRef | None:
         if not self.curves:

@@ -1,4 +1,4 @@
-# Architecture de VISU PTBG 1.0.0 — pour reprendre le code
+# Architecture de VISU PTBG 1.1.0 — pour reprendre le code
 
 ## 1. Vue d'ensemble
 
@@ -41,14 +41,14 @@ ptbg/
     ├── path_bar.py          barre de chemin et accès rapides (REQ 5100)
     ├── tree_panel.py        arbre des données (REQ 5103, 5105, 5200-5203)
     ├── graph_area.py        onglets (REQ 5104, 5106)
-    ├── analysis_tab.py      un onglet : souris, clavier, curseurs (REQ 5400-5408)
+    ├── analysis_tab.py      un onglet : souris, clavier, curseurs (REQ 5400-5408), annuler / rétablir
     ├── reading_panel.py     panneau de lecture à droite (REQ 5402)
     ├── status_bar.py        barre d'état (REQ 5102)
     ├── info_windows.py      fenêtres Information et visualiseur Markdown (REQ 5101)
     ├── tasks.py             fils de travail (REQ 4105)
     ├── tooltip.py           bulle d'aide des lignes tronquées (arbre, lectures)
     ├── icons.py             icônes de statut dessinées
-    └── dialogs/             base de temps, groupes, curseur H, X/Y, rapport, préférences
+    └── dialogs/             base de temps, groupes, curseur H, X/Y, aspect des courbes, rapport, préférences
                              (base.py : boutons « OK » / « Annuler », saisie de texte)
 tests/                       unittest : core, rendu, PDF, IHM réelle, architecture
 tools/                       audit d'environnement, traçabilité, données de démonstration

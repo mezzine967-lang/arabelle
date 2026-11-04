@@ -27,14 +27,16 @@ from ptbg.core.diagnostic_report import file_report, issue_line
 from ptbg.core.multi_source import compare_sources
 from ptbg.core.project import PROJECT_SUFFIX, ReportPage, load_project, save_project
 from ptbg.core.signals import BinaryGroup, SignalType
-from ptbg.gui.dialogs.analysis_dialogs import (ConditionalProcessingWindow, GroupDialog, HorizontalCursorDialog,
-                                               XYDialog)
+from ptbg.gui.analysis_tab import HEIGHT_STEP
+from ptbg.gui.dialogs.analysis_dialogs import (ConditionalProcessingWindow, CurveStyleDialog, GroupDialog,
+                                               HorizontalCursorDialog, XYDialog)
 from ptbg.gui.dialogs.base import ask_text
 from ptbg.gui.dialogs.report_dialogs import HeaderDialog, PagesWindow, PreferencesDialog
 from ptbg.gui.dialogs.time_base_dialog import TimeBaseDialog
 from ptbg.gui.info_windows import TextWindow, read_document, sources_text, version_text
 from ptbg.gui.tasks import BackgroundTask
 from ptbg.gui.tree_panel import TreeRef
+from ptbg.plotting.styles import curve_color
 from ptbg.report.pdf_report import build_header, export_pdf
 from ptbg.system.activity_log import ActivityLog
 from ptbg.system.compat import open_with_default_application
@@ -246,12 +248,22 @@ class Application:
         removed = {source.id for source in files}
         for source in files:
             self.workspace.remove_file(source)
+        emptied = []
         for tab in self.graph.tabs:
+            had_content = bool(tab.state.file_ids())
             for axle in tab.state.axles:
                 axle.curves = [c for c in axle.curves if c.file_id not in removed]
                 if (axle.xy_x and axle.xy_x.file_id in removed) or (axle.xy_y and axle.xy_y.file_id in removed):
                     axle.xy_x = axle.xy_y = None
-        self.notify(f"Fermé : {names}.")
+                if axle.h_condition:
+                    axle.h_condition.terms = [t for t in axle.h_condition.terms if t.file_id not in removed]
+            if had_content and not tab.state.file_ids():
+                emptied.append(tab)
+        # Un onglet qui ne montrait que les fichiers fermés est fermé avec eux (remarque du relecteur).
+        for tab in emptied:
+            self.close_tab(tab)
+        self.notify(f"Fermé : {names}" + (f" ; {len(emptied)} onglet(s) devenu(s) vide(s) fermé(s)." if emptied
+                                          else "."))
         self.tree.refresh()
         self.graph.redraw_all()
 
@@ -406,6 +418,18 @@ class Application:
         if not self.graph.tabs:
             self.graph.new_tab(DEFAULT_TEMPLATE)
 
+    def undo(self) -> None:
+        """Ctrl+Z : annule la dernière action de l'onglet actif."""
+        tab = self.graph.active_tab()
+        if tab is not None and not tab.undo():
+            self.notify("Rien à annuler dans cet onglet.")
+
+    def redo(self) -> None:
+        """Ctrl+Y : rétablit la dernière action annulée de l'onglet actif."""
+        tab = self.graph.active_tab()
+        if tab is not None and not tab.redo():
+            self.notify("Rien à rétablir dans cet onglet.")
+
     def rename_tab(self) -> None:
         """Renomme l'onglet actif (titre repris dans le rapport)."""
         tab = self.graph.active_tab()
@@ -522,6 +546,7 @@ class Application:
         dialog = HorizontalCursorDialog(self.root, self.workspace, axle, suggested)
         if dialog.result:
             axle.h_enabled, axle.h_level, axle.h_condition = dialog.result
+            tab.leave_navigation()
             self.notify(f"Curseur horizontal axe {tab.active_axle + 1} : niveau {axle.h_level:.6g}"
                         + (f", condition {axle.h_condition.describe()}" if axle.h_condition else ""))
             tab.update_cursors()
@@ -576,6 +601,7 @@ class Application:
         """Menu contextuel d'un axe (clic droit)."""
         axle = tab.state.axles[index]
         menu = tk.Menu(self.root, tearoff=False)
+        self._presentation_menu(menu, tab, index)
         if axle.kind == "xy":
             menu.add_command(label="Choisir X et Y…", command=self.configure_xy)
             self._legend_menu(menu, tab, index)
@@ -597,11 +623,55 @@ class Application:
             for position, ref in enumerate(axle.curves):
                 choose.add_command(label=ref.name, command=lambda p=position: tab._select_curve(p))
             menu.add_cascade(label="Courbe sélectionnée", menu=choose)
+            menu.add_command(label="Aspect de la courbe sélectionnée (couleur, épaisseur, trait)…",
+                             command=lambda: self.edit_curve_style(tab))
             menu.add_command(label="Retirer la courbe sélectionnée", command=tab.remove_selected_curve)
             menu.add_command(label="Vider l'axe", command=tab.clear_axle)
         menu.add_command(label="Échelle Y automatique",
                          command=lambda: (setattr(axle, "ylim", None), tab.redraw()))
         self._legend_menu(menu, tab, index)
+        return menu
+
+    def _presentation_menu(self, menu, tab, index: int) -> None:
+        """Entrées de présentation d'un axe : titre, unité, hauteur."""
+        axle = tab.state.axles[index]
+        menu.add_command(label="Titre de l'axe…", command=lambda: self._ask_axle_text(
+            tab, index, "Titre de l'axe", "Titre (vide = « Axe n ») :", axle.title, tab.set_axle_title))
+        menu.add_command(label="Unité de l'axe…", command=lambda: self._ask_axle_text(
+            tab, index, "Unité de l'axe", "Unité des valeurs (ex. bar, °C, % ; vide = aucune) :", axle.unit,
+            tab.set_axle_unit))
+        height = tk.Menu(menu, tearoff=False)
+        height.add_command(label="Agrandir l'axe", command=lambda: tab.set_axle_height(index, HEIGHT_STEP))
+        height.add_command(label="Réduire l'axe", command=lambda: tab.set_axle_height(index, 1 / HEIGHT_STEP))
+        height.add_command(label="Hauteur du modèle", command=lambda: tab.set_axle_height(index, None))
+        menu.add_cascade(label="Hauteur de l'axe", menu=height)
+        menu.add_separator()
+
+    def _ask_axle_text(self, tab, index: int, title: str, prompt: str, initial: str, apply) -> None:
+        """Saisie d'un texte de l'axe (titre, unité), appliqué s'il n'est pas annulé."""
+        text = ask_text(self.root, title, prompt, initial)
+        if text is not None:
+            apply(index, text)
+
+    def edit_curve_style(self, tab) -> None:
+        """Couleur, épaisseur et style de trait de la courbe sélectionnée de l'axe actif."""
+        axle = tab.axle()
+        ref = axle.selected_curve()
+        if ref is None:
+            return
+        shown = ref.color or curve_color(axle.curves.index(ref))
+        dialog = CurveStyleDialog(self.root, ref, shown)
+        if dialog.result:
+            tab.set_curve_style(*dialog.result)
+
+    def monitor_menu(self, tab):
+        """Clic droit sur le Time Base Monitor : diagnostic complet de chaque fichier affiché."""
+        menu = tk.Menu(self.root, tearoff=False)
+        for source in tab.sources():
+            menu.add_command(label=f"Diagnostic complet — {source.name}…",
+                             command=lambda s=source: self.show_diagnostic(s))
+        if not tab.sources():
+            menu.add_command(label="Aucun fichier affiché", state="disabled")
         return menu
 
     @staticmethod
@@ -620,6 +690,13 @@ class Application:
         menu.add_command(label="Masquer la légende", command=lambda: tab.set_legend(index, "hidden"))
 
     # --------------------------------------------------------------- rapport
+    def set_report_orientation(self, orientation: str) -> None:
+        """Pages du rapport en paysage ou en portrait (choix conservé dans les préférences)."""
+        self.settings.report_orientation = orientation
+        error = self.settings.save()
+        self.notify(error or f"Rapport : pages en {'portrait' if orientation == 'portrait' else 'paysage'}.",
+                    "AVERTISSEMENT" if error else "INFO")
+
     def edit_report_header(self) -> None:
         """Saisie des champs libres de l'en-tête du rapport (REQ 6005)."""
         dialog = HeaderDialog(self.root, self.settings)

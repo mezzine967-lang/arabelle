@@ -1,4 +1,4 @@
-# VISU PTBG 1.0.0 — analyseur graphique de perturbographie
+# VISU PTBG 1.1.0 — analyseur graphique de perturbographie
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
 Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
@@ -38,6 +38,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | la même chose en **tableur** : versions, dépendances, sensibilités, tests, relevé des postes | [docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx](docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx) |
 | **reprendre ou modifier le code** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | voir **ce qui a changé** d'une version à l'autre | [CHANGELOG.md](CHANGELOG.md) |
+| suivre les **remarques du relecteur** une par une (réponse, état, version, test) | [docs/recapitulatif/Suivi_remarques_VISU_PTBG.xlsx](docs/recapitulatif/Suivi_remarques_VISU_PTBG.xlsx) |
 | obtenir un **exemple de rapport** PDF | dans l'outil : Fichier > Ouvrir un dossier de CSV > `data/demo/`, afficher des courbes, puis Rapport > Rapport automatique |
 | voir des **captures** | [nuage X/Y](docs/captures/02_nuage_xy.png), [diagnostic](docs/captures/03_diagnostic.png), [base de temps](docs/captures/04_configuration_base_de_temps.png), [axe absolu passant minuit](docs/captures/05_axe_absolu_minuit.png) |
 
@@ -51,7 +52,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | `ptbg/report/` | rapport PDF |
 | `ptbg/gui/` | interface Tkinter : contrôleur, arbre, onglets, dialogues |
 | `ptbg/system/` | compatibilité Windows / SLES, environnement, journal |
-| `tests/` | 145 tests automatisés (dont l'interface réelle et la robustesse) |
+| `tests/` | 154 tests automatisés (dont l'interface réelle et la robustesse) |
 | `tools/` | audit d'environnement, banc de performance, traçabilité, données de démo |
 | `install/` | installation et lancement Windows / SLES |
 | `data/demo/` | CSV de démonstration (3 PLC + 1 fichier non conforme) |
@@ -66,8 +67,8 @@ Les 64 lignes de la spécification sont tracées dans
 
 | Statut | Lignes |
 |---|---|
-| Implémenté et testé | 47 |
-| Implémenté selon une interprétation à valider (questions dans l'Excel, onglet « Points ouverts ») | 14 |
+| Implémenté et testé | 45 |
+| Implémenté selon une interprétation à valider (questions dans l'Excel, onglet « Points ouverts ») | 16 |
 | Proposition (énoncé vide dans la Rev. A) | 1 |
 | Implémenté, qualification sur cible ou sur volumes réels à faire | 2 |
 | **Total** | **64** |
@@ -83,7 +84,7 @@ Les 64 lignes de la spécification sont tracées dans
 ## 6. Vérifier
 
 ```
-python -m unittest discover -s tests -v     # 145 tests (sous Linux sans bureau : xvfb-run devant)
+python -m unittest discover -s tests -v     # 154 tests (sous Linux sans bureau : xvfb-run devant)
 python tools/verifier_tracabilite.py        # chaque requis du Word : matrice + code + test
 python tools/audit_environnement.py         # versions présentes / versions figées
 python tools/banc_performance.py f.csv      # durées et mémoire (ou --generer 500 : fichier de 500 Mo)

@@ -10,6 +10,13 @@
 - REQ_COMMON_KH_4104 : présent dans tous les rapports ; s'il a été retiré de
   la mise en page, le rapport porte une indication confirmant la bonne
   construction de la base de temps (``confirmation_text``).
+
+À l'écran (remarque du relecteur), le titre n'est plus suivi du texte de
+conversion et des avertissements : le statut de chaque fichier est écrit au
+coin de la courbe des Δt, chaque anomalie est un marqueur dont le détail
+(fichier, instant, ligne CSV, Δt) s'affiche au survol, et le diagnostic
+complet s'ouvre par un clic droit. Le rapport, qui ne se survole pas, garde
+le texte détaillé sous le titre.
 """
 from __future__ import annotations
 
@@ -73,8 +80,11 @@ def wrap_text(text: str, chars: int) -> str:
     return "\n".join(out)
 
 
-def text_height_in(sources: list[SourceFile], chars: int) -> float:
-    """Hauteur (pouces) du bandeau texte : titre + lignes de description coupées à ``chars``."""
+def text_height_in(sources: list[SourceFile], chars: int, detailed: bool = True) -> float:
+    """Hauteur (pouces) du bandeau texte : titre, plus les lignes de description coupées
+    à ``chars`` si ``detailed`` (rapport)."""
+    if not detailed:
+        return 0.22
     lines = sum(wrap_text(describe_source(source), chars).count("\n") + 1 for source in sources) or 1
     return 0.28 + 0.118 * lines             # marge sous le texte : il ne touche pas la courbe
 
@@ -90,25 +100,27 @@ def confirmation_text(sources: list[SourceFile], chars: int) -> str:
 
 
 def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline, chars: int,
-                 outside: bool = False, legend_xy=None) -> list:
-    """Dessine le TBM : bandeau de texte (conversion/statut) + courbe des Δt.
+                 outside: bool = False, legend_xy=None, detailed: bool = True) -> tuple[list, list]:
+    """Dessine le TBM : titre (et, si ``detailed``, texte de conversion et de statut coupé
+    à ``chars`` caractères par ligne) + courbe des Δt.
 
-    Description coupée à ``chars`` caractères par ligne. Légende des anomalies : une entrée par sorte d'anomalie (total des
+    Légende des anomalies : une entrée par sorte d'anomalie (total des
     fichiers) ; ``outside`` (rapport) la place à droite de la courbe ; ``legend_xy`` :
     place choisie à la souris (coin bas-gauche, fraction de la courbe).
-    Renvoie les (ligne, x, y) des courbes de Δt pour que le rendu les réduise
-    au zoom comme les autres courbes."""
+    Renvoie les (ligne, x, y) des courbes de Δt, que le rendu réduit au zoom comme
+    les autres courbes, et les marqueurs d'anomalie (x, y, texte du détail)."""
     status = monitor_status(sources) if sources else Severity.OK
     color = SEVERITY_COLORS[status]
     text_ax.set_axis_off()
     title = f"{TITLE} — statut : {status.label if sources else 'aucun fichier affiché'}"
     text_ax.text(0.0, 1.0, title, transform=text_ax.transAxes, va="top", ha="left",
                  fontsize=FONT_SMALL + 1, fontweight="bold", color=color)
-    body = wrap_text("\n".join(describe_source(source) for source in sources), chars)
-    # Corps placé juste sous le titre (décalage en points, indépendant de la hauteur).
-    text_ax.annotate(body, xy=(0.0, 1.0), xycoords="axes fraction", xytext=(0, -13),
-                     textcoords="offset points", va="top", ha="left",
-                     fontsize=FONT_SMALL - 0.5, family="DejaVu Sans Mono")
+    if detailed:
+        body = wrap_text("\n".join(describe_source(source) for source in sources), chars)
+        # Corps placé juste sous le titre (décalage en points, indépendant de la hauteur).
+        text_ax.annotate(body, xy=(0.0, 1.0), xycoords="axes fraction", xytext=(0, -13),
+                         textcoords="offset points", va="top", ha="left",
+                         fontsize=FONT_SMALL - 0.5, family="DejaVu Sans Mono")
     plot_ax.tick_params(labelsize=FONT_SMALL)
     apply_grid(plot_ax)
     for spine in plot_ax.spines.values():
@@ -116,17 +128,17 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     loaded = [s for s in sources if s.is_loaded and s.analysis.dt_values.size]
     if not loaded:
         plot_ax.set_ylabel("Δt (ms)", fontsize=FONT_SMALL)
-        return []
+        return [], []
     periods = [seg.period_s for s in loaded for seg in s.analysis.segments]
     # Périodes très différentes (ex. 1 ms et 20 ms) : Δt rapporté à la période
     # de chaque fichier, sinon le petit raster serait écrasé en bas de l'axe.
     relative = max(periods) > 1.5 * min(periods)
     plot_ax.set_ylabel("Δt / période" if relative else "Δt (ms)", fontsize=FONT_SMALL)
     top = 2.6 if relative else 2.6 * max(periods) * 1e3
-    lines = []
+    lines, markers = [], []
     for position, source in enumerate(loaded):
         lines.append(_draw_source(plot_ax, source, timeline, CURVE_COLORS[position % len(CURVE_COLORS)],
-                                  top, position, relative))
+                                  top, position, relative, markers))
     wrap = outside and not legend_xy        # libellés coupés seulement dans la marge du rapport
     totals = {kind: sum(s.analysis.event_counts[kind] for s in loaded) for kind in EVENT_STYLE
               if kind is not EventKind.FREQUENCY}
@@ -147,7 +159,7 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
         plot_ax.legend(handles=handles, loc="upper left", fontsize=FONT_SMALL - 1, framealpha=0.8,
                        ncol=len(handles))
     plot_ax.set_ylim(0, top * 1.08)
-    return lines
+    return lines, markers
 
 
 def _legend_label(text: str, wrap: bool) -> str:
@@ -165,10 +177,19 @@ def _readable_neighbour_x(x_all: np.ndarray, indices: list[int]) -> np.ndarray:
     return x_all[valid[rank]]
 
 
-def _draw_source(ax, source, timeline, color, top, position, relative):
+def _event_detail(source, timeline, event, x: float) -> str:
+    """Texte de la bulle d'une anomalie : fichier, sorte, instant, ligne CSV, détail."""
+    line = source.line_of(event.index) if 0 <= event.index < source.analysis.n_samples else None
+    where = f" — ligne CSV {line}" if line is not None else ""
+    return "\n".join(part for part in (f"{source.name} : {event.kind.label}", f"{timeline.format(x)}{where}",
+                                        event.detail) if part)
+
+
+def _draw_source(ax, source, timeline, color, top, position, relative, markers: list):
     """Δt d'un fichier, période de référence par segment, bande de tolérance,
     anomalies ; les Δt hors échelle sont posés sur le bord supérieur (▲).
-    ``relative`` : ordonnée = Δt / période du segment (sans unité)."""
+    ``relative`` : ordonnée = Δt / période du segment (sans unité). Chaque anomalie
+    est ajoutée à ``markers`` (x, y, détail) pour la bulle de survol."""
     analysis = source.analysis
     x_all = timeline.x(source)
     x = x_all[analysis.dt_index]
@@ -201,10 +222,15 @@ def _draw_source(ax, source, timeline, color, top, position, relative):
         if kind is EventKind.FREQUENCY:
             for value in ex:
                 ax.axvline(value, color=event_color, lw=1.2, ls="-.")
+            ey = np.full(len(events), top / 2)
         else:
             ax.plot(ex, ey, marker, ls="none", ms=6, color=event_color, mec="white", mew=0.5)
+        markers += [(float(x), float(y), _event_detail(source, timeline, event, x))
+                    for x, y, event in zip(ex, ey, events)]
     # Une ligne par fichier, empilées en points : elles ne se recouvrent pas sur une courbe basse.
-    ax.annotate(f"{source.name} : T = {ms(analysis.period_used_s)} ms", xy=(0.995, 1.0),
+    # Statut du fichier écrit à côté de sa période (il n'est plus sous le titre à l'écran).
+    ax.annotate(f"{source.name} : T = {ms(analysis.period_used_s)} ms — {source.time_status().label}",
+                xy=(0.995, 1.0),
                 xycoords="axes fraction", xytext=(0, -2 - position * LINE_HEIGHT_PT), textcoords="offset points",
                 ha="right", va="top", fontsize=FONT_SMALL - 1, color=color,
                 bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.3))

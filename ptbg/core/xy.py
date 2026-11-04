@@ -8,8 +8,8 @@ Deux signaux sont associés point par point :
 
 Le curseur X/Y désigne un point du nuage ; il est affiché soit avec deux
 curseurs (droite verticale en X et horizontale en Y), soit par le seul point
-de croisement. Le coefficient de corrélation de Pearson et la droite de
-régression aident au contrôle de corrélation.
+de croisement. Le coefficient de corrélation de Pearson aide au contrôle de
+corrélation (la droite de régression a été retirée à la demande du relecteur).
 """
 from __future__ import annotations
 
@@ -27,8 +27,6 @@ class XYData:
     t: np.ndarray          # abscisse temporelle de chaque point (échantillon X)
     index: np.ndarray      # indice de l'échantillon X dans son fichier
     r: float               # corrélation de Pearson (NaN si indéfinie)
-    slope: float
-    intercept: float
 
     @property
     def n(self) -> int:
@@ -37,33 +35,27 @@ class XYData:
     def describe(self) -> str:
         if self.n < 2 or not np.isfinite(self.r):
             return f"{self.n} point(s) ; corrélation indéfinie"
-        return (f"{self.n} points ; r = {self.r:.4f} ; "
-                f"régression Y = {self.slope:.6g} · X + {self.intercept:.6g}")
+        return f"{self.n} points ; corrélation r = {self.r:.4f}"
 
 
-def _fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float]:
-    """Corrélation de Pearson et droite des moindres carrés (NaN si indéfinies).
+def _pearson(x: np.ndarray, y: np.ndarray) -> float:
+    """Corrélation de Pearson (NaN si indéfinie).
 
     Calcul sur valeurs réduites par leur maximum absolu puis centrées : aucun
     dépassement flottant, même avec des valeurs extrêmes (±1e308)."""
     if x.size < 2:
-        return np.nan, np.nan, np.nan
+        return np.nan
     with np.errstate(all="ignore"):
         sx, sy = float(np.max(np.abs(x))), float(np.max(np.abs(y)))
         if not (sx > 0 and sy > 0 and np.isfinite(sx) and np.isfinite(sy)):
-            return np.nan, np.nan, np.nan
+            return np.nan
         xs, ys = x / sx, y / sy
         mx, my = float(xs.mean()), float(ys.mean())
         xc, yc = xs - mx, ys - my
         sxx, syy, sxy = float(xc @ xc), float(yc @ yc), float(xc @ yc)
         if sxx <= 0 or syy <= 0:
-            return np.nan, np.nan, np.nan              # X ou Y constant
-        r = sxy / np.sqrt(sxx * syy)
-        slope = sxy / sxx * (sy / sx)
-        intercept = sy * my - slope * sx * mx
-    if not (np.isfinite(slope) and np.isfinite(intercept)):
-        return float(r), np.nan, np.nan
-    return float(r), float(slope), float(intercept)
+            return np.nan                               # X ou Y constant
+        return float(sxy / np.sqrt(sxx * syy))
 
 
 def build_xy(tx: np.ndarray, vx: np.ndarray, ty: np.ndarray, vy: np.ndarray,
@@ -85,8 +77,7 @@ def build_xy(tx: np.ndarray, vx: np.ndarray, ty: np.ndarray, vy: np.ndarray,
         keep = np.isfinite(vx) & np.isfinite(y_all) & np.isfinite(tx) & (gap <= max_gap_s)
         index = np.flatnonzero(keep)
         x, y, t = vx[keep], y_all[keep], tx[keep]
-    r, slope, intercept = _fit(x, y)
-    return XYData(x, y, t, index, r, slope, intercept)
+    return XYData(x, y, t, index, _pearson(x, y))
 
 
 def nearest_point(data: XYData, px: float, py: float, x_span: float, y_span: float) -> int | None:

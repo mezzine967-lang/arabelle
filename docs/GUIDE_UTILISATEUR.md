@@ -1,4 +1,4 @@
-# Guide d'utilisation — VISU PTBG 1.0.0
+# Guide d'utilisation — VISU PTBG 1.1.0
 
 Analyseur graphique des fichiers CSV de perturbographie (PTBG) produits par les PLC
 TXS Compact. Ce guide est le **fichier d'aide** de l'outil (menu Information > Fichier
@@ -110,16 +110,21 @@ Pour chaque fichier, l'outil contrôle :
 | Contrôle | Signification |
 |---|---|
 | Valeur de la période | médiane des Δt, comparée à la période nominale si elle est saisie |
-| Stabilité | part des Δt dans la tolérance, jitter, déphasages, changements de fréquence |
+| Stabilité | part des Δt dans la tolérance, écart max à la grille régulière, déphasages, changements de fréquence |
 | Croissance continue | aucun horodatage dupliqué ni retour arrière |
 | Données manquantes | trous de k périodes (k − 1 échantillons manquants) |
 | Lisibilité, horodatages aberrants | horodatage illisible ; horodatage isolé à plus de 10 périodes de ses deux voisins (ex. « 00:00:00 » au milieu d'un essai à 18 h, ou « 23:59:59 » au milieu d'un essai à 0 h 10), signalé en erreur et exclu du calcul du raster, sans compter de faux passage de minuit ; il reste affiché à son instant brut (case « Masquer… » de Base de temps > Configurer pour le retirer des courbes ; seuil de 10 périodes réglable dans Outils > Préférences) |
 
-Le **Time Base Monitor**, en bas de chaque onglet, montre pour chaque fichier affiché la
-conversion appliquée, l'origine, le statut, les Δt (ou Δt / période quand les fichiers ont
-des périodes différentes), la période et sa bande de tolérance, et les anomalies (▼ trou,
-◆ déphasage, ✖ doublon / retour arrière, ✚ horodatage illisible, ★ horodatage aberrant,
-trait mixte = changement de fréquence).
+Le **Time Base Monitor**, en bas de chaque onglet, montre les Δt de chaque fichier affiché
+(ou Δt / période quand les fichiers ont des périodes différentes), la période et sa bande
+de tolérance, et les anomalies (▼ trou, ◆ déphasage, ✖ doublon / retour arrière,
+✚ horodatage illisible, ★ horodatage aberrant, trait mixte = changement de fréquence).
+À l'écran, le titre donne le statut général et le coin de la courbe le statut de chaque
+fichier (« fichier : T = 10 ms — OK ») ; **survoler un marqueur** affiche le détail de
+l'anomalie (fichier, instant, ligne du CSV, Δt) et un **clic droit** sur la courbe ouvre le
+diagnostic complet d'un fichier. Le rapport PDF garde, sous le titre du TBM, le texte
+détaillé de la conversion (format, unité, origine, affichage brut ou régularisé) et du
+statut, puisqu'il ne se survole pas.
 
 **Masquer le TBM** n'est possible que si aucune base de temps affichée n'a
 d'avertissement ni d'erreur ; il réapparaît automatiquement si une alerte survient.
@@ -138,7 +143,9 @@ d'avertissement ni d'erreur ; il réapparaît automatiquement si une alerte surv
 
 Par défaut les courbes sont tracées sur l'**horodatage brut** du fichier : rien n'est
 recalé. Le jitter qui reste dans la tolérance n'est pas compté comme anomalie, il est
-mesuré et affiché (« jitter max »). L'option « Affichage régularisé » remplace l'affichage
+mesuré et affiché (« écart max à la grille » : distance de chaque mesure à une grille
+parfaitement régulière ; un Δt isolé de 9 ms pour 10 ms décale la grille et donne aussi
+un écart d'environ 1 ms). Un Δt pile à la limite de la tolérance est conforme. L'option « Affichage régularisé » remplace l'affichage
 par une droite ajustée sur le raster (les trous restent visibles, aucune mesure n'est
 créée) ; le TBM indique toujours lequel des deux affichages est utilisé.
 
@@ -160,22 +167,38 @@ flux décalée, fréquences, déphasage entre grilles d'échantillonnage.
 **Nouvel onglet** (barre rapide ou menu Affichage) propose 7 modèles : 1, 2, 3 ou 4 axes,
 analogique + logique, grille 2 × 2, temporel + nuage X/Y. Les axes temporels d'un onglet
 partagent le même temps : zoom et déplacement (loupe et croix de la barre d'outils)
-s'appliquent à tous. Le bouton **Vue d'origine** (aussi Affichage > Vue d'origine, Ctrl+0)
-réaffiche toute la durée des fichiers avec les échelles verticales automatiques et remet les
-légendes déplacées à leur place ; courbes et curseurs sont conservés.
+s'appliquent à tous. Le bouton **maison** de la barre de zoom réaffiche toute la durée des
+fichiers avec les échelles verticales automatiques, même après être passé par un autre
+onglet. Le bouton **Vue d'origine** (aussi Affichage > Vue d'origine, Ctrl+0) fait de même
+et remet en plus les légendes déplacées à leur place ; courbes et curseurs sont conservés.
+
+**Annuler / rétablir** : **Ctrl+Z** annule la dernière action de l'onglet (courbe ajoutée ou
+retirée, curseur déplacé, zoom, légende déplacée, titre, aspect…), **Ctrl+Y** la rétablit
+(aussi menu Édition) ; jusqu'à 50 actions par onglet.
 
 **Légendes et étiquettes** : tout ce qui est écrit sur le graphique se déplace à la souris
 (glisser) : légende d'un axe, légende du Time Base Monitor, noms des pistes logiques,
 étiquettes des curseurs (C1, C2, Global, Δt, curseur horizontal, point du nuage X/Y). Chaque
 élément garde sa place après un redessin, dans le projet et dans le rapport PDF (à la même
-place par rapport aux courbes). Déplacer une étiquette ne déplace pas le curseur. Un clic sur
-un nom de la légende sélectionne cette courbe. Clic droit sur l'axe : masquer / afficher la
-légende, la remettre à sa place automatique, remettre les étiquettes à leur place ;
+place par rapport aux courbes). Déplacer une étiquette ne déplace pas le curseur. La légende
+ne porte que le nom de la variable (le nom du fichier n'y est ajouté que si deux fichiers de
+l'axe ont une variable du même nom). Un **clic sur une courbe**, ou sur son nom ou son trait
+dans la légende, la sélectionne. Clic droit sur l'axe : masquer / afficher la légende, la
+remettre à sa place automatique, remettre les étiquettes à leur place ;
 **Vue d'origine** remet tout à sa place.
+
+**Présentation d'un axe** (clic droit sur l'axe) :
+
+| Entrée du menu | Effet |
+|---|---|
+| Titre de l'axe… | remplace « Axe n » (vide = titre automatique) ; repris dans le rapport |
+| Unité de l'axe… | écrite sur l'axe vertical et après les valeurs des curseurs (le CSV ne porte pas d'unité) |
+| Hauteur de l'axe | agrandir, réduire, ou revenir à la hauteur du modèle |
+| Aspect de la courbe sélectionnée… | couleur (nuancier), épaisseur, trait (continu, tirets, pointillés, tirets-points) |
 
 | Action sur un onglet | Comment |
 |---|---|
-| Fermer | croix **×** de son titre, clic molette sur le titre, clic droit sur le titre ou Ctrl+W ; s'il n'en reste aucun, un onglet vide est recréé |
+| Fermer | croix **×** de son titre, clic molette sur le titre, clic droit sur le titre ou Ctrl+W ; s'il n'en reste aucun, un onglet vide est recréé (numérotation repartant de 1). Fermer un paquet ou un fichier ferme aussi les onglets qui ne montraient que lui |
 | Renommer | clic droit sur le titre |
 | Revenir à la vue de départ | bouton **Vue d'origine** ou Ctrl+0 |
 
@@ -197,15 +220,18 @@ aucune valeur n'est jamais inventée ni interpolée.
 | Curseur vertical simple | « Curseur vertical > Curseur simple » : sur l'axe actif ; étiquette = instant + valeur de la courbe sélectionnée |
 | Suivi souris | le curseur suit la souris ; le panneau de droite liste toutes les courbes de l'axe |
 | Double curseur | C1 et C2 posés automatiquement ; Δt, 1/Δt et ΔV par courbe |
-| Curseur global | une ligne sur tous les axes (TBM compris), déplacée ensemble |
+| Curseur global | une ligne sur tous les axes (TBM compris), déplacée ensemble ; posée au centre de la vue affichée à chaque activation |
 | Curseur horizontal | sur une courbe Float sélectionnée : niveau, franchissements montants / descendants |
 | Condition Bool | dans le dialogue du curseur horizontal : 1 à 3 Bool (ET / OU) ; seuls les franchissements sous condition sont retenus ; périodes vraies ombrées |
-| Nuage X/Y | Outils > Nuage X/Y : Y = f(X), corrélation r, régression ; clic = désigner un point, affiché par deux curseurs ou par le seul point de croisement ; C1 / C2 reportés |
+| Nuage X/Y | Outils > Nuage X/Y : Y = f(X), corrélation r (pas de droite de régression) ; clic = désigner un point, affiché par deux curseurs ou par le seul point de croisement ; C1 / C2 reportés |
 
-Souris : **clic** = placer le curseur ; **glisser** = le déplacer ; **Maj + clic** = niveau du
-curseur horizontal ; **clic droit** = menu de l'axe. Clavier : **flèches gauche / droite** =
-échantillon précédent / suivant de la courbe sélectionnée. Quand la loupe ou la croix de
-la barre d'outils est active, les clics servent au zoom (la désactiver pour les curseurs).
+Souris : **clic sur une courbe** = la sélectionner ; **clic ailleurs** = placer le curseur ;
+**glisser** = le déplacer (un curseur se saisit en priorité sur la courbe qu'il recouvre) ;
+**Maj + clic** = niveau du curseur horizontal ; **clic droit** = menu de l'axe. Clavier :
+**flèches gauche / droite** = échantillon précédent / suivant de la courbe sélectionnée.
+Quand la loupe ou la croix de la barre d'outils est active, les clics servent au zoom ;
+activer un curseur (simple, double, global, suivi, horizontal) la désactive et place le
+curseur dans la vue affichée : pas de zoom involontaire.
 
 Les valeurs lues sont celles des **échantillons réels** : le plus proche pour un Float,
 l'état en cours pour un Bool. Le panneau de lecture indique l'instant de l'échantillon et
@@ -226,11 +252,13 @@ condition est vraie. Copier ou exporter en CSV.
 | **Rapport automatique** (Ctrl+P) | une page de l'onglet actif |
 | **+ Page pas à pas** (Ctrl+K) | capture la vue active (zoom, curseurs, légendes, nuage X/Y, condition) avec un commentaire ; recommencer après chaque réglage |
 | **Gérer les pages…** | ordonner, commenter, supprimer les captures, puis **Générer le PDF** |
+| **Pages en paysage / Pages en portrait** | format A4 des pages (choix conservé) |
 
-Dans une disposition de 3 axes ou plus, la page garde 8 lectures sous le graphique pour que
-les axes restent lisibles ; les autres lectures sont imprimées en annexe. Les étiquettes des
-curseurs ne se chevauchent jamais : si l'axe est trop bas, elles se réduisent à l'instant (la
-valeur figure dans le tableau des lectures).
+Chaque onglet tient sur **sa** page, graphique et tableau des lectures compris (police du
+tableau réduite si besoin) ; seul un nombre de lectures qui ne tiendrait pas même ainsi
+renvoie la suite en annexe, ce qui est signalé sur la page. Les étiquettes des curseurs ne
+se chevauchent jamais : si l'axe est trop bas, elles se réduisent à l'instant (la valeur
+figure dans le tableau des lectures).
 
 Chaque page, au format des rapports de test du projet (police à chasse fixe, axes
 quadrillés, légendes à droite), comporte l'en-tête — à gauche : version de l'outil,
@@ -270,7 +298,8 @@ traçabilité des requis.
 |---|---|
 | Fichier rouge « ILLISIBLE » | voir son nœud Diagnostic : séparateur, encodage, taille maximale (Préférences) |
 | TBM impossible à masquer | une base de temps affichée a un avertissement ou une erreur (voir le TBM) |
-| Curseur qui ne bouge pas au clic | la loupe ou la croix de la barre d'outils est active : la désactiver |
+| Curseur qui ne bouge pas au clic | la loupe ou la croix de la barre d'outils est active : la désactiver (activer un curseur le fait automatiquement) |
+| Fausse manipulation | Ctrl+Z (Édition > Annuler) |
 | Axe absolu refusé | un fichier n'a pas d'origine absolue : la saisir dans Base de temps > Configurer |
 | Rien ne s'affiche sous SLES à distance | se connecter avec `ssh -X` (session graphique requise) |
 | Message sur une bibliothèque au démarrage | versions différentes de celles testées : voir Information > Sources et docs/DEPENDANCES.md |
@@ -284,6 +313,7 @@ traçabilité des requis.
 | Ctrl+S | enregistrer le projet |
 | Ctrl+W | fermer l'onglet |
 | Ctrl+0 | vue d'origine (toute la durée, échelles automatiques) |
+| Ctrl+Z / Ctrl+Y | annuler / rétablir la dernière action de l'onglet |
 | Ctrl+P | rapport automatique de l'onglet actif |
 | Ctrl+K | ajouter la vue active au rapport pas à pas |
 | F9 | afficher / masquer l'arbre des données |
@@ -294,11 +324,14 @@ traçabilité des requis.
 | Souris | Action |
 |---|---|
 | clic sur un axe | rend l'axe actif ; place le curseur |
+| clic sur une courbe | la sélectionne (sa valeur est portée par les curseurs) |
+| survol d'un marqueur du TBM | détail de l'anomalie |
+| clic droit sur le TBM | diagnostic complet d'un fichier |
 | glisser | déplace le curseur |
 | Maj + clic | niveau du curseur horizontal |
 | glisser une légende, un nom de piste ou une étiquette de curseur | le déplace (place conservée, curseur inchangé) |
-| clic sur un nom de la légende | sélectionne cette courbe |
-| clic droit sur un axe | menu de l'axe (curseurs, courbe sélectionnée, échelle, légende) |
+| clic sur un nom ou un trait de la légende | sélectionne cette courbe |
+| clic droit sur un axe | menu de l'axe (titre, unité, hauteur, curseurs, courbe sélectionnée et son aspect, échelle, légende) |
 | double-clic sur une variable de l'arbre | l'ajoute à l'axe actif |
 | glisser une variable de l'arbre sur un axe | l'ajoute à cet axe |
 | clic molette sur le titre d'un onglet | ferme l'onglet |

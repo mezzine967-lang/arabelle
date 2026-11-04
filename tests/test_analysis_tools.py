@@ -127,6 +127,17 @@ class ConditionalAndXYTests(unittest.TestCase):
         # A à 0,20,40..., B à 10,30,50... : état de B maintenu depuis son dernier échantillon.
         self.assertEqual(list(mask), [False, False, False, True, True, True, True, True, False, False])
 
+    def test_other_file_state_unknown_in_gap_and_after_end(self):
+        """REQ 5407 : l'état d'un Bool d'un autre fichier n'est pas maintenu à travers un
+        trou de ce fichier ni après sa fin (aucun état inventé pendant une perte)."""
+        c = self.files.write("c.csv", counter_csv([0, 20, 80, 100], {"flag": [1, 1, 1, 1]}))
+        self.ws.active_package.files.append(load_source(c, Settings()))
+        source = self.ws.files()[-1]
+        mask = evaluate(Condition([ConditionTerm(source.id, "flag", True)]), self.a, self.ws.find,
+                        self.ws.timeline())
+        # A à 0..180 : vrai à 0 et 20, inconnu dans le trou 20-80, vrai de 80 à 120 (fin + 1 période).
+        self.assertEqual(list(mask), [True, True, False, False, True, True, True, False, False, False])
+
     def test_and_or_combination(self):
         terms = [ConditionTerm(self.a.id, "cond", True), ConditionTerm(self.b.id, "flag", True)]
         timeline = self.ws.timeline()
@@ -154,7 +165,7 @@ class ConditionalAndXYTests(unittest.TestCase):
                         self.a.signal("Q").values, True, 0.01)
         self.assertEqual(same.n, 10)
         self.assertAlmostEqual(same.r, 1.0)
-        self.assertAlmostEqual(same.slope, 2.0)
+        self.assertNotIn("régression", same.describe())       # retirée (remarque du relecteur)
         cross = build_xy(timeline.x(self.a), self.a.signal("P").values, timeline.x(self.b),
                          self.b.signal("R").values, False, 0.005)
         self.assertEqual(cross.n, 0)                        # B à ±10 ms : au-delà de 5 ms

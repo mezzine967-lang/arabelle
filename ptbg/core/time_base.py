@@ -32,6 +32,18 @@ Vocabulaire :
                        de fréquence est une suite d'au moins N intervalles
                        consécutifs hors raster et cohérents entre eux.
 
+Les comparaisons à la tolérance acceptent ``TIME_RESOLUTION_S`` (1 ns) de plus :
+les horodatages ne sont pas plus fins que la nanoseconde, un écart plus petit
+n'est qu'un arrondi du calcul en flottant. Sans cette marge, deux Δt identiques
+de 11 ms pour T = 10 ms ± 1 ms étaient jugés l'un conforme, l'autre déphasé selon
+la position de l'horodatage dans le fichier (remarque du relecteur, fichiers
+simulation10_producer1/2/3).
+
+Écart à la grille : distance de chaque mesure à l'horodatage régularisé. Il
+mesure le jitter, mais aussi un recalage ponctuel de la grille (un Δt de 9 ms
+décale d'1 ms toutes les mesures suivantes) : il est donc affiché comme « écart
+max à la grille », sans préjuger de sa cause.
+
 Horodatage régularisé (« jitter ignoré », REQ 4107) : dans chaque bloc
 d'échantillons alignés sur la grille, le rang de cycle k de chaque mesure est
 connu (les manques sautent des rangs) ; une droite t = a + T·k est ajustée par
@@ -121,8 +133,8 @@ class TimeBaseAnalysis:
     dt_max_s: float = np.nan
     dt_mean_s: float = np.nan
     dt_std_s: float = np.nan
-    jitter_max_s: float = 0.0
-    jitter_std_s: float = 0.0
+    grid_offset_max_s: float = 0.0     # écart max à la grille régulière (voir en-tête)
+    grid_offset_std_s: float = 0.0
     normal_ratio: float = 0.0
     missing_samples: int = 0
     checks: list[Check] = field(default_factory=list)
@@ -150,7 +162,7 @@ class TimeBaseAnalysis:
         counts = ", ".join(f"{count} {kind.short}" for kind, count in self.event_counts.items())
         return (f"T = {ms(self.period_used_s)} ms ± {self.tolerance_pct:g} % ; "
                 f"{self.normal_ratio * 100:.1f} % des Δt conformes ; "
-                f"jitter max {ms(self.jitter_max_s)} ms"
+                f"écart max à la grille {ms(self.grid_offset_max_s)} ms"
                 + (f" ; {counts}" if counts else " ; aucune anomalie"))
 
 
@@ -161,6 +173,7 @@ _KIND_OF_CODE = {DT_MISSING: EventKind.MISSING, DT_PHASE: EventKind.PHASE,
 
 
 OUTLIER_JUMP = 10      # écart minimal par défaut (en périodes) d'un horodatage aberrant isolé (préférence)
+TIME_RESOLUTION_S = 1e-9   # résolution des horodatages : marge des comparaisons (voir en-tête)
 
 
 def _isolated_outliers(t: np.ndarray, nominal: float | None, jump_periods: float = OUTLIER_JUMP) -> np.ndarray:
@@ -215,8 +228,8 @@ def _split_frequency_segments(dt: np.ndarray, period: float, tol_frac: float,
         while True:
             rest = dt[start:start + window]
             if rest.size >= max(min_run, 2):
-                abnormal = (np.abs(rest - current) > tol_frac * current) & (rest > 0)
-                steady = np.abs(np.diff(rest)) <= tol_frac * np.maximum(rest[:-1], rest[1:])
+                abnormal = (np.abs(rest - current) > tol_frac * current + TIME_RESOLUTION_S) & (rest > 0)
+                steady = np.abs(np.diff(rest)) <= tol_frac * np.maximum(rest[:-1], rest[1:]) + TIME_RESOLUTION_S
                 linked = abnormal[:-1] & abnormal[1:] & steady
                 starts = _run_starts(linked, min_run - 1)
                 if not first:
@@ -244,7 +257,7 @@ def _classify(dt: np.ndarray, period: float, tol: float) -> tuple[np.ndarray, np
         cycles = np.rint(dt / period)
         # Un Δt gigantesque (horodatage corrompu) ne peut pas être situé sur la
         # grille à la tolérance près en flottant 64 bits : il reste « hors raster ».
-        on_grid = (np.abs(dt - cycles * period) <= tol) & (np.abs(dt) * 1e-12 <= tol)
+        on_grid = (np.abs(dt - cycles * period) <= tol + TIME_RESOLUTION_S) & (np.abs(dt) * 1e-12 <= tol)
     codes = np.full(dt.size, DT_PHASE, dtype=np.int8)
     codes[on_grid & (cycles == 1)] = DT_NORMAL
     codes[on_grid & (cycles >= 2)] = DT_MISSING
@@ -367,11 +380,11 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
     result.missing_samples = int(np.sum(cycles[codes == DT_MISSING] - 1))
     result.normal_ratio = float(np.count_nonzero(codes == DT_NORMAL) / dt.size)
 
-    # 3) Horodatage régularisé (jitter ignoré) et mesure du jitter résiduel.
+    # 3) Horodatage régularisé (jitter ignoré) et écart des mesures à cette grille.
     regular = _regularize(t, codes, cycles, segment_starts)
     residual = t - regular
-    result.jitter_max_s = float(np.max(np.abs(residual)))
-    result.jitter_std_s = float(np.std(residual))
+    result.grid_offset_max_s = float(np.max(np.abs(residual)))
+    result.grid_offset_std_s = float(np.std(residual))
     result.regular_s[valid_index] = regular
     result.dt_index, result.dt_values, result.dt_kinds = sample_after, dt, codes
 
@@ -388,10 +401,10 @@ def _add_checks(result: TimeBaseAnalysis, codes: np.ndarray, estimated: float,
     severity = Severity.OK
     if nominal:
         text += f" ; période nominale saisie : {ms(nominal)} ms"
-        if abs(estimated - nominal) > tol_frac * nominal:
+        if abs(estimated - nominal) > tol_frac * nominal + TIME_RESOLUTION_S:
             severity = Severity.WARNING
             text += " -> ÉCART supérieur à la tolérance"
-    elif not any(abs(estimated * 1e3 - p) <= tol_frac * p for p in preferred_periods_ms):
+    elif not any(abs(estimated * 1e3 - p) <= tol_frac * p + TIME_RESOLUTION_S * 1e3 for p in preferred_periods_ms):
         text += " (hors des valeurs préférées " + "/".join(f"{p:g}" for p in preferred_periods_ms) \
                 + " ms : information seulement, REQ 2100)"
     result.checks.append(Check("Valeur de la période", severity, text))
@@ -401,8 +414,8 @@ def _add_checks(result: TimeBaseAnalysis, codes: np.ndarray, estimated: float,
         "Stabilité de la période", Severity.WARNING if unstable else Severity.OK,
         f"{result.normal_ratio * 100:.2f} % des Δt à ± {result.tolerance_pct:g} % (± {ms(result.tolerance_s)} ms) ; "
         f"Δt min/moy/max {ms(result.dt_min_s)} / {ms(result.dt_mean_s)} / {ms(result.dt_max_s)} ms, "
-        f"écart-type {ms(result.dt_std_s)} ms ; jitter max {ms(result.jitter_max_s)} ms, "
-        f"écart-type {ms(result.jitter_std_s)} ms (ignoré dans la tolérance) ; "
+        f"écart-type {ms(result.dt_std_s)} ms ; écart max à la grille régulière {ms(result.grid_offset_max_s)} ms, "
+        f"écart-type {ms(result.grid_offset_std_s)} ms (jitter ou recalage de la grille, toléré) ; "
         f"{counts.get(EventKind.PHASE, 0)} déphasage(s), {counts.get(EventKind.FREQUENCY, 0)} "
         "changement(s) de fréquence."))
     # Croissance continue.

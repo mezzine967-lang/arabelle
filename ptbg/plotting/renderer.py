@@ -17,6 +17,12 @@ Requis servis :
 Les axes temporels d'un onglet partagent leur abscisse (``sharex``) : zoom et
 déplacement sont synchronisés, ce qui réalise la synchronisation des axes
 demandée par REQ_COMMON_KH_5405.
+
+Réglages de présentation choisis par l'utilisateur (remarques du relecteur) :
+titre et unité de chaque axe, hauteur relative des axes, couleur / épaisseur /
+style de trait de chaque courbe. La légende ne porte que le nom de la
+variable ; le nom du fichier n'y est ajouté que si deux fichiers de l'axe ont
+une variable du même nom (sinon les courbes seraient indiscernables).
 """
 from __future__ import annotations
 
@@ -48,6 +54,7 @@ HSPACE = 0.45           # espace vertical entre axes (fraction de hauteur moyenn
 CHAR_WIDTH_EM = 0.62    # largeur moyenne d'un caractère (fraction de la taille de police)
 LINE_PT = 1.35          # hauteur d'une ligne de texte (fraction de la taille de police)
 MIN_TBM_PLOT_IN = 0.45  # hauteur minimale de la courbe des Δt du TBM (pouces)
+PICK_RADIUS_PX = 6      # distance (pixels) à laquelle un clic désigne une courbe
 
 
 def _time_slot_below(tpl, slot) -> bool:
@@ -78,6 +85,26 @@ def _representable_limits(arrays) -> tuple[float, float] | None:
     with np.errstate(over="ignore"):
         span = hi - lo
     return None if np.isfinite(span) else (max(lo, -1e307), min(hi, 1e307))
+
+
+def _row_ratios(tpl, axles) -> list[float]:
+    """Hauteurs relatives des rangées : celles du modèle, multipliées par la hauteur
+    choisie pour les axes de la rangée (le plus haut d'une rangée l'emporte)."""
+    ratios = []
+    for row, ratio in enumerate(tpl.row_ratios):
+        heights = [axle.height for slot, axle in zip(tpl.slots, axles) if slot.row == row and slot.rowspan == 1]
+        ratios.append(ratio * max(heights or [1.0]))
+    return ratios
+
+
+def _legend_labels(curves) -> list[str]:
+    """Libellés de légende : nom de la variable seul, fichier ajouté en cas d'homonymie."""
+    names = [curve.ref.name for curve in curves]
+    labels = []
+    for curve in curves:
+        label = ("Groupe " if curve.ref.is_group else "") + curve.ref.name
+        labels.append(f"{label} [{curve.source.name}]" if names.count(curve.ref.name) > 1 else label)
+    return labels
 
 
 def _bound_axes(ax, xlim, ylim) -> None:
@@ -119,6 +146,9 @@ class TabRenderer:
         self._movables: list = []           # étiquettes déplaçables du dessin : (élément, axe, clé, décalage auto)
         self._cursor_movables: list = []    # idem pour les étiquettes des curseurs (refaites à chaque mouvement)
         self._time_labels = True            # graduations de temps écrites sur l'axe en cours de dessin
+        self._curve_lines: list = []        # (axe, courbe, ligne) : désignation d'une courbe à la souris
+        self._tbm_markers: list = []        # anomalies du TBM : (x, y, détail) pour la bulle de survol
+        self._tip = None                    # bulle de détail du TBM (écran)
 
     # ------------------------------------------------------------------ build
     def sources_in_tab(self):
@@ -139,15 +169,18 @@ class TabRenderer:
         self.container.clear()
         self.axes, self._lines, self._lanes, self._h_cache = [], [], {}, {}
         self._digital_axles, self._cursor_artists, self.tbm_plot = set(), [], None
-        self._movables, self._cursor_movables = [], []
+        self._movables, self._cursor_movables, self._curve_lines = [], [], []
+        self._tbm_markers, self._tip = [], None
         tpl = self.tab.template
         sources = self.sources_in_tab()
         with_tbm = self.tab.tbm_visible
         with_note = self.for_print and not with_tbm      # REQ 4104
-        ratios = list(tpl.row_ratios)
+        ratios = _row_ratios(tpl, self.tab.axles)
         total = float(sum(ratios))
         if with_tbm:
-            ratios.append(min(0.8 * total, 0.38 * total * (1 + 0.3 * max(len(sources) - 1, 0))))
+            # Rapport : le texte détaillé grandit avec le nombre de fichiers ; écran : titre seul.
+            growth = 1 + 0.3 * max(len(sources) - 1, 0) if self.for_print else 1.0
+            ratios.append(min(0.8 * total, 0.38 * total * growth))
         elif with_note:
             ratios.append(0.12 * total * (1 + 0.5 * len(sources)))
         # Caractères par ligne du texte du TBM : largeur de la zone / largeur d'un caractère.
@@ -159,7 +192,7 @@ class TabRenderer:
             # lisible (sans dépasser 60 % de la hauteur), au lieu que le texte morde la courbe.
             rows, others = len(ratios), sum(ratios[:-1])
             scale = self.height_in * 0.89 * rows / (rows + HSPACE * (rows - 1))
-            needed = monitor.text_height_in(sources, chars) + MIN_TBM_PLOT_IN
+            needed = monitor.text_height_in(sources, chars, self.for_print) + MIN_TBM_PLOT_IN
             if scale > needed:
                 ratios[-1] = max(ratios[-1], min(needed * others / (scale - needed), 1.5 * others))
         grid = self.container.add_gridspec(
@@ -192,14 +225,21 @@ class TabRenderer:
             rows = len(ratios)
             band_in = (self.height_in * 0.89 * rows * ratios[-1]
                        / (sum(ratios) * (rows + HSPACE * (rows - 1))))
-            text_in = monitor.text_height_in(sources, chars)
+            text_in = monitor.text_height_in(sources, chars, self.for_print)
             text_share = text_in / max(band_in - text_in, 0.35)
             band = grid[tpl.nrows, :].subgridspec(2, 1, height_ratios=[text_share, 1], hspace=0.04)
             text_ax = self.container.add_subplot(band[0])
             self.tbm_plot = self.container.add_subplot(band[1], sharex=master)
-            for line, x, y in monitor.draw_monitor(text_ax, self.tbm_plot, sources, self.timeline, chars,
-                                                   outside=self.for_print, legend_xy=self.tab.tbm_legend_xy):
+            lines, self._tbm_markers = monitor.draw_monitor(
+                text_ax, self.tbm_plot, sources, self.timeline, chars, outside=self.for_print,
+                legend_xy=self.tab.tbm_legend_xy, detailed=self.for_print)
+            for line, x, y in lines:
                 self._lines.append((self.tbm_plot, line, DisplayCurve(x, y)))
+            if not self.for_print:
+                self._tip = self.tbm_plot.annotate(
+                    "", xy=(0, 0), xytext=(8, 8), textcoords="offset points", fontsize=FONT_SMALL, zorder=10,
+                    visible=False, animated=True, annotation_clip=False,
+                    bbox=dict(fc="#fffde7", ec="#999999", lw=0.6, pad=2))
             if self.tbm_plot.get_legend() is not None and not self.for_print:
                 self.tbm_plot.get_legend().set_draggable(True)
             apply_time_axis(self.tbm_plot, self.timeline, True)
@@ -244,11 +284,12 @@ class TabRenderer:
             pad = (hi - lo) * 0.01 or 1.0
             master.set_xlim(lo - pad, hi + pad)
 
-    def _style_axle(self, index: int, ax) -> None:
-        """Quadrillage, titre « Axe n » (centré dans le rapport) et cadre bleu de l'axe actif."""
+    def _style_axle(self, index: int, ax, axle: AxleState) -> None:
+        """Quadrillage, titre (« Axe n » ou celui choisi ; centré dans le rapport) et cadre
+        bleu de l'axe actif."""
         apply_grid(ax)
         ax.tick_params(labelsize=FONT_SMALL)
-        ax.set_title(f"Axe {index + 1}", loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
+        ax.set_title(axle.display_title(index), loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
         if not self.for_print and index == self.active_axle:
             for spine in ax.spines.values():
                 spine.set_edgecolor(ACTIVE_AXLE_COLOR)
@@ -273,7 +314,7 @@ class TabRenderer:
 
     def _draw_time_axle(self, index: int, ax, axle: AxleState) -> None:
         """Axe temporel : analogique ou pistes logiques selon ses courbes."""
-        self._style_axle(index, ax)
+        self._style_axle(index, ax, axle)
         apply_time_axis(ax, self.timeline, self._time_labels)
         curves = [c for c in (resolve(ref, self.workspace) for ref in axle.curves) if c is not None]
         if not curves:
@@ -298,22 +339,42 @@ class TabRenderer:
         self._lines.append((ax, line, DisplayCurve(x, y)))
         return line
 
+    def _register_curve(self, index: int, position: int, ax, x, y, curve: CurveData, selected: bool, **style):
+        """Trace la courbe ``position`` de l'axe ``index`` avec l'aspect choisi pour elle
+        (épaisseur automatique : plus forte pour la courbe sélectionnée) ; la mémorise
+        pour la désigner à la souris."""
+        width = curve.ref.width or 1.0
+        line = self._register(ax, x, y, lw=width + (0.8 if selected else 0.0), ls=curve.ref.linestyle or "-",
+                              **style)
+        line.set_pickradius(PICK_RADIUS_PX)
+        self._curve_lines.append((index, position, line))
+        return line
+
+    def curve_at(self, event) -> tuple[int, int] | None:
+        """(axe, courbe) tracée sous la souris, ou None (désignation par clic)."""
+        for index, position, line in self._curve_lines:
+            if line.axes is event.inaxes and line.contains(event)[0]:
+                return index, position
+        return None
+
     def _draw_analog(self, index, ax, axle, curves: list[CurveData]) -> None:
         """Courbes Float : trait continu, courbe sélectionnée épaissie, croix des cellules vides."""
-        for position, curve in enumerate(curves):
+        for position, (curve, label) in enumerate(zip(curves, _legend_labels(curves))):
             color = curve.ref.color or curve_color(position)
             selected = position == min(axle.selected, len(curves) - 1)
             x = self.timeline.x(curve.source)
             xb, yb = break_at(x, curve.values, curve.source.gap_starts())
             # Rapport : nom du fichier à la ligne, la légende tient dans la marge de droite.
-            label = curve.label.replace(" [", "\n[") if self.for_print else curve.label
-            self._register(ax, xb, yb, color=color, lw=1.8 if selected else 1.0,
-                           label=("► " if selected else "") + label)
+            label = label.replace(" [", "\n[") if self.for_print else label
+            self._register_curve(index, position, ax, xb, yb, curve, selected, color=color,
+                                 label=("► " if selected else "") + label)
             if curve.signal is not None:
                 marks = missing_markers(x, curve.values, curve.signal.missing)[:MAX_MARKERS]
                 if marks.size:
                     ax.plot(x[marks], curve.values[marks], "x", color=color, ms=7, mew=1.6)
         _bound_axes(ax, None, _representable_limits([curve.values for curve in curves]))
+        if axle.unit.strip():
+            ax.set_ylabel(axle.unit.strip(), fontsize=FONT_SMALL)
         self._legend(ax, axle)
 
     def _legend(self, ax, axle: AxleState) -> None:
@@ -360,7 +421,8 @@ class TabRenderer:
                 y = base + scale * values
                 xb, yb = break_at(x, y, curve.source.gap_starts())
                 selected = position == min(axle.selected, len(curves) - 1)
-                self._register(ax, xb, yb, color=color, lw=1.6 if selected else 1.0, drawstyle="steps-post")
+                self._register_curve(index, position, ax, xb, yb, curve, selected, color=color,
+                                     drawstyle="steps-post")
                 marks = missing_markers(x, values, member.missing)[:MAX_MARKERS]
                 if marks.size:
                     ax.plot(x[marks], y[marks], "x", color=color, ms=6, mew=1.4)
@@ -381,27 +443,24 @@ class TabRenderer:
         ax.set_ylim(-(lane - 1) * LANE_STEP - 0.3, LANE_HEIGHT + 0.4)
 
     def _draw_xy_axle(self, index: int, ax, axle: AxleState) -> None:
-        """Nuage X/Y, droite de régression et corrélation dans le titre (REQ 5408)."""
-        self._style_axle(index, ax)
+        """Nuage X/Y et corrélation dans le titre (REQ 5408 ; pas de droite de régression)."""
+        self._style_axle(index, ax, axle)
+        name = axle.display_title(index)
         data = xy_data(axle, self.workspace, self.timeline)
         if data is None:
             self._placeholder(ax, "Nuage X/Y : Outils > Nuage X/Y…")
-            ax.set_title(f"Axe {index + 1} — nuage X/Y", loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
+            ax.set_title(f"{name} — nuage X/Y", loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
             return
         step = max(1, data.n // MAX_XY_POINTS)
         ax.plot(data.x[::step], data.y[::step], ".", ms=2.5, color=curve_color(0), alpha=0.7)
         _bound_axes(ax, _representable_limits([data.x]), _representable_limits([data.y]))
-        if np.isfinite(data.slope):
-            span = np.array([data.x.min(), data.x.max()])
-            ax.plot(span, data.slope * span + data.intercept, "--", color="#555555", lw=1.0,
-                    label=f"régression (r = {data.r:.4f})")
-            self._legend(ax, axle)
         apply_grid(ax, minor_y=True)
         ax.set_xlabel(f"X : {axle.xy_x.name}", fontsize=FONT_SMALL)
-        ax.set_ylabel(f"Y : {axle.xy_y.name}", fontsize=FONT_SMALL)
+        unit = f" ({axle.unit.strip()})" if axle.unit.strip() else ""
+        ax.set_ylabel(f"Y : {axle.xy_y.name}{unit}", fontsize=FONT_SMALL)
         # Titre coupé à la largeur de l'axe : rien n'est rogné au bord de la figure.
         chars = int(self._width_pt(ax) / (CHAR_WIDTH_EM * FONT_SMALL))
-        ax.set_title(textwrap.fill(f"Axe {index + 1} — X/Y : {data.describe()}", max(chars, 20)),
+        ax.set_title(textwrap.fill(f"{name} — X/Y : {data.describe()}", max(chars, 20)),
                      loc=self._title_side(), fontsize=FONT_SMALL, pad=3)
         if axle.ylim:
             ax.set_ylim(*axle.ylim)
@@ -483,9 +542,36 @@ class TabRenderer:
         return artist
 
     def draw_cursor_artists(self) -> None:
-        """Dessine les seuls curseurs sur le rendu déjà présent (écran)."""
+        """Dessine les seuls curseurs (et la bulle du TBM) sur le rendu déjà présent (écran)."""
         for artist in self._cursor_artists:
             self.container.figure.draw_artist(artist)
+        if self._tip is not None and self._tip.get_visible():
+            self.container.figure.draw_artist(self._tip)
+
+    def show_monitor_tip(self, event) -> bool:
+        """Bulle de détail de l'anomalie du TBM la plus proche de la souris (à moins de
+        ``PICK_RADIUS_PX`` × 2) ; vrai si la bulle a changé (à redessiner)."""
+        if self._tip is None:
+            return False
+        text, xy = "", None
+        if event.inaxes is self.tbm_plot and self._tbm_markers and event.x is not None:
+            points = self.tbm_plot.transData.transform([(x, y) for x, y, _ in self._tbm_markers])
+            distance = np.hypot(points[:, 0] - event.x, points[:, 1] - event.y)
+            nearest = int(np.argmin(distance))
+            if distance[nearest] <= 2 * PICK_RADIUS_PX:
+                x, y, text = self._tbm_markers[nearest]
+                xy = (x, y)
+        if text == self._tip.get_text() and self._tip.get_visible() == bool(text):
+            return False
+        self._tip.set_text(text)
+        self._tip.set_visible(bool(text))
+        if xy is not None:
+            self._tip.xy = xy
+            # Bulle placée du côté où il reste de la place (bord droit de la courbe).
+            left, right = self.tbm_plot.get_xlim()
+            self._tip.set_horizontalalignment("right" if xy[0] > (left + right) / 2 else "left")
+            self._tip.xyann = (-8 if xy[0] > (left + right) / 2 else 8, 8)
+        return True
 
     def _draw_vertical_cursors(self, index: int, ax, axle: AxleState) -> None:
         """Curseurs global, C1, C2 : ligne, instant, valeur de la courbe sélectionnée, Δt.
@@ -503,7 +589,8 @@ class TabRenderer:
             if curve is not None:
                 sample = sample_at(self.timeline.grid(curve.source), curve.values, position, curve.hold)
                 if sample is not None:
-                    lines.append(f"{curve.ref.name} = {curve.format_at(sample.index)}")
+                    unit = f" {axle.unit.strip()}" if axle.unit.strip() and not curve.hold else ""
+                    lines.append(f"{curve.ref.name} = {curve.format_at(sample.index)}{unit}")
                     y_mark = self._display_y(index, axle, curve, sample.value)
                     if y_mark is not None:
                         self._keep(ax.plot(sample.x, y_mark, "o", ms=6, mfc="none", mec=color, mew=1.5)[0])

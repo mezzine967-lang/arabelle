@@ -12,7 +12,7 @@ from ptbg.core.arrangement import TEMPLATES
 
 
 class MenuBar:
-    """Construit les menus Fichier, Affichage, Base de temps, Outils, Rapport, Information."""
+    """Construit les menus Fichier, Édition, Affichage, Base de temps, Outils, Rapport, Information."""
 
     def __init__(self, root: tk.Tk, controller) -> None:
         """Crée les menus et les raccourcis clavier globaux."""
@@ -21,6 +21,7 @@ class MenuBar:
         c = controller
         self.time_mode = tk.StringVar(value="relative")
         self.tree_visible = tk.BooleanVar(value=True)
+        self.orientation = tk.StringVar(value=controller.settings.report_orientation)
 
         # Fichier : sources (REQ 2105), paquets (REQ 5200), projet (REQ 6005).
         files = tk.Menu(bar, tearoff=False)
@@ -36,6 +37,12 @@ class MenuBar:
         files.add_separator()
         files.add_command(label="Quitter", accelerator="Ctrl+Q", command=c.quit)
         bar.add_cascade(label="Fichier", menu=files)
+
+        # Édition : annuler / rétablir les actions de l'onglet actif (remarque du relecteur).
+        edit = tk.Menu(bar, tearoff=False)
+        edit.add_command(label="Annuler", accelerator="Ctrl+Z", command=c.undo)
+        edit.add_command(label="Rétablir", accelerator="Ctrl+Y", command=c.redo)
+        bar.add_cascade(label="Édition", menu=edit)
 
         # Affichage : arbre masquable (REQ 5105), onglets / modèles (REQ 5106, 5300), axe des temps (REQ 4107).
         view = tk.Menu(bar, tearoff=False)
@@ -84,6 +91,11 @@ class MenuBar:
         report.add_separator()
         report.add_command(label="Pas à pas : ajouter la vue active", accelerator="Ctrl+K", command=c.add_report_page)
         report.add_command(label="Pas à pas : gérer les pages et générer le PDF…", command=c.manage_report_pages)
+        report.add_separator()
+        report.add_radiobutton(label="Pages en paysage", value="landscape", variable=self.orientation,
+                               command=lambda: c.set_report_orientation("landscape"))
+        report.add_radiobutton(label="Pages en portrait", value="portrait", variable=self.orientation,
+                               command=lambda: c.set_report_orientation("portrait"))
         bar.add_cascade(label="Rapport", menu=report)
 
         # Information : version, historique, sources, aide (REQ 5101) et journal (REQ 5102).
@@ -104,3 +116,7 @@ class MenuBar:
                                  ("<Control-p>", c.automatic_report), ("<Control-k>", c.add_report_page),
                                  ("<F9>", c.toggle_tree), ("<F1>", c.show_help)):
             root.bind_all(sequence, lambda _event, action=action: action())
+        # Annuler / rétablir : pas dans un champ de saisie (Ctrl+Z y garde son sens habituel).
+        for sequence, action in (("<Control-z>", c.undo), ("<Control-y>", c.redo), ("<Control-Z>", c.redo)):
+            root.bind_all(sequence, lambda event, action=action: None if isinstance(event.widget, (tk.Entry, tk.Text))
+                          else action())

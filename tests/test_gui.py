@@ -80,7 +80,7 @@ class InterfaceTests(unittest.TestCase):
         """REQ 5100, 5102, 5103, 5104, 5106, 3002 : menus, arbre à gauche, graphique à droite, barre d'état."""
         menu = self.root.nametowidget(self.root["menu"])
         labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)]
-        self.assertEqual(labels, ["Fichier", "Affichage", "Base de temps", "Outils", "Rapport", "Information"])
+        self.assertEqual(labels, ["Fichier", "Édition", "Affichage", "Base de temps", "Outils", "Rapport", "Information"])
         panes = [str(p) for p in self.ctl.paned.panes()]
         self.assertEqual(panes, [str(self.ctl.tree), str(self.ctl.graph)])
         self.assertGreater(self.ctl.graph.winfo_width(), self.ctl.tree.winfo_width())
@@ -497,6 +497,127 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual([str(p) for p in self.ctl.paned.panes()], [str(self.ctl.graph)])
         self.ctl.toggle_tree()
         self.assertEqual(len(self.ctl.paned.panes()), 2)
+
+    def test_home_button_after_tab_change_and_undo(self):
+        """Remarques du relecteur : la « maison » revient à toute la durée même après un
+        redessin (changement d'onglet) ; Ctrl+Z / Ctrl+Y annulent et rétablissent."""
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "output", False)], 0)
+        master = tab.renderer.axes_time_master()
+        full = master.get_xlim()
+        master.set_xlim(2.0, 4.0)                        # zoom
+        self.ctl.new_tab("1A")                           # changement d'onglet, puis retour
+        self.ctl.graph.notebook.select(tab)
+        tab.redraw()
+        self.assertEqual(tab.state.xlim, [2.0, 4.0])
+        tab.toolbar.home()
+        self.assertIsNone(tab.state.xlim)
+        self.assertEqual(tab.renderer.axes_time_master().get_xlim(), full)
+        tab.add_curves([(source.id, "pv", False)], 0)
+        tab.set_cursor_mode("single")
+        self.ctl.undo()
+        self.assertEqual(tab.state.axles[0].cursor_mode, "none")
+        self.ctl.undo()
+        self.assertEqual([c.name for c in tab.state.axles[0].curves], ["output"])
+        self.ctl.redo()
+        self.assertEqual([c.name for c in tab.state.axles[0].curves], ["output", "pv"])
+
+    def test_closing_package_closes_emptied_tabs(self):
+        """Remarque du relecteur : fermer un paquet ferme les onglets qui ne montraient que
+        ses fichiers ; la numérotation des onglets repart de 1."""
+        from ptbg.gui.tree_panel import TreeRef
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        for _ in range(3):
+            self.ctl.new_tab("1A").add_curves([(source.id, "output", False)], 0)
+        package = self.ctl.workspace.packages[0]
+        with mock.patch.object(self.ctl.tree, "selection", return_value=[TreeRef("package", package.id)]), \
+                mock.patch("ptbg.gui.app.messagebox.askyesno", return_value=True):
+            self.ctl.remove_selection()
+        titles = [tab.state.title for tab in self.ctl.graph.tabs]
+        self.assertEqual(len(titles), 1)                 # l'onglet vide de départ reste seul
+        for tab in list(self.ctl.graph.tabs):
+            self.ctl.close_tab(tab)
+        self.assertTrue(self.ctl.graph.tabs[0].state.title.startswith("Analyse 1 "))
+
+    def test_cursor_activation_leaves_zoom_and_recenters(self):
+        """Remarques du relecteur : activer un curseur désactive la loupe (pas de zoom
+        involontaire) et le place au centre de la vue zoomée."""
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "output", False)], 0)
+        tab.renderer.axes_time_master().set_xlim(2.0, 4.0)
+        tab.state.t_global = 15.0                        # ancien curseur hors de la vue
+        tab.toolbar.zoom()
+        self.assertEqual(tab.toolbar.mode, "zoom rect")
+        tab.global_cursor.set(True)
+        tab._toggle_global()
+        self.assertEqual(tab.toolbar.mode, "")
+        self.assertAlmostEqual(tab.state.t_global, 3.0)
+        tab.state.axles[0].t1 = 15.0
+        tab.toolbar.pan()
+        tab.set_cursor_mode("single")
+        self.assertEqual(tab.toolbar.mode, "")
+        self.assertTrue(2.0 <= tab.state.axles[0].t1 <= 4.0)
+
+    def test_curve_selection_title_unit_style_height(self):
+        """Remarques du relecteur : légende = nom de la variable ; clic sur une courbe = la
+        sélectionner ; titre, unité, aspect de la courbe et hauteur de l'axe réglables."""
+        from matplotlib.backend_bases import MouseEvent
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        self.ctl.close_tab(tab)
+        tab = self.ctl.new_tab("2A")
+        tab.add_curves([(source.id, "UL", False), (source.id, "output", False)], 0)
+        self.root.update()
+        tab.redraw()                                     # rendu définitif à la taille de la fenêtre
+        tab.canvas.draw()
+        ax = tab.renderer.axes[0]
+        self.assertEqual([t.get_text() for t in ax.get_legend().get_texts()], ["► UL", "output"])
+        ul = ax.lines[0].get_xydata()
+        out = ax.lines[1].get_xydata()
+        point = next(p for p, q in zip(out, ul) if abs(p[1] - q[1]) > 20)   # loin de l'autre courbe
+        x_px, y_px = ax.transData.transform(point)
+        tab.canvas.callbacks.process("button_press_event",
+                                     MouseEvent("button_press_event", tab.canvas, x_px, y_px, button=1))
+        self.assertEqual(tab.state.axles[0].selected, 1)
+        tab.set_axle_title(0, "Régulation")
+        tab.set_axle_unit(0, "%")
+        tab.set_curve_style("#ff0000", 3.0, "--")
+        tab.set_axle_height(0, 2.0)
+        ax, other = tab.renderer.axes[0], tab.renderer.axes[1]
+        self.assertEqual(ax.get_title(loc="left"), "Régulation")
+        self.assertEqual(ax.get_ylabel(), "%")
+        line = ax.lines[1]
+        self.assertEqual((line.get_color(), line.get_linewidth(), line.get_linestyle()), ("#ff0000", 3.8, "--"))
+        self.assertGreater(ax.get_position().height, 1.5 * other.get_position().height)
+        tab.set_cursor_mode("single")
+        labels = [a.get_text() for a in tab.renderer._cursor_artists if hasattr(a, "get_text")]
+        self.assertTrue(any(text.endswith(" %") for text in labels))
+
+    def test_monitor_details_on_hover_not_under_title(self):
+        """Remarque du relecteur (REQ 4102) : à l'écran, pas de texte d'avertissement sous le
+        titre du TBM ; statut au coin de la courbe ; détail d'une anomalie au survol."""
+        from matplotlib.backend_bases import MouseEvent
+        (source,) = self.load(DEMO / "PLC_B_20ms_dephase.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, source.float_names()[0], False)], 0)
+        renderer = tab.renderer
+        texts = " ".join(t.get_text() for ax in tab.figure.axes for t in ax.texts)
+        self.assertNotIn("Stabilité", texts)
+        self.assertNotIn(source.conversion.description, texts)
+        self.assertIn(f"{source.name} : T = 20 ms — {source.time_status().label}", texts)
+        self.root.update()
+        tab.redraw()                                     # rendu définitif à la taille de la fenêtre
+        tab.canvas.draw()
+        renderer = tab.renderer
+        self.assertTrue(renderer._tbm_markers)
+        x, y, detail = renderer._tbm_markers[0]
+        x_px, y_px = renderer.tbm_plot.transData.transform((x, y))
+        tab.canvas.callbacks.process("motion_notify_event",
+                                     MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
+        self.assertTrue(renderer._tip.get_visible())
+        self.assertIn("ligne CSV", renderer._tip.get_text())
 
     def test_absolute_time_mode(self):
         """REQ 4107 : axe absolu refusé sans origine, accepté pour l'horodatage hh:mm:ss."""

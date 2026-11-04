@@ -36,8 +36,19 @@ class TimeBaseTests(unittest.TestCase):
         t = raster(1000, 0.01) + rng.uniform(-0.0004, 0.0004, 1000)
         result = analyze(t, tolerance_pct=10)
         self.assertIs(result.status, Severity.OK)
-        self.assertGreater(result.jitter_max_s, 0.0001)
+        self.assertGreater(result.grid_offset_max_s, 0.0001)
         np.testing.assert_allclose(np.diff(result.regular_s), 0.01, atol=1e-6)
+
+    def test_dt_exactly_at_tolerance_is_conform_wherever_it_is(self):
+        """REQ 4100 (remarque du relecteur, simulation10_producer1/2/3) : un Δt de 11 ms
+        pour T = 10 ms ± 10 % est pile à la limite ; il est conforme quelle que soit sa
+        position dans le fichier (l'arrondi flottant le rendait parfois « déphasé »)."""
+        for start in (34, 377, 438):                       # débuts des trois fichiers reçus
+            ms_ = list(range(start, 4980, 10))
+            ms_ += [ms_[-1] + 11] + [ms_[-1] + 11 + 10 * k for k in range(1, 400)]
+            result = analyze(np.array(ms_, dtype=float) * 0.001)
+            self.assertIs(result.status, Severity.OK, start)
+            self.assertEqual(result.normal_ratio, 1.0)
 
     def test_missing_samples_detected_and_kept_in_regular_time(self):
         """REQ 4101 : trou de 3 échantillons ; le trou reste visible après régularisation."""
@@ -74,7 +85,7 @@ class TimeBaseTests(unittest.TestCase):
         self.assertAlmostEqual(result.segments[1].period_s, 0.04)
         self.assertEqual(result.event_counts[EventKind.FREQUENCY], 1)
         self.assertNotIn(EventKind.MISSING, result.event_counts)
-        self.assertLess(result.jitter_max_s, 1e-9)        # régularisation par segment
+        self.assertLess(result.grid_offset_max_s, 1e-9)        # régularisation par segment
 
     def test_user_nominal_period(self):
         """REQ 4106 : raster imposé ; écart signalé avec son diagnostic."""

@@ -14,8 +14,11 @@ termes « signal Bool = état attendu » par ET ou OU. Elle sert :
 Règles sans interpolation :
 - Bool du MÊME fichier : état lu sur la même ligne que la mesure analogique ;
 - Bool d'un AUTRE fichier : état maintenu du dernier échantillon Bool
-  antérieur, sur l'axe des temps commun (explicitement indiqué) ;
-- Bool vide, invalide ou hors de sa plage de temps : condition FAUSSE.
+  antérieur, sur l'axe des temps commun (explicitement indiqué), et seulement
+  jusqu'à l'échantillon suivant : à travers un trou de ce fichier (intervalle
+  plus long qu'une période + tolérance) ou plus d'une période après sa
+  dernière mesure, l'état est inconnu ;
+- Bool vide, invalide, inconnu ou hors de sa plage de temps : condition FAUSSE.
 """
 from __future__ import annotations
 
@@ -24,6 +27,7 @@ from dataclasses import asdict, dataclass, field
 import numpy as np
 
 from ptbg.core.data_package import SourceFile, Timeline
+from ptbg.core.time_base import TIME_RESOLUTION_S
 
 
 @dataclass
@@ -64,9 +68,18 @@ def _term_state(term: ConditionTerm, target: SourceFile, find, timeline: Timelin
     else:
         xs, xt = timeline.x(source), timeline.x(target)
         order = np.argsort(xs, kind="stable")
-        position = np.searchsorted(xs[order], xt, side="right") - 1
+        known = xs[order]
+        position = np.searchsorted(known, xt, side="right") - 1
         state = np.full(xt.size, np.nan)
         inside = (position >= 0) & np.isfinite(xt)
+        analysis = source.analysis
+        if analysis is not None and np.isfinite(analysis.period_used_s):
+            # Durée de maintien de chaque échantillon : jusqu'au suivant s'il n'y a pas
+            # de trou, une période après la dernière mesure ; au-delà, état inconnu.
+            period, hold = analysis.period_used_s, analysis.period_used_s + analysis.tolerance_s
+            following = np.append(known[1:], known[-1] + period) if known.size else known
+            reach = np.where(following - known <= hold + TIME_RESOLUTION_S, following, known)
+            inside &= xt <= reach[np.clip(position, 0, None)] if known.size else False
         state[inside] = values[order][position[inside]]
     finite = np.isfinite(state)
     return finite & ((state >= 0.5) == term.expected)
