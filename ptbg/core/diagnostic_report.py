@@ -38,10 +38,9 @@ def tag(severity: Severity) -> str:
 
 
 def issue_line(issue: Issue) -> str:
-    """Constat sur une ligne : gravité, message, ligne du CSV, requis."""
+    """Constat sur une ligne : gravité, message, ligne du CSV."""
     where = f" — ligne {issue.line} du CSV" if issue.line is not None else ""
-    req = f" ({issue.requirement.replace('REQ_COMMON_KH_', 'REQ ')})" if issue.requirement else ""
-    return f"{tag(issue.severity)} {issue.message}{where}{req}"
+    return f"{tag(issue.severity)} {issue.message}{where}"
 
 
 def _size(n_bytes: int) -> str:
@@ -101,7 +100,7 @@ def file_report(source: SourceFile, timeline: Timeline) -> str:
         identity.append(("Empreinte SHA-256", source.table.sha256))
     lines += ["## 1. Identité du fichier", ""] + _table(("Élément", "Valeur"), identity)
     lines += ["", "## 2. Lecture du fichier", "",
-              "Séparateur, encodage, en-tête et nombre de colonnes de chaque ligne (REQ 2300 à 2310).", ""]
+              "Séparateur, encodage, en-tête et nombre de colonnes de chaque ligne.", ""]
     lines += [f"- {issue_line(issue)}" for issue in source.read_issues] or \
         [f"- {tag(Severity.OK)} Aucun constat : le fichier a été lu sans écart."]
     if not source.is_loaded:

@@ -239,7 +239,7 @@ def sources_text(workspace) -> str:
             count = data.count(b"\n")      # hors f-string : antislash interdit avant Python 3.12
             lines.append(f"    {str(path.relative_to(root)):<46} {count:>5} lignes  "
                          f"{hashlib.sha256(data).hexdigest()[:16]}")
-    lines += ["", "## Environnement d'exécution et bibliothèques (REQ 3004)", ""]
+    lines += ["", "## Environnement d'exécution et bibliothèques", ""]
     lines += ["    " + line for line in collect_environment().as_text().splitlines()]
     lines += ["", "Détail des dépendances, licences et impacts de montée de version : docs/DEPENDANCES.md",
               "", "## Fichiers de données chargés", ""]

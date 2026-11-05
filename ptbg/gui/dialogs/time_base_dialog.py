@@ -46,7 +46,7 @@ class TimeBaseDialog(Dialog):
         ts = self.source.time_settings
         analysis = self.source.analysis
         raw = ", ".join(self.source.table.time_raw[:4])
-        info = (f"Colonne de temps (1re colonne, REQ 2304) : « {self.source.table.time_name} » — "
+        info = (f"Colonne de temps : « {self.source.table.time_name} » — "
                 f"premières valeurs : {raw}\nDétecté : {self.source.conversion.description}\n"
                 f"Statut actuel : {self.source.time_status().label} — {analysis.summary()}")
         ttk.Label(master, text=info, wraplength=620, justify="left").grid(row=0, column=0, columnspan=3,
@@ -79,13 +79,13 @@ class TimeBaseDialog(Dialog):
             ttk.Label(master, text=label).grid(row=row, column=0, sticky="w", padx=(0, 6), pady=2)
             widget.grid(row=row, column=1, sticky="w", pady=2)
             ttk.Label(master, text=hint, foreground="#555555", wraplength=330).grid(row=row, column=2, sticky="w")
-        ttk.Checkbutton(master, text="Affichage régularisé sur le raster (jitter ignoré, REQ 4107) — "
+        ttk.Checkbutton(master, text="Affichage régularisé sur le raster (jitter ignoré) — "
                                      "décoché : horodatage brut du fichier (référence)",
                         variable=self.ignore_jitter).grid(row=7, column=0, columnspan=3, sticky="w", pady=4)
         ttk.Checkbutton(master, text="Masquer sur les courbes les horodatages aberrants isolés — décoché : "
                                      "affichés à leur instant brut (toujours signalés dans le TBM)",
                         variable=self.hide_aberrant).grid(row=8, column=0, columnspan=3, sticky="w", pady=2)
-        ttk.Label(master, text="Diagnostic opérateur associé (REQ 4106) :").grid(row=9, column=0, columnspan=3,
+        ttk.Label(master, text="Diagnostic opérateur associé :").grid(row=9, column=0, columnspan=3,
                                                                                 sticky="w")
         self.note = tk.Text(master, width=80, height=3, wrap="word")
         self.note.insert("1.0", ts.operator_note)
@@ -93,7 +93,7 @@ class TimeBaseDialog(Dialog):
         self.unit_to_others = tk.BooleanVar(value=False)
         if self.others_assumed:
             ttk.Checkbutton(master, text=f"Appliquer aussi cette unité aux {self.others_assumed} autre(s) "
-                                         "fichier(s) dont l'unité est supposée (REQ 2307)",
+                                         "fichier(s) dont l'unité est supposée",
                             variable=self.unit_to_others).grid(row=11, column=0, columnspan=3, sticky="w", pady=4)
         return rows[2][1]
 

@@ -55,11 +55,11 @@ Un fichier abîmé est lu sans rien inventer ni perdre en silence :
 | ligne avec trop ou trop peu de champs (ligne tronquée, valeur en trop) | **rejetée et listée** avec son extrait ; jamais complétée (sa dernière valeur pourrait être coupée) ; sa place apparaît comme un trou dans la base de temps |
 | guillemet non fermé, octets nuls (fichier interrompu pendant l'écriture) | seule la ligne concernée est rejetée ; un remplissage d'octets nuls en fin de fichier est signalé |
 | dernière ligne sans retour à la ligne | gardée si elle est complète, avec un avertissement « vérifier cette dernière mesure » |
-| préambule de métadonnées, lignes « # » | ignorés, signalés (non-conformité REQ 2303) |
+| préambule de métadonnées, lignes « # » | ignorés, signalés (non-conformité : métadonnées non prévues) |
 | pas de ligne d'en-têtes | la 1re ligne de mesures est **conservée**, colonnes nommées Colonne_1, Colonne_2… |
 | en-tête répété au milieu (fichiers mis bout à bout) | ignoré, signalé |
 | virgules en fin de ligne | tolérées |
-| octets non UTF-8 (fichier enregistré en Windows-1252), UTF-16 | fichier **lu**, marqué en **ERREUR** (non-conformité REQ 2302) avec la 1re ligne fautive |
+| octets non UTF-8 (fichier enregistré en Windows-1252), UTF-16 | fichier **lu**, marqué en **ERREUR** (non-conformité : encodage autre que UTF-8) avec la 1re ligne fautive |
 | valeur « nan », « inf » | valeur absente (comme une cellule vide), comptée par variable |
 | texte dans une colonne numérique, nombre ≠ 0/1 dans un Bool | non tracé, compté par variable ; le type reste modifiable |
 | virgule décimale dans un fichier à virgules | fichier refusé avec l'explication, aucune fausse colonne n'est créée |
@@ -285,7 +285,7 @@ traçabilité des requis.
 
 | Outils > Préférences | Valeur par défaut |
 |---|---|
-| Taille maximale d'un CSV (REQ 2310, « xxx Mo » à confirmer) | 500 Mo |
+| Taille maximale d'un CSV (valeur à confirmer) | 500 Mo |
 | Tolérance par défaut de la période | 10 % |
 | Unité supposée d'un compteur sans unité | ms |
 | Intervalles consécutifs pour un changement de fréquence | 10 |

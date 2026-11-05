@@ -29,12 +29,12 @@ class Issue:
     severity: Severity
     message: str
     line: int | None = None          # ligne physique du CSV (1 = en-tête)
-    requirement: str | None = None   # ex. "REQ_COMMON_KH_2301"
+    requirement: str | None = None   # ex. "REQ_COMMON_KH_2301" (traçabilité, non affiché)
 
     def as_text(self) -> str:
+        """Texte affiché : gravité, message, ligne du CSV (le requis n'est pas écrit à l'écran)."""
         where = f" (ligne {self.line})" if self.line is not None else ""
-        req = f" [{self.requirement}]" if self.requirement else ""
-        return f"{self.severity.label} : {self.message}{where}{req}"
+        return f"{self.severity.label} : {self.message}{where}"
 
 
 def worst(severities) -> Severity:

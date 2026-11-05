@@ -1,6 +1,6 @@
 # Historique des modifications — VISU PTBG
 
-Affiché par Information > Historique des modifications (REQ_COMMON_KH_5101).
+Affiché par Information > Historique des modifications.
 Chaque nouvelle version incrémente `ptbg/version.py` et ajoute une entrée en tête de ce
 fichier : ce qui change, pourquoi (requis, remarque de relecture, anomalie constatée),
 et le nombre de tests.
@@ -26,9 +26,10 @@ Remarques de Sébastien après ses premiers essais (package simulation10 : 3 pro
 | Axes | légende = nom de la variable (fichier seulement en cas d'homonymie) ; clic sur une courbe ou son entrée de légende = la sélectionner ; titre, unité et hauteur de chaque axe ; couleur, épaisseur et trait de chaque courbe | remarques sur la légende, la sélection, le titre, les unités, l'aspect et la hauteur |
 | Rapport | pages en paysage ou en portrait ; graphique et lectures d'un onglet sur la même page | remarques « paysage ou portrait », « page unique » |
 | Nuage X/Y | droite de régression retirée (corrélation r conservée) | remarque « virer la courbe de régression » |
+| Interface | plus aucun numéro de requis affiché dans les fenêtres, messages et diagnostics (ils restent dans le code et la traçabilité) | lisibilité |
 | Time Base Monitor | à l'écran, plus de texte sous le titre : statut par fichier au coin de la courbe, détail d'une anomalie au survol, diagnostic au clic droit ; le rapport garde le texte détaillé | remarque « ne pas afficher les avertissements sous le titre » |
 
-Non modifié : le « suivi souris » (remarque « semble inutile ») est le requis REQ 5402 ;
+Non modifié : le « suivi souris » (remarque « semble inutile ») est demandé par un requis (mode de lecture « tracking ») ;
 la question est posée dans le fichier de suivi. Deux nouveaux points ouverts (n° 19 et 20)
 portent sur les interprétations faites pour le TBM et la « page unique ».
 
@@ -54,7 +55,7 @@ les 18 questions à faire valider (20 depuis la version 1.1.0).
 | Graphiques (§ 4.4) | axes quadrillés ; courbes réduites pour l'affichage sans perdre les pics ; cellules vides marquées, trous de temps visibles ; légendes, noms des pistes et étiquettes des curseurs déplaçables à la souris ; bouton « Vue d'origine » |
 | Curseurs (§ 4.4) | simple, double (Δt, 1/Δt, ΔV), global, suivi souris avec panneau de lecture, horizontal avec franchissements, condition Bool, nuage X/Y avec corrélation ; valeurs lues sur les échantillons réels, jamais interpolées |
 | Traitement conditionnel (§ 4.5) | statistiques des signaux pendant qu'une condition Bool est vraie, export CSV (proposition, énoncé 5500 vide) |
-| Rapports (§ 5) | PDF automatique ou pas à pas, en-tête complet (REQ 6005), Time Base Monitor, lectures, page de traçabilité |
+| Rapports (§ 5) | PDF automatique ou pas à pas, en-tête complet, Time Base Monitor, lectures, page de traçabilité |
 | Projet | fichier `.ptbg.json` (chemins relatifs, réglages, onglets, curseurs, pages du rapport) |
 | Architecture (§ 6) | Python 3.11 de référence (code prévu pour 3.10 à 3.14), stdlib + numpy + matplotlib ; Windows 11 et SLES 15 SP7 depuis les mêmes sources, différences isolées dans `ptbg/system/compat.py` ; classeur des versions et dépendances (`docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx`) ; versions du poste Spyder 6 relevées |
 | Qualité | 145 tests automatisés (dont l'interface réelle et un banc de fichiers abîmés) ; contrôle automatique de la traçabilité ; banc de mesure des performances (`tools/banc_performance.py`) |

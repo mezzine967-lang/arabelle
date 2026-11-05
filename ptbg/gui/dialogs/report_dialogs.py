@@ -115,7 +115,7 @@ class PreferencesDialog(Dialog):
     """Paramètres persistants ; result = dict des valeurs validées."""
 
     FIELDS = (
-        ("max_file_size_mb", "Taille maximale d'un CSV (Mo) — REQ 2310 « xxxMo » à confirmer", float),
+        ("max_file_size_mb", "Taille maximale d'un CSV (Mo) — valeur à confirmer", float),
         ("tolerance_pct", "Tolérance par défaut de la période (%)", float),
         ("default_counter_unit", "Unité supposée d'un compteur sans unité (ns, us, ms, s)", str),
         ("frequency_change_min_run", "Intervalles consécutifs pour un changement de fréquence", int),

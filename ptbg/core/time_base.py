@@ -406,7 +406,7 @@ def _add_checks(result: TimeBaseAnalysis, codes: np.ndarray, estimated: float,
             text += " -> ÉCART supérieur à la tolérance"
     elif not any(abs(estimated * 1e3 - p) <= tol_frac * p + TIME_RESOLUTION_S * 1e3 for p in preferred_periods_ms):
         text += " (hors des valeurs préférées " + "/".join(f"{p:g}" for p in preferred_periods_ms) \
-                + " ms : information seulement, REQ 2100)"
+                + " ms : information seulement)"
     result.checks.append(Check("Valeur de la période", severity, text))
     # Stabilité de la période.
     unstable = counts.get(EventKind.PHASE, 0) + counts.get(EventKind.FREQUENCY, 0)
