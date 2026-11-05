@@ -19,14 +19,14 @@ diagnostic de base de temps de chaque fichier et l'environnement d'exécution.
 Mise en page (demandes du relecteur) : pages A4 en paysage ou en portrait,
 choisies à chaque génération ; rapport épuré :
 
-- page graphique : un bandeau d'une ligne (outil, projet, page), le titre de
-  la capture, puis UNIQUEMENT la zone graphique (axes et Time Base Monitor) ;
-  le pied de page dit qui a émis le rapport et quand ;
+- chaque page porte l'en-tête complet (REQ 6005) et, en pied de page, qui a
+  émis le rapport et quand ;
+- page graphique : le titre de la capture, puis UNIQUEMENT la zone graphique
+  (axes et Time Base Monitor) ;
 - pages « Lectures » : le tableau des lectures de curseurs de la capture ;
-- dernière page « Identification et traçabilité » : l'en-tête complet
-  (REQ 6005), un tableau d'une ligne par fichier source (statut, période,
-  écarts, anomalies, SHA-256), les seuls points à signaler (avertissements et
-  erreurs) et l'environnement d'exécution.
+- dernière page « Identification et traçabilité » : un tableau d'une ligne
+  par fichier source (statut, période, écarts, anomalies, SHA-256), les seuls
+  points à signaler (avertissements et erreurs) et l'environnement d'exécution.
 
 Le PDF est d'abord écrit dans un fichier temporaire du même dossier puis
 renommé : un export interrompu ne laisse jamais un PDF partiel.
@@ -58,8 +58,7 @@ from ptbg.system.environment import collect_environment
 from ptbg.version import full_name
 
 A4_IN = (11.69, 8.27)           # format A4 (grand côté, petit côté), en pouces
-HEADER_IN = 1.5                 # hauteur de l'en-tête complet (page de traçabilité)
-BANNER_IN = 0.75                # bandeau d'une ligne + titre (pages graphiques et lectures)
+HEADER_IN = 1.5                 # hauteur de l'en-tête complet et du titre de page
 FOOTER_IN = 0.35                # pied de page
 ROW_IN = 0.17                   # hauteur d'une ligne du tableau des lectures (pouces)
 READING_FONT = 6.5              # police du tableau des lectures
@@ -130,20 +129,7 @@ def _timeline(page: ReportPage, workspace: Workspace) -> Timeline:
 
 def _rows_per_page(height_in: float) -> int:
     """Lignes de lecture qui tiennent sur une page « Lectures »."""
-    return max(int((height_in - BANNER_IN - FOOTER_IN - 0.3) / ROW_IN) - 1, 5)
-
-
-def _draw_banner(fig: Figure, header: ReportHeader, number: int, count: int) -> None:
-    """Bandeau d'une ligne des pages graphiques et lectures : outil, projet et unité, page."""
-    height_in = fig.get_size_inches()[1]
-    y = 1 - 0.22 / height_in
-    project = " · ".join(part for part in (header.project_name, header.project_unit) if part != "—")
-    fig.text(0.03, y, header.tool + (f" · {project}" if project else ""), fontsize=7.5, va="center",
-             family=REPORT_FONT, color="#333333")
-    fig.text(0.97, y, f"Page {number}/{count}", fontsize=7.5, va="center", ha="right", family=REPORT_FONT,
-             color="#333333")
-    line = 1 - 0.36 / height_in
-    fig.add_artist(Line2D([0.03, 0.97], [line, line], color="#999999", lw=0.5))
+    return max(int((height_in - HEADER_IN - FOOTER_IN - 0.3) / ROW_IN) - 1, 5)
 
 
 def _fit(text: str, chars: int) -> str:
@@ -169,12 +155,17 @@ def _draw_readings(fig: Figure, rows, bottom: float, height: float, font: float)
 
 def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspace: Workspace,
                  settings: Settings, number: int, count: int) -> None:
-    """Page graphique : bandeau, titre, puis uniquement la zone graphique."""
+    """Page graphique : en-tête, titre, puis uniquement la zone graphique."""
     width_in, height_in = page_size(settings.report_orientation)
     fig = Figure(figsize=(width_in, height_in), dpi=100)
-    _draw_banner(fig, header, number, count)
+    files = [s for s in (workspace.find(fid) for fid in page.tab.file_ids()) if s is not None]
+    # Courbes tracées : celles des axes temporels, plus un nuage par axe X/Y renseigné.
+    curves = sum(len(axle.curves) + (axle.xy_x is not None and axle.xy_y is not None) for axle in page.tab.axles)
+    _draw_header(fig, header, [f"Page {number}/{count}", f"Fichiers sources : {len(files)}",
+                               f"Courbes : {curves}",
+                               f"Base de temps : {monitor_status(files).label if files else '—'}"])
     _draw_title(fig, page)
-    top_in = BANNER_IN + (0.15 if page.tab.comment else 0.0)
+    top_in = HEADER_IN + (0.15 if page.tab.comment else 0.0)
     graph_in = height_in - top_in - FOOTER_IN
     # Une sous-figure n'utilise que les RATIOS de sa grille (pas top/bottom) :
     # 3 bandes = bandeau et titre (masqués ici), zone graphique, pied de page.
@@ -195,11 +186,12 @@ def _render_readings(pdf: PdfPages, page: ReportPage, header: ReportHeader, sett
     chunks = [rows[i:i + per_page] for i in range(0, len(rows), per_page)]
     for part, chunk in enumerate(chunks, 1):
         fig = Figure(figsize=(width_in, height_in), dpi=100)
-        _draw_banner(fig, header, number + part - 1, count)
+        _draw_header(fig, header, [f"Page {number + part - 1}/{count}", "Lectures de curseurs",
+                                   f"Lectures : {len(rows)}"])
         suite = f" (suite {part}/{len(chunks)})" if part > 1 else ""
         _draw_title(fig, page, "Lectures de curseurs — ", suite)
         table_in = (len(chunk) + 1) * ROW_IN
-        top = 1 - (BANNER_IN + 0.2) / height_in
+        top = 1 - (HEADER_IN + 0.2) / height_in
         _draw_readings(fig, chunk, top - table_in / height_in, table_in / height_in, READING_FONT)
         _draw_footer(fig, header)
         pdf.savefig(fig)
@@ -207,14 +199,14 @@ def _render_readings(pdf: PdfPages, page: ReportPage, header: ReportHeader, sett
 
 
 def _draw_title(fig: Figure, page: ReportPage, prefix: str = "", suffix: str = "") -> None:
-    """Titre de la capture (et son commentaire) sous le bandeau."""
+    """Titre de la capture (et son commentaire) sous l'en-tête."""
     width_in, height_in = fig.get_size_inches()
     chars = int(width_in * 0.94 / (10 * CHAR_IN))
     title = f"{prefix}{page.tab.title} — capture du {page.captured_at}{suffix}"
-    fig.text(0.5, 1 - 0.58 / height_in, textwrap.shorten(title, chars), fontsize=10, fontweight="bold",
+    fig.text(0.5, 1 - 1.36 / height_in, textwrap.shorten(title, chars), fontsize=10, fontweight="bold",
              ha="center", family=REPORT_FONT)
     if page.tab.comment:
-        fig.text(0.5, 1 - 0.76 / height_in, textwrap.shorten(page.tab.comment, int(chars * 1.3)),
+        fig.text(0.5, 1 - 1.52 / height_in, textwrap.shorten(page.tab.comment, int(chars * 1.3)),
                  fontsize=7.5, style="italic", ha="center", family=REPORT_FONT)
 
 

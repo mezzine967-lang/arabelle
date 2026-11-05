@@ -259,11 +259,11 @@ condition est vraie. Copier ou exporter en CSV.
 
 | Page | Contenu |
 |---|---|
-| Graphique (une par capture) | un bandeau d'une ligne (outil, projet, n° de page), le titre de la capture, puis **uniquement les graphiques** (axes et Time Base Monitor) |
+| Graphique (une par capture) | l'en-tête, le titre de la capture, puis **uniquement les graphiques** (axes et Time Base Monitor) |
 | Lectures | le tableau des lectures de curseurs de la capture (sur plusieurs pages s'il le faut) |
-| Identification et traçabilité (dernière) | l'en-tête complet (outil, émetteur, date, projet, unité, référence, empreinte), un tableau d'une ligne par fichier source (statut, période, Δt conformes, écart max à la grille, anomalies, SHA-256), les seuls avertissements et erreurs, l'environnement |
+| Identification et traçabilité (dernière) | un tableau d'une ligne par fichier source (statut, période, Δt conformes, écart max à la grille, anomalies, SHA-256), les seuls avertissements et erreurs, l'environnement |
 
-Le pied de chaque page indique qui a émis le rapport et quand. Les étiquettes des curseurs ne se chevauchent jamais : si l'axe est trop bas,
+Chaque page porte l'en-tête complet (outil, émetteur, date, projet, unité, référence, empreinte du projet, fichiers sources) ; le pied de page indique qui a émis le rapport et quand. Les étiquettes des curseurs ne se chevauchent jamais : si l'axe est trop bas,
 elles se réduisent à l'instant (la valeur figure dans les pages de lectures).
 
 Le style suit celui des rapports de test du projet : police à chasse fixe, axes quadrillés,
