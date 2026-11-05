@@ -62,8 +62,8 @@ les 18 questions à faire valider (20 depuis la version 1.1.0).
 | Qualité | 145 tests automatisés (dont l'interface réelle et un banc de fichiers abîmés) ; contrôle automatique de la traçabilité ; banc de mesure des performances (`tools/banc_performance.py`) |
 
 Tests automatiques lancés sur le poste Windows 11 / Spyder 6 le 30/10/2026 : 144 sur 145
-OK ; le seul en erreur cherchait un document de référence absent du dossier (corrigé :
-ce contrôle est sauté quand le document n'est pas fourni).
+OK ; le seul en erreur demandait un fichier de référence absent du dossier (corrigé :
+ce contrôle est sauté quand le fichier n'est pas fourni).
 
 Reste à faire avant de déclarer l'outil qualifié : réponses aux points ouverts ; essai de
 réception sur le poste Windows 11 / Spyder 6 ; tests et essai de réception sur la

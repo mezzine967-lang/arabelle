@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Document de référence | **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026), `docs/specification/NCS00ICOMMON----ES010_RevA.docx` (à y placer s'il n'est pas présent) |
-| Contenu du Word | **64 lignes** de requis pour **63 identifiants** (REQ_COMMON_KH_2201 apparaît deux fois : « Analog signal type : float » et « Binary group signal ») |
-| Contrôle automatique | `python tools/verifier_tracabilite.py` (et `tests/test_architecture.py`) relit les identifiants **dans le Word** et vérifie que chacun est cité ici, dans le code et dans au moins un test |
+| Document de référence | **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026) |
+| Contenu de la spécification | **64 lignes** de requis pour **63 identifiants** (REQ_COMMON_KH_2201 apparaît deux fois : « Analog signal type : float » et « Binary group signal ») |
+| Contrôle automatique | `python tools/verifier_tracabilite.py` (et `tests/test_architecture.py`) relit les identifiants **dans la spécification** et vérifie que chacun est cité ici, dans le code et dans au moins un test |
 | Version tableur | `docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx`, avec l'onglet « Points ouverts » (questions à faire valider par le rédacteur de la spécification) |
 
 ## Synthèse
@@ -24,7 +24,7 @@ ouverts avec le rédacteur de la spécification qui le confirmera. Le code est p
 Windows 11 et SLES 15 SP7 ; il ne pourra être dit officiellement compatible qu'après les
 essais sur ces postes.
 
-Sections ci-dessous (numérotation du Word) : 2.1 Caractéristiques des sources ·
+Sections ci-dessous (numérotation de la spécification) : 2.1 Caractéristiques des sources ·
 2.2 Contenu des sources · 2.3 Caractéristiques des fichiers · 6 Architecture ·
 3.1 Base de temps · 4.1 Fenêtre principale · 4.2 Arbre des données · 4.3 Modèles ·
 4.4 Outils graphiques · 4.5 Traitement conditionnel · 5 Sortie (rapport) ·
@@ -65,7 +65,7 @@ Qualification restant à faire.
 | REQ_COMMON_KH_2309 | Noms des variables PLC | Noms vides et doublons renommés et signalés | `core/csv_reader.py` (`normalize_header`) | `test_csv_reader.test_header_names_normalized` | Implémenté et testé |
 | REQ_COMMON_KH_2310 | Taille maximale « xxxMo » | Paramètre `max_file_size_mb` (défaut 500 Mo, Outils > Préférences) ; fichier refusé au-delà ; valeur à fixer avec le banc `tools/banc_performance.py` sur les postes cibles | `config.py`, `core/csv_reader.py` | `test_csv_reader.test_size_limit` | Implémenté — interprétation à valider (valeur xxx) |
 
-## 6 (Word) Architecture
+## 6 Architecture
 
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
@@ -153,5 +153,5 @@ Qualification restant à faire.
 
 | Essai | Requis | Comment | Repère actuel |
 |---|---|---|---|
-| Windows 11 / Spyder 6 au poste, et VM Linux SLES 15 SP7 fournie par l'entreprise | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | poste Windows 11 / Spyder 6 : outil lancé avec un CSV du projet et tests automatiques de la version 1.0.0 lancés le 30/10/2026 (144 sur 145 OK, le dernier cherchait le Word de la spécification, absent du dossier ; corrigé), tests de la 1.1.0 à relancer, essai de 15 minutes à faire ; VM : tests et essai à faire |
+| Windows 11 / Spyder 6 au poste, et VM Linux SLES 15 SP7 fournie par l'entreprise | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | poste Windows 11 / Spyder 6 : outil lancé avec un CSV du projet et tests automatiques de la version 1.0.0 lancés le 30/10/2026 (144 sur 145 OK, le dernier demandait un fichier de référence absent du dossier ; corrigé), tests de la 1.1.0 à relancer, essai de 15 minutes à faire ; VM : tests et essai à faire |
 | Volumes réels de PTBG (taille, nombre de colonnes, de fichiers) pour confirmer la valeur de REQ 2310 | REQ_COMMON_KH_2310, 4105 | `python tools/banc_performance.py` sur de vrais fichiers, puis `--generer 500` | à mesurer sur les postes cibles (pas de valeur retenue à ce jour) |

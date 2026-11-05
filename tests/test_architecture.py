@@ -8,7 +8,7 @@
 - REQ_COMMON_KH_3007 : aucune fonction inutile ;
 - REQ_COMMON_KH_3000 / 3001 : syntaxe compatible avec la version minimale de Python ;
 - REQ_COMMON_KH_5300 : modèles de disposition cohérents ;
-- traçabilité : chaque requis du Word est cité dans la matrice, le code et les tests.
+- traçabilité : chaque requis de la spécification est cité dans la matrice, le code et les tests.
 """
 import ast
 import io
@@ -151,13 +151,13 @@ class ArchitectureTests(unittest.TestCase):
                 self.assertTrue(environment._os_description().startswith("Windows 10 "))
 
     def test_every_requirement_is_traced(self):
-        """Aucun requis du Word laissé de côté : matrice + code + test. Le Word de la
-        spécification n'est pas toujours fourni avec l'outil : sans lui, le contrôle est
-        sauté (et dit pourquoi) au lieu d'échouer."""
+        """Aucun requis de la spécification laissé de côté : matrice + code + test. La
+        spécification n'est pas fournie avec l'outil : sans elle, le contrôle est sauté
+        (et dit pourquoi) au lieu d'échouer."""
         sys.path.insert(0, str(ROOT / "tools"))
         import verifier_tracabilite
-        if not verifier_tracabilite.SPEC.exists():
-            self.skipTest("spécification Word absente de docs/specification/ : contrôle de traçabilité non lancé")
+        if verifier_tracabilite.spec_path() is None:
+            self.skipTest("spécification absente de docs/specification/ : contrôle de traçabilité non lancé")
         self.assertEqual(len(verifier_tracabilite.spec_requirements()), 63)
         self.assertEqual(verifier_tracabilite.check(), [])
 

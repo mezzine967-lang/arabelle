@@ -1,18 +1,18 @@
-"""Vérifie que CHAQUE requis du document Word est tracé (aucun requis oublié).
+"""Vérifie que CHAQUE requis de la spécification est tracé (aucun requis oublié).
 
 Usage : python tools/verifier_tracabilite.py
 
-Pour chaque identifiant REQ_COMMON_KH_xxxx lu dans
-docs/specification/NCS00ICOMMON----ES010_RevA.docx (bibliothèque standard :
-zipfile + expressions régulières), le script contrôle qu'il est cité :
+Pour chaque identifiant REQ_COMMON_KH_xxxx lu dans le fichier .docx placé dans
+docs/specification/ (bibliothèque standard : zipfile + expressions
+régulières), le script contrôle qu'il est cité :
 
 1. dans la matrice docs/TRACABILITE_REQUIS.md ;
 2. dans le code (ptbg/ ou MAIN.py) — sauf requis purement documentaires ;
 3. dans au moins un test (tests/).
 
-Code de sortie 0 si tout est tracé, 1 sinon (utilisable en intégration), 2 si le
-document Word n'a pas été placé dans docs/specification/ (il n'est pas toujours
-fourni avec l'outil : c'est le document de la spécification elle-même).
+Code de sortie 0 si tout est tracé, 1 sinon (utilisable en intégration), 2 si
+aucun fichier .docx n'a été placé dans docs/specification/ (il n'est pas fourni
+avec l'outil).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = ROOT / "docs" / "specification" / "NCS00ICOMMON----ES010_RevA.docx"
+SPEC_DIR = ROOT / "docs" / "specification"
 MATRIX = ROOT / "docs" / "TRACABILITE_REQUIS.md"
 
 # Requis vérifiés par la documentation et les tests d'architecture plutôt que
@@ -30,9 +30,14 @@ MATRIX = ROOT / "docs" / "TRACABILITE_REQUIS.md"
 DOCUMENTARY = {"REQ_COMMON_KH_3006", "REQ_COMMON_KH_3007"}
 
 
-def spec_requirements(path: Path = SPEC) -> dict[str, int]:
-    """Identifiants du Word et nombre d'occurrences (2201 apparaît deux fois)."""
-    xml = zipfile.ZipFile(path).read("word/document.xml").decode("utf-8")
+def spec_path() -> Path | None:
+    """Fichier .docx placé dans docs/specification/, ou None."""
+    return next(iter(sorted(SPEC_DIR.glob("*.docx"))), None)
+
+
+def spec_requirements(path: Path | None = None) -> dict[str, int]:
+    """Identifiants de la spécification et nombre d'occurrences (2201 apparaît deux fois)."""
+    xml = zipfile.ZipFile(path or spec_path()).read("word/document.xml").decode("utf-8")
     text = re.sub(r"<[^>]+>", "", xml)
     found: dict[str, int] = {}
     for identifier in re.findall(r"REQ_COMMON_KH_\d{4}", text):
@@ -63,12 +68,12 @@ def check() -> list[str]:
 
 
 if __name__ == "__main__":
-    if not SPEC.exists():
-        print(f"Spécification absente : placer {SPEC.name} dans docs/specification/ pour lancer le contrôle.")
+    if spec_path() is None:
+        print("Spécification absente : placer son fichier .docx dans docs/specification/ pour lancer le contrôle.")
         sys.exit(2)
     requirements = spec_requirements()
     problems = check()
-    print(f"{len(requirements)} identifiants ({sum(requirements.values())} lignes) dans {SPEC.name}")
+    print(f"{len(requirements)} identifiants ({sum(requirements.values())} lignes) dans la spécification")
     for problem in problems:
         print("  MANQUE :", problem)
     print("Traçabilité complète." if not problems else f"{len(problems)} manque(s).")

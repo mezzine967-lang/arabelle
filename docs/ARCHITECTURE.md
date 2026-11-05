@@ -137,7 +137,7 @@ classement dans `core/time_base.py::_classify`, le style dans `plotting/styles.p
 ```
 python -m unittest discover -s tests -v          # tout (IHM ignorée sans écran)
 xvfb-run python -m unittest discover -s tests    # Linux sans écran : IHM incluse
-python tools/verifier_tracabilite.py             # chaque requis du Word est tracé
+python tools/verifier_tracabilite.py             # chaque requis est tracé
 python tools/audit_environnement.py              # versions présentes vs figées
 python tools/banc_performance.py f.csv           # durées et mémoire sur de vrais fichiers
 ```

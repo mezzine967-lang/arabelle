@@ -2,7 +2,7 @@
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
 Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
-**NCS/00/I/COMMON----/ES/010 Rev. A** (document Word à placer dans `docs/specification/` pour le contrôle automatique de traçabilité).
+**NCS/00/I/COMMON----/ES/010 Rev. A**.
 
 Il lit un ou plusieurs CSV (un par PLC), **contrôle la base de temps** de chacun
 (période, stabilité, croissance continue, trous, déphasage, changements de fréquence),
@@ -58,7 +58,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | `data/demo/` | CSV de démonstration (3 PLC + 1 fichier non conforme) |
 | `data/exemples/` | CSV reçus du projet (inchangés) |
 | `data/references_simulation/` | scripts de simulation de référence reçus (inchangés, hors outil) |
-| `docs/` | documents ci-dessus, récapitulatifs Excel, captures ; `docs/specification/` reçoit le Word de la spécification |
+| `docs/` | documents ci-dessus, récapitulatifs Excel, captures |
 
 ## 4. État des requis
 
@@ -85,7 +85,7 @@ Les 64 lignes de la spécification sont tracées dans
 
 ```
 python -m unittest discover -s tests -v     # 155 tests (sous Linux sans bureau : xvfb-run devant)
-python tools/verifier_tracabilite.py        # chaque requis du Word : matrice + code + test
+python tools/verifier_tracabilite.py        # chaque requis : matrice + code + test
 python tools/audit_environnement.py         # versions présentes / versions figées
 python tools/banc_performance.py f.csv      # durées et mémoire (ou --generer 500 : fichier de 500 Mo)
 ```
