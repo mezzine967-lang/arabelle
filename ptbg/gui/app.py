@@ -31,7 +31,7 @@ from ptbg.gui.analysis_tab import HEIGHT_STEP
 from ptbg.gui.dialogs.analysis_dialogs import (ConditionalProcessingWindow, CurveStyleDialog, GroupDialog,
                                                HorizontalCursorDialog, XYDialog)
 from ptbg.gui.dialogs.base import ask_text
-from ptbg.gui.dialogs.report_dialogs import HeaderDialog, PagesWindow, PreferencesDialog
+from ptbg.gui.dialogs.report_dialogs import HeaderDialog, OrientationDialog, PagesWindow, PreferencesDialog
 from ptbg.gui.dialogs.time_base_dialog import TimeBaseDialog
 from ptbg.gui.info_windows import TextWindow, read_document, sources_text, version_text
 from ptbg.gui.tasks import BackgroundTask
@@ -690,13 +690,6 @@ class Application:
         menu.add_command(label="Masquer la légende", command=lambda: tab.set_legend(index, "hidden"))
 
     # --------------------------------------------------------------- rapport
-    def set_report_orientation(self, orientation: str) -> None:
-        """Pages du rapport en paysage ou en portrait (choix conservé dans les préférences)."""
-        self.settings.report_orientation = orientation
-        error = self.settings.save()
-        self.notify(error or f"Rapport : pages en {'portrait' if orientation == 'portrait' else 'paysage'}.",
-                    "AVERTISSEMENT" if error else "INFO")
-
     def edit_report_header(self) -> None:
         """Saisie des champs libres de l'en-tête du rapport (REQ 6005)."""
         dialog = HeaderDialog(self.root, self.settings)
@@ -750,7 +743,14 @@ class Application:
         self._export(self.report_pages, f"rapport_pas_a_pas_{datetime.now():%Y%m%d_%H%M%S}.pdf")
 
     def _export(self, pages: list[ReportPage], default_name: str) -> None:
-        """Demande le fichier, construit l'en-tête, écrit le PDF et propose de l'ouvrir."""
+        """Demande l'orientation des pages (portrait ou paysage, la dernière proposée) puis
+        le fichier, construit l'en-tête, écrit le PDF et propose de l'ouvrir."""
+        orientation = OrientationDialog(self.root, self.settings.report_orientation).result
+        if orientation is None:
+            return
+        if orientation != self.settings.report_orientation:
+            self.settings.report_orientation = orientation
+            self.settings.save()
         path = filedialog.asksaveasfilename(parent=self.root, title="Enregistrer le rapport PDF",
                                             defaultextension=".pdf", initialfile=default_name,
                                             filetypes=[("PDF", "*.pdf")])

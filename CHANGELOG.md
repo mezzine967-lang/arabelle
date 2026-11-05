@@ -7,7 +7,7 @@ et le nombre de tests.
 
 | Version | Date | En une ligne | Tests |
 |---|---|---|---|
-| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 154 |
+| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 155 |
 | 1.0.0 | 2026-10-29 | première version livrée pour revue des requis | 145 |
 
 ## 1.1.0 — 2026-11-05 — remarques du relecteur sur les premiers essais
@@ -24,14 +24,15 @@ Remarques issues des premiers essais (package simulation10 : 3 producteurs,
 | Global | Ctrl+Z / Ctrl+Y (menu Édition) ; bouton « maison » = toute la durée même après un changement d'onglet ; fermer un paquet ferme les onglets qui ne montraient que lui | remarques « fausses manips », « Home sans effet », « onglets 7 à 10 restés ouverts » |
 | Curseurs | activer un curseur désactive la loupe et le place dans la vue affichée (curseur global au centre) | remarques « zoom non volontaire », « curseur à recentrer » |
 | Axes | légende = nom de la variable (fichier seulement en cas d'homonymie) ; clic sur une courbe ou son entrée de légende = la sélectionner ; titre, unité et hauteur de chaque axe ; couleur, épaisseur et trait de chaque courbe | remarques sur la légende, la sélection, le titre, les unités, l'aspect et la hauteur |
-| Rapport | pages en paysage ou en portrait ; graphique et lectures d'un onglet sur la même page | remarques « paysage ou portrait », « page unique » |
+| Rapport | orientation demandée à chaque génération (paysage ou portrait) ; zone graphique seule sur sa page, lectures sur les pages suivantes | remarques « paysage ou portrait », « page unique » |
+| Curseurs | mode « suivi souris » retiré ; le panneau de lecture se met à jour en glissant le curseur | demande du relecteur |
 | Nuage X/Y | droite de régression retirée (corrélation r conservée) | remarque « virer la courbe de régression » |
 | Interface | plus aucun numéro de requis ni référence du document de spécification affichés dans les fenêtres, messages, diagnostics et rapports (ils restent dans le code et la traçabilité) | lisibilité |
 | Time Base Monitor | à l'écran, plus de texte sous le titre : statut par fichier au coin de la courbe, détail d'une anomalie au survol, diagnostic au clic droit ; le rapport garde le texte détaillé | remarque « ne pas afficher les avertissements sous le titre » |
 
-Non modifié : le « suivi souris » (remarque « semble inutile ») est demandé par un requis (mode de lecture « tracking ») ;
-la question est posée dans le fichier de suivi. Deux nouveaux points ouverts (n° 19 et 20)
-portent sur les interprétations faites pour le TBM et la « page unique ».
+Deux nouveaux points ouverts (n° 19 et 20) portent sur le détail du TBM à l'écran et sur
+l'énoncé du requis « tracking reading mode », à mettre à jour après le retrait du suivi souris.
+Un projet enregistré par la 1.0.0 s'ouvre toujours (réglages retirés ignorés).
 
 Les tests de cette version restent à lancer sur le poste Windows 11 / Spyder 6, puis sur la
 VM Linux SLES 15 SP7 fournie par l'entreprise.

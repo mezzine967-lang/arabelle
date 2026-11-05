@@ -5,7 +5,8 @@ Requis servis (l'état est dans ``TabState``, le dessin dans plotting/renderer) 
 - REQ_COMMON_KH_5104 / 5106 : zone graphique principale, un onglet par disposition ;
 - REQ_COMMON_KH_5400 : curseur vertical simple, activé AXE PAR AXE (axe actif) ;
 - REQ_COMMON_KH_5401 : il porte l'instant et la valeur de la courbe sélectionnée ;
-- REQ_COMMON_KH_5402 : mode suivi (le curseur suit la souris) + panneau droit ;
+- REQ_COMMON_KH_5402 : panneau de lecture à droite, mis à jour quand on déplace un curseur
+  (le mode « suivi souris » a été retiré à la demande du relecteur) ;
 - REQ_COMMON_KH_5403 / 5404 : double curseur, instants posés automatiquement ;
 - REQ_COMMON_KH_5405 : curseur global sur tous les axes, déplacés ensemble ;
 - REQ_COMMON_KH_5406 : curseur horizontal réservé aux axes analogiques ;
@@ -138,7 +139,6 @@ class AnalysisTab(ttk.Frame):
         self.curve_choice = tk.StringVar()
         self.cursor_mode = tk.StringVar(value="none")
         self.global_cursor = tk.BooleanVar(value=self.state.global_cursor)
-        self.tracking = tk.BooleanVar(value=self.state.tracking)
         self.show_panel = tk.BooleanVar(value=True)
         bar.add(ttk.Label(bar, text=f"Modèle : {self.state.template.name}"), gap=10)
         axle = ttk.Frame(bar)
@@ -164,8 +164,6 @@ class AnalysisTab(ttk.Frame):
         bar.add(cursor, gap=8, new_line=True)
         bar.add(ttk.Checkbutton(bar, text="Curseur global", variable=self.global_cursor,
                                 command=self._toggle_global), gap=8)
-        bar.add(ttk.Checkbutton(bar, text="Suivi souris", variable=self.tracking,
-                                command=self._toggle_tracking), gap=8)
         bar.add(ttk.Button(bar, text="Curseur horizontal…", command=self.controller.horizontal_cursor))
         bar.add(ttk.Button(bar, text="Nuage X/Y…", command=self.controller.configure_xy))
         self.tbm_button = bar.add(ttk.Button(bar, text="Masquer le TBM", width=15, command=self.toggle_monitor))
@@ -282,7 +280,6 @@ class AnalysisTab(ttk.Frame):
         self._snapshot = previous
         self.active_axle = min(self.active_axle, len(self.state.axles) - 1)
         self.global_cursor.set(self.state.global_cursor)
-        self.tracking.set(self.state.tracking)
         self.master.tab(self, text=self.state.title)
         self.redraw()
         return True
@@ -370,7 +367,6 @@ class AnalysisTab(ttk.Frame):
             self.curve_choice.set("")
         self.cursor_mode.set(axle.cursor_mode)
         self.global_cursor.set(self.state.global_cursor)
-        self.tracking.set(self.state.tracking)
 
     def _select_curve(self, index: int) -> None:
         """Change la courbe sélectionnée de l'axe actif (valeur portée par le curseur)."""
@@ -508,16 +504,6 @@ class AnalysisTab(ttk.Frame):
             self.leave_navigation()
             self.state.t_global = self._view_fraction(0.5)
         self.update_cursors()
-
-    def _toggle_tracking(self) -> None:
-        """Case « Suivi souris » : le curseur suit la souris (REQ 5402)."""
-        self.state.tracking = self.tracking.get()
-        if self.state.tracking:
-            self.leave_navigation()
-            if not self.state.global_cursor and self.axle().cursor_mode == "none":
-                self.set_cursor_mode("single")
-                self.cursor_mode.set("single")
-        self._checkpoint()
 
     def _toggle_panel(self) -> None:
         """Affiche ou masque le panneau de lecture."""
@@ -768,7 +754,7 @@ class AnalysisTab(ttk.Frame):
             self.update_cursors()
 
     def _on_motion(self, event) -> None:
-        """Mouvement : glisser un curseur ou suivi souris, regroupés par ``after_idle`` ;
+        """Mouvement : glisser un curseur (mouvements regroupés par ``after_idle``) ;
         bulle de détail au survol d'un marqueur du Time Base Monitor."""
         if self.renderer is None or self.toolbar.mode or self._grab:
             return
@@ -776,18 +762,9 @@ class AnalysisTab(ttk.Frame):
             self._blit()
         if event.inaxes is None:
             return
-        if self._drag:
-            self._pending_motion = (self._drag, event)
-        elif self.state.tracking and event.inaxes is not self.renderer.tbm_plot:
-            index = self.renderer.axle_index_of(event.inaxes)
-            if index is None or self.state.axles[index].kind == "xy":
-                return
-            if self.state.global_cursor:
-                self._pending_motion = ("G", event)
-            elif index == self.active_axle and self.state.axles[index].cursor_mode != "none":
-                self._pending_motion = ("C1", event)
-        else:
+        if not self._drag:
             return
+        self._pending_motion = (self._drag, event)
         self.after_idle(self._apply_motion)        # regroupe les mouvements rapides
 
     def _apply_motion(self) -> None:

@@ -218,7 +218,6 @@ aucune valeur n'est jamais inventée ni interpolée.
 | Outil | Utilisation |
 |---|---|
 | Curseur vertical simple | « Curseur vertical > Curseur simple » : sur l'axe actif ; étiquette = instant + valeur de la courbe sélectionnée |
-| Suivi souris | le curseur suit la souris ; le panneau de droite liste toutes les courbes de l'axe |
 | Double curseur | C1 et C2 posés automatiquement ; Δt, 1/Δt et ΔV par courbe |
 | Curseur global | une ligne sur tous les axes (TBM compris), déplacée ensemble ; posée au centre de la vue affichée à chaque activation |
 | Curseur horizontal | sur une courbe Float sélectionnée : niveau, franchissements montants / descendants |
@@ -249,16 +248,16 @@ condition est vraie. Copier ou exporter en CSV.
 | Commande | Effet |
 |---|---|
 | **Rapport > En-tête…** | nom du projet, unité / tranche, émetteur, référence |
-| **Rapport automatique** (Ctrl+P) | une page de l'onglet actif |
+| **Rapport automatique** (Ctrl+P) | la page graphique de l'onglet actif, ses lectures et la traçabilité |
 | **+ Page pas à pas** (Ctrl+K) | capture la vue active (zoom, curseurs, légendes, nuage X/Y, condition) avec un commentaire ; recommencer après chaque réglage |
 | **Gérer les pages…** | ordonner, commenter, supprimer les captures, puis **Générer le PDF** |
-| **Pages en paysage / Pages en portrait** | format A4 des pages (choix conservé) |
 
-Chaque onglet tient sur **sa** page, graphique et tableau des lectures compris (police du
-tableau réduite si besoin) ; seul un nombre de lectures qui ne tiendrait pas même ainsi
-renvoie la suite en annexe, ce qui est signalé sur la page. Les étiquettes des curseurs ne
-se chevauchent jamais : si l'axe est trop bas, elles se réduisent à l'instant (la valeur
-figure dans le tableau des lectures).
+À chaque génération, l'outil demande l'orientation des pages A4 : **paysage** ou
+**portrait** (le dernier choix est proposé). Chaque capture occupe **une page à elle
+seule** (en-tête, titre, zone graphique avec son Time Base Monitor) ; ses **lectures de
+curseurs** suivent sur une ou plusieurs pages « Lectures », puis vient la page de
+traçabilité. Les étiquettes des curseurs ne se chevauchent jamais : si l'axe est trop bas,
+elles se réduisent à l'instant (la valeur figure dans les pages de lectures).
 
 Chaque page, au format des rapports de test du projet (police à chasse fixe, axes
 quadrillés, légendes à droite), comporte l'en-tête — à gauche : version de l'outil,

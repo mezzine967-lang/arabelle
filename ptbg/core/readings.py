@@ -1,8 +1,8 @@
 """Lectures des curseurs, communes au panneau droit et au rapport PDF.
 
 - REQ_COMMON_KH_5401 : curseur simple -> instant + valeur de la courbe sélectionnée ;
-- REQ_COMMON_KH_5402 : mode suivi -> liste des valeurs de TOUTES les courbes
-  de l'axe (panneau de lecture à droite) ;
+- REQ_COMMON_KH_5402 : liste des valeurs de TOUTES les courbes de l'axe au
+  curseur (panneau de lecture à droite) ;
 - REQ_COMMON_KH_5403 / 5404 : double curseur -> instants C1, C2 automatiques,
   Δt, 1/Δt et écart de valeur par courbe ;
 - REQ_COMMON_KH_5405 : curseur global -> lecture sur tous les axes ;

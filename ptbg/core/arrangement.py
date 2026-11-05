@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 from ptbg.core.conditional import Condition
 
@@ -119,7 +119,6 @@ class TabState:
     axles: list[AxleState]
     global_cursor: bool = False           # REQ 5405
     t_global: float | None = None
-    tracking: bool = False                # suivi souris (REQ 5402)
     xlim: list | None = None              # zoom temporel commun
     tbm_visible: bool = True              # REQ 4103
     comment: str = ""                     # commentaire de page (rapport pas à pas)
@@ -157,14 +156,22 @@ class TabState:
 
     @classmethod
     def from_dict(cls, data: dict) -> "TabState":
-        """Reconstruit un état depuis ``to_dict`` (projet, page de rapport)."""
+        """Reconstruit un état depuis ``to_dict`` (projet, page de rapport). Les clés
+        inconnues (réglage retiré d'une version, ex. « tracking » de la 1.0.0) sont
+        ignorées : un projet d'une version précédente s'ouvre toujours."""
         axles = []
         for raw in data.get("axles", []):
-            raw = dict(raw)
-            raw["curves"] = [CurveRef(**c) for c in raw.get("curves", [])]
+            raw = _known(AxleState, raw)
+            raw["curves"] = [CurveRef(**_known(CurveRef, c)) for c in raw.get("curves", [])]
             for key in ("xy_x", "xy_y"):
-                raw[key] = CurveRef(**raw[key]) if raw.get(key) else None
+                raw[key] = CurveRef(**_known(CurveRef, raw[key])) if raw.get(key) else None
             raw["h_condition"] = Condition.from_dict(raw["h_condition"]) if raw.get("h_condition") else None
             axles.append(AxleState(**raw))
-        fields_ = {k: v for k, v in data.items() if k != "axles"}
+        fields_ = {k: v for k, v in _known(cls, data).items() if k != "axles"}
         return cls(axles=axles, **fields_)
+
+
+def _known(kind, data: dict) -> dict:
+    """Copie de ``data`` limitée aux champs du dataclass ``kind``."""
+    names = {f.name for f in fields(kind)}
+    return {key: value for key, value in data.items() if key in names}

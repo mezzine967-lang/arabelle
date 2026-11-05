@@ -16,12 +16,10 @@
 Une dernière page « Traçabilité » donne les empreintes SHA-256 complètes, le
 diagnostic de base de temps de chaque fichier et l'environnement d'exécution.
 
-Mise en page (remarques du relecteur) : pages A4 en paysage ou en portrait
-(Rapport > Pages en paysage / portrait) ; chaque onglet tient sur SA page,
-graphique et tableau des lectures compris : le tableau prend la place qu'il
-lui faut (jusqu'à ``TABLE_SHARE`` de la hauteur, police réduite si besoin).
-Seul un nombre de lectures qui ne tiendrait pas même ainsi renvoie la suite
-en annexe, ce qui est signalé sur la page.
+Mise en page (demandes du relecteur) : pages A4 en paysage ou en portrait,
+choisies à chaque génération ; la zone graphique d'un onglet occupe SEULE sa
+page (pas de tableau dessous) ; ses lectures de curseurs suivent sur une ou
+plusieurs pages « Lectures », puis vient la page de traçabilité.
 
 Le PDF est d'abord écrit dans un fichier temporaire du même dossier puis
 renommé : un export interrompu ne laisse jamais un PDF partiel.
@@ -53,7 +51,8 @@ from ptbg.version import full_name
 A4_IN = (11.69, 8.27)           # format A4 (grand côté, petit côté), en pouces
 HEADER_IN = 1.5                 # hauteur de l'en-tête et du titre de page
 FOOTER_IN = 0.35                # pied de page
-TABLE_SHARE = 0.34              # part maximale de la hauteur laissée au tableau des lectures
+ROW_IN = 0.17                   # hauteur d'une ligne du tableau des lectures (pouces)
+READING_FONT = 6.5              # police du tableau des lectures
 CHAR_IN = 0.6 / 72              # largeur d'un caractère à chasse fixe, par point de police (pouces)
 TABLE_COLUMNS = (0.06, 0.07, 0.33, 0.2, 0.26, 0.08)   # largeur des colonnes des lectures (fraction)
 
@@ -113,25 +112,22 @@ def _draw_header(fig: Figure, header: ReportHeader, summary: list[str]) -> None:
     fig.add_artist(Line2D([0.03, 0.97], [line, line], color="#555555", lw=0.6))
 
 
-def _reading_layout(count: int, height_in: float) -> tuple[int, float, float]:
-    """(lignes imprimées, taille de police, hauteur d'une ligne en pouces) pour ``count``
-    lectures : police normale si elles tiennent dans ``TABLE_SHARE`` de la page, sinon
-    réduite, sinon le maximum de lignes à la police réduite (suite en annexe)."""
-    room = TABLE_SHARE * height_in - 0.1
-    for font, row_in in ((6.5, 0.15), (5.5, 0.125)):
-        if (count + 1) * row_in <= room:
-            return count, font, row_in
-    return max(int(room / 0.125) - 2, 4), 5.5, 0.125
+def _timeline(page: ReportPage, workspace: Workspace) -> Timeline:
+    """Axe des temps de la capture (relatif ou absolu, date connue ou non)."""
+    loaded = workspace.loaded_files()
+    return Timeline(page.time_mode, page.ref_ns, all(s.conversion.date_known for s in loaded) if loaded else True)
 
 
-def _draw_readings(fig: Figure, rows, bottom: float, height: float, limit: int, font: float) -> None:
-    """Tableau des lectures de curseurs sous le graphique (``limit`` lignes, suite en annexe)."""
+def _rows_per_page(height_in: float) -> int:
+    """Lignes de lecture qui tiennent sur une page « Lectures »."""
+    return max(int((height_in - HEADER_IN - FOOTER_IN - 0.3) / ROW_IN) - 1, 5)
+
+
+def _draw_readings(fig: Figure, rows, bottom: float, height: float, font: float) -> None:
+    """Tableau des lectures de curseurs, remplissant le cadre donné (fractions de page)."""
     ax = fig.add_axes([0.03, bottom, 0.94, height])
     ax.set_axis_off()
-    shown = [row.as_tuple() for row in rows[:limit]]
-    if len(rows) > limit:
-        shown.append(("…", "", f"{len(rows) - limit} lecture(s) supplémentaire(s) en annexe",
-                      "", "", ""))
+    shown = [row.as_tuple() for row in rows]
     # Texte de chaque cellule raccourci à la largeur de sa colonne.
     table_in = fig.get_size_inches()[0] * 0.94
     chars = [max(int(share * table_in / (font * CHAR_IN)) - 1, 6) for share in TABLE_COLUMNS]
@@ -144,48 +140,71 @@ def _draw_readings(fig: Figure, rows, bottom: float, height: float, limit: int, 
 
 
 def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspace: Workspace,
-                 settings: Settings, number: int, count: int) -> list:
-    """Une page : en-tête, titre, zone graphique, lectures, pied de page ; tout l'onglet
-    tient sur la page (voir l'en-tête du module)."""
+                 settings: Settings, rows: list, number: int, count: int) -> None:
+    """Page graphique : en-tête, titre, zone graphique seule sur la page, pied de page."""
     width_in, height_in = page_size(settings.report_orientation)
     fig = Figure(figsize=(width_in, height_in), dpi=100)
-    loaded = workspace.loaded_files()
-    timeline = Timeline(page.time_mode, page.ref_ns,
-                        all(s.conversion.date_known for s in loaded) if loaded else True)
-    rows = compute_readings(page.tab, workspace, timeline)
     files = [s for s in (workspace.find(fid) for fid in page.tab.file_ids()) if s is not None]
     # Courbes tracées : celles des axes temporels, plus un nuage par axe X/Y renseigné.
     curves = sum(len(axle.curves) + (axle.xy_x is not None and axle.xy_y is not None) for axle in page.tab.axles)
+    readings = f"Lectures de curseurs : {len(rows)}" + (f" (page {number + 1})" if rows else "")
     _draw_header(fig, header, [f"Page {number}/{count}", f"Fichiers sources : {len(files)}",
-                               f"Courbes : {curves}", f"Lectures de curseurs : {len(rows)}",
+                               f"Courbes : {curves}", readings,
                                f"Base de temps : {monitor_status(files).label if files else '—'}"])
-    title = f"{page.tab.title} — capture du {page.captured_at}"
-    title_chars = int(width_in * 0.94 / (10 * CHAR_IN))
-    fig.text(0.5, 1 - 1.36 / height_in, textwrap.shorten(title, title_chars), fontsize=10, fontweight="bold",
+    _draw_title(fig, page)
+    top_in = HEADER_IN + (0.15 if page.tab.comment else 0.0)
+    graph_in = height_in - top_in - FOOTER_IN
+    # Une sous-figure n'utilise que les RATIOS de sa grille (pas top/bottom) :
+    # 3 bandes = en-tête (masqué ici), zone graphique, pied de page.
+    bands = fig.add_gridspec(3, 1, height_ratios=[top_in, graph_in, FOOTER_IN], hspace=0)
+    area = fig.add_subfigure(bands[1])
+    TabRenderer(area, page.tab, workspace, _timeline(page, workspace), settings.max_points_per_curve * 2,
+                for_print=True, height_in=graph_in).draw()
+    _draw_footer(fig, header)
+    pdf.savefig(fig)
+
+
+def _render_readings(pdf: PdfPages, page: ReportPage, header: ReportHeader, settings: Settings,
+                     rows: list, number: int, count: int) -> int:
+    """Pages « Lectures » d'une capture, à la suite de sa page graphique ; renvoie le
+    nombre de pages écrites."""
+    width_in, height_in = page_size(settings.report_orientation)
+    per_page = _rows_per_page(height_in)
+    chunks = [rows[i:i + per_page] for i in range(0, len(rows), per_page)]
+    for part, chunk in enumerate(chunks, 1):
+        fig = Figure(figsize=(width_in, height_in), dpi=100)
+        suite = f" ({part}/{len(chunks)})" if len(chunks) > 1 else ""
+        _draw_header(fig, header, [f"Page {number + part - 1}/{count}", f"Lectures de curseurs{suite}",
+                                   f"Capture : {page.tab.title}"])
+        _draw_title(fig, page, "Lectures de curseurs — ")
+        table_in = (len(chunk) + 1) * ROW_IN
+        top = 1 - (HEADER_IN + 0.25) / height_in
+        _draw_readings(fig, chunk, top - table_in / height_in, table_in / height_in, READING_FONT)
+        _draw_footer(fig, header)
+        pdf.savefig(fig)
+    return len(chunks)
+
+
+def _draw_title(fig: Figure, page: ReportPage, prefix: str = "") -> None:
+    """Titre de la capture (et son commentaire) sous l'en-tête."""
+    width_in, height_in = fig.get_size_inches()
+    chars = int(width_in * 0.94 / (10 * CHAR_IN))
+    title = f"{prefix}{page.tab.title} — capture du {page.captured_at}"
+    fig.text(0.5, 1 - 1.36 / height_in, textwrap.shorten(title, chars), fontsize=10, fontweight="bold",
              ha="center", family=REPORT_FONT)
     if page.tab.comment:
-        fig.text(0.5, 1 - 1.52 / height_in, textwrap.shorten(page.tab.comment, int(title_chars * 1.3)),
+        fig.text(0.5, 1 - 1.52 / height_in, textwrap.shorten(page.tab.comment, int(chars * 1.3)),
                  fontsize=7.5, style="italic", ha="center", family=REPORT_FONT)
-    limit, font, row_in = _reading_layout(len(rows), height_in)
-    table_in = 0.0 if not rows else (min(len(rows), limit + 1) + 1) * row_in + 0.1
-    top_in = HEADER_IN + (0.15 if page.tab.comment else 0.0)
-    graph_in = height_in - top_in - FOOTER_IN - table_in
-    # Une sous-figure n'utilise que les RATIOS de sa grille (pas top/bottom) :
-    # 3 bandes = en-tête (masqué ici), zone graphique, tableau des lectures et pied de page.
-    bands = fig.add_gridspec(3, 1, height_ratios=[top_in, graph_in, FOOTER_IN + table_in], hspace=0)
-    area = fig.add_subfigure(bands[1])
-    TabRenderer(area, page.tab, workspace, timeline, settings.max_points_per_curve * 2, for_print=True,
-                height_in=graph_in).draw()
-    if rows:
-        _draw_readings(fig, rows, (FOOTER_IN - 0.05) / height_in, table_in / height_in, limit, font)
-    fig.text(0.5, 0.1 / height_in, header.tool, ha="center", fontsize=6.5,
-             color="#555555", family=REPORT_FONT)
-    pdf.savefig(fig)
-    return rows[limit:]
+
+
+def _draw_footer(fig: Figure, header: ReportHeader) -> None:
+    """Pied de page : nom et version de l'outil."""
+    fig.text(0.5, 0.1 / fig.get_size_inches()[1], header.tool, ha="center", fontsize=6.5, color="#555555",
+             family=REPORT_FONT)
 
 
 def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, settings: Settings,
-                  pages: list[ReportPage], extra_rows: list, number: int, count: int) -> None:
+                  pages: list[ReportPage], number: int, count: int) -> None:
     """Page de traçabilité : empreintes, diagnostics de base de temps, environnement."""
     width_in, height_in = page_size(settings.report_orientation)
     fig = Figure(figsize=(width_in, height_in), dpi=100)
@@ -209,8 +228,6 @@ def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, set
     for mode, ref in sorted(timelines, key=str):
         for issue in compare_sources(files, Timeline(mode, ref)):
             lines.append(f"Inter-sources : {issue.as_text()}")
-    for row in extra_rows:
-        lines.append("Lecture : " + " | ".join(row.as_tuple()))
     environment = collect_environment()
     lines += ["", f"Environnement : Python {environment.python_version} ({environment.python_bits} bits), "
               f"{environment.os_description}, {environment.tk_version}"]
@@ -226,13 +243,17 @@ def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, set
 
 def export_pdf(path: Path, pages: list[ReportPage], header: ReportHeader, workspace: Workspace,
                settings: Settings, progress=None) -> None:
-    """Écrit le rapport : une page par capture + annexe de traçabilité.
+    """Écrit le rapport : pour chaque capture, sa page graphique puis ses pages de
+    lectures ; enfin l'annexe de traçabilité.
 
-    ``progress(i, n)`` est appelé après chaque page (barre d'avancement).
+    ``progress(i, n)`` est appelé après chaque capture (i = dernière page écrite).
     """
     path = Path(path)
     temporary = path.with_name(path.name + ".partiel")
-    count = len(pages) + 1
+    height_in = page_size(settings.report_orientation)[1]
+    readings = [compute_readings(page.tab, workspace, _timeline(page, workspace)) for page in pages]
+    per_page = _rows_per_page(height_in)
+    count = sum(1 + -(-len(rows) // per_page) for rows in readings) + 1
     metadata = {"Title": f"Rapport {full_name()}", "Author": header.issuer,
                 "Subject": f"Projet {header.project_name} — unité {header.project_unit}",
                 "Keywords": "perturbographie PTBG " + " ".join(n for n, _ in header.sources),
@@ -241,12 +262,13 @@ def export_pdf(path: Path, pages: list[ReportPage], header: ReportHeader, worksp
         # Style par défaut : un réglage global (ex. savefig.bbox = "tight" dans
         # Spyder) recadrerait les pages A4.
         with style.context("default"), PdfPages(temporary, metadata=metadata) as pdf:
-            extra = []
-            for number, page in enumerate(pages, start=1):
-                extra += _render_page(pdf, page, header, workspace, settings, number, count)
+            number = 1
+            for page, rows in zip(pages, readings):
+                _render_page(pdf, page, header, workspace, settings, rows, number, count)
+                number += 1 + _render_readings(pdf, page, header, settings, rows, number + 1, count)
                 if progress:
-                    progress(number, count)
-            _render_annex(pdf, header, workspace, settings, pages, extra, count, count)
+                    progress(number - 1, count)
+            _render_annex(pdf, header, workspace, settings, pages, count, count)
         os.replace(temporary, path)
     finally:
         if temporary.exists():

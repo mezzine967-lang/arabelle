@@ -2,6 +2,7 @@
 et rapport PDF (4102-4104, 5300, 6000-6005)."""
 import json
 import unittest
+import unittest.mock
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
@@ -127,6 +128,17 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(data.tabs[0].axles[0].curves[0].name, "x")
         self.assertEqual(data.header["project_name"], "NCS")
 
+
+    def test_project_of_previous_version_still_opens(self):
+        """Un onglet enregistré par la 1.0.0 (réglage « tracking » retiré depuis) s'ouvre :
+        les réglages inconnus sont ignorés."""
+        old = TabState.from_template("1A", "Ancien").to_dict()
+        old["tracking"] = True
+        old["axles"][0]["curves"] = [{"file_id": "f1", "name": "x", "is_group": False, "color": ""}]
+        tab = TabState.from_dict(old)
+        self.assertFalse(hasattr(tab, "tracking"))
+        self.assertEqual(tab.axles[0].curves[0].name, "x")
+        self.assertEqual(tab.axles[0].curves[0].linestyle, "-")
 
 class RenderAndReportTests(unittest.TestCase):
     def setUp(self):
@@ -292,24 +304,32 @@ class RenderAndReportTests(unittest.TestCase):
         self.assertFalse((self.files.path / "rapport.pdf.partiel").exists())
 
 
-    def test_portrait_report_and_tab_on_a_single_page(self):
-        """Remarques du relecteur (REQ 6001) : rapport en paysage ou en portrait ; l'onglet
-        tient sur sa page, lectures comprises (20 lectures ne partent plus en annexe)."""
+    def test_graph_alone_on_its_page_readings_on_next_pages(self):
+        """Demandes du relecteur (REQ 6001 / 6004) : pages en paysage ou en portrait ; la zone
+        graphique est seule sur sa page, ses lectures suivent sur des pages « Lectures »,
+        puis la traçabilité."""
         import re
-        from ptbg.report.pdf_report import _reading_layout
-        for height in (8.27, 11.69):
-            self.assertEqual(_reading_layout(20, height)[0], 20)
+        from matplotlib.table import Table
+        from ptbg.report import pdf_report
         tab = TabState.from_template("2A", "Portrait")
         tab.axles[0].curves.append(CurveRef(self.ok.id, "output"))
-        tab.axles[0].cursor_mode, tab.axles[0].t1 = "single", 1.0
+        tab.axles[0].cursor_mode, tab.axles[0].t1, tab.axles[0].t2 = "double", 1.0, 3.0
         pages = [ReportPage(tab, "relative", None)]
         header = build_header(self.settings, self.ws, pages, None, "")
-        for orientation, box in (("portrait", (595.44, 841.68)), ("landscape", (841.68, 595.44))):
-            self.settings.report_orientation = orientation
-            target = self.files.path / f"{orientation}.pdf"
-            export_pdf(target, pages, header, self.ws, self.settings)
-            sizes = re.findall(rb"/MediaBox \[ ?0 0 ([\d.]+) ([\d.]+) ?\]", target.read_bytes())
-            self.assertEqual({(float(w), float(h)) for w, h in sizes}, {box})
+        figures = []
+        saved = pdf_report.PdfPages.savefig
+        with unittest.mock.patch.object(pdf_report.PdfPages, "savefig",
+                                        lambda pdf, fig: (figures.append(fig), saved(pdf, fig))):
+            for orientation, box in (("portrait", (595.44, 841.68)), ("landscape", (841.68, 595.44))):
+                figures.clear()
+                self.settings.report_orientation = orientation
+                target = self.files.path / f"{orientation}.pdf"
+                export_pdf(target, pages, header, self.ws, self.settings)
+                sizes = re.findall(rb"/MediaBox \[ ?0 0 ([\d.]+) ([\d.]+) ?\]", target.read_bytes())
+                self.assertEqual({(float(w), float(h)) for w, h in sizes}, {box})
+                tables = [any(isinstance(a, Table) for a in fig.findobj()) for fig in figures]
+                self.assertEqual(tables, [False, True, False])     # graphique, lectures, traçabilité
+                self.assertIn("Lectures de curseurs", " ".join(text.get_text() for text in figures[1].texts))
 
     def test_legend_names_variable_only_unless_ambiguous(self):
         """Remarque du relecteur : légende = nom de la variable ; le fichier n'est ajouté que si

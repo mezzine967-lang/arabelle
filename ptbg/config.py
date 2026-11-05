@@ -48,7 +48,7 @@ class Settings:
     project_name: str = ""
     project_unit: str = ""
     project_reference: str = ""
-    report_orientation: str = "landscape"   # pages du rapport : "landscape" (paysage) ou "portrait"
+    report_orientation: str = "landscape"   # dernière orientation choisie pour le rapport : "landscape" ou "portrait"
 
     def effective_issuer(self) -> str:
         """Émetteur du rapport : saisi, sinon l'utilisateur de la session."""

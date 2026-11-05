@@ -1,6 +1,6 @@
 """Panneau de lecture des curseurs, à droite de la zone graphique (REQ 5402).
 
-En mode suivi, il liste la valeur croisée de TOUTES les courbes de l'axe
+Pour chaque curseur, il liste la valeur croisée de TOUTES les courbes de l'axe
 (et de tous les axes pour le curseur global), avec l'instant de
 l'échantillon lu et sa ligne dans le CSV. Bouton « Copier » : texte
 tabulé collable dans un tableur ou un rapport.

@@ -2,6 +2,7 @@
 
 - ``HeaderDialog``      : projet, unité, émetteur, référence (REQ_COMMON_KH_6005) ;
 - ``PagesWindow``       : rapport pas à pas, pages ordonnées (REQ_COMMON_KH_6004) ;
+- ``OrientationDialog`` : pages en portrait ou en paysage, demandé à chaque rapport ;
 - ``PreferencesDialog`` : taille maximale (REQ 2310), tolérance par défaut...
 """
 from __future__ import annotations
@@ -44,6 +45,26 @@ class HeaderDialog(Dialog):
     def apply(self) -> None:
         """Résultat : dictionnaire des champs saisis."""
         self.result = {key: var.get().strip() for key, var in self.vars.items()}
+
+
+class OrientationDialog(Dialog):
+    """Choix de l'orientation des pages ; result = "portrait" | "landscape" ou None."""
+
+    def __init__(self, parent, current: str) -> None:
+        """``current`` : orientation proposée (celle du dernier rapport)."""
+        self.current = current
+        super().__init__(parent, "Rapport PDF")
+
+    def body(self, master):
+        """Deux choix : paysage ou portrait (format A4)."""
+        ttk.Label(master, text="Orientation des pages (A4) :").pack(anchor="w", padx=5, pady=(4, 2))
+        self.choice = tk.StringVar(value=self.current)
+        for value, label in (("landscape", "Paysage"), ("portrait", "Portrait")):
+            ttk.Radiobutton(master, text=label, value=value, variable=self.choice).pack(anchor="w", padx=15)
+
+    def apply(self) -> None:
+        """Résultat : l'orientation choisie."""
+        self.result = self.choice.get()
 
 
 class PagesWindow(tk.Toplevel):

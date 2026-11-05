@@ -16,7 +16,7 @@ from ptbg.core.data_package import SourceFile, Workspace
 from ptbg.core.signals import SignalData, SignalType
 
 # Mots binaires déjà calculés : (fichier, révision, groupe, membres) -> valeurs.
-# Évite de recalculer un mot à chaque mouvement de souris en mode suivi.
+# Évite de recalculer un mot à chaque déplacement de curseur.
 _GROUP_WORDS: dict = {}
 
 

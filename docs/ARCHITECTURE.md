@@ -75,7 +75,7 @@ jamais `tkinter`. On peut donc tester et réutiliser les traitements sans interf
 | 5. Axe des temps | `Workspace.timeline()` → `Timeline` | relatif ou absolu ; `Timeline.x(fichier)` donne les abscisses (mises en cache) de chaque échantillon |
 | 6. Curseurs | `TabState` / `AxleState` → `core/readings.py` → `TabRenderer.draw_cursors()` → `AnalysisTab.update_cursors()` | lectures sur l'échantillon réel, jamais interpolé, à partir d'une `TimeGrid` (abscisses finies et leur ordre, préparées une fois par fichier et par axe des temps) ; seuls les curseurs sont recréés puis redessinés sur le rendu figé du reste de la figure (« blitting », rendu mémorisé à chaque dessin complet par `_on_draw`) |
 | 7. Zoom | `core/sampling.py::DisplayCurve` | l'ordre des abscisses d'une courbe n'est analysé qu'une fois ; nuage X/Y et mots binaires gardés en cache tant que leurs courbes ne changent pas |
-| 8. Rapport | `core/project.py::ReportPage` → `report/pdf_report.py::export_pdf` | une page est une copie figée du `TabState` ; chaque page est dessinée (en-tête + zone graphique + lectures), puis l'annexe de traçabilité |
+| 8. Rapport | `core/project.py::ReportPage` → `report/pdf_report.py::export_pdf` | une page est une copie figée du `TabState` ; chaque capture donne une page graphique (en-tête + zone graphique) suivie de ses pages de lectures, puis l'annexe de traçabilité |
 
 Deux règles transversales :
 

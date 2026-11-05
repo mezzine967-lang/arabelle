@@ -140,30 +140,34 @@ class InterfaceTests(unittest.TestCase):
                         if line.get_linestyle() == "--" and line.get_color() == "#2e7d32"]
         self.assertGreaterEqual(len(global_lines), 3)                   # REQ 5405 : sur tous les axes
 
-    def test_tracking_mode(self):
-        """REQ 5402 : le curseur suit la souris sans clic."""
+    def test_reading_panel_follows_dragged_cursor(self):
+        """REQ 5402 : en glissant le curseur, le panneau de droite donne la valeur de toutes
+        les courbes de l'axe ; seuls les curseurs sont redessinés (REQ 4105). Le mode
+        « suivi souris » n'existe plus (retiré à la demande du relecteur)."""
         from matplotlib.backend_bases import MouseEvent
         (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
         tab = self.ctl.graph.active_tab()
-        tab.add_curves([(source.id, "output", False)], 0)
-        tab.tracking.set(True)
-        tab._toggle_tracking()
+        tab.add_curves([(source.id, "output", False), (source.id, "pv", False)], 0)
+        self.assertFalse(hasattr(tab, "tracking") or hasattr(tab.state, "tracking"))
+        tab.set_cursor_mode("single")
         self.root.update()
+        tab.redraw()
+        tab.canvas.draw()
         ax = tab.renderer.axes[0]
-        x_px, y_px = ax.transData.transform((12.0, 1.0))
-        tab.canvas.callbacks.process("motion_notify_event",
-                                     MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
-        self.root.update()
-        self.assertAlmostEqual(tab.axle().t1, 12.0, delta=0.1)
-        # REQ 4105 : seuls les curseurs sont redessinés, sur le rendu figé du reste.
-        self.assertIsNotNone(tab._background)
-        ax = tab.renderer.axes[0]            # un redimensionnement a pu redessiner l'onglet
+        start = ax.transData.transform((tab.axle().t1, 1.0))
         x_px, y_px = ax.transData.transform((14.0, 1.0))
+        tab.canvas.callbacks.process("button_press_event",
+                                     MouseEvent("button_press_event", tab.canvas, start[0], start[1], button=1))
         tab.canvas.callbacks.process("motion_notify_event",
-                                     MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
+                                     MouseEvent("motion_notify_event", tab.canvas, x_px, y_px, button=1))
         self.root.update()
+        self.assertIsNotNone(tab._background)
+        tab.canvas.callbacks.process("button_release_event",
+                                     MouseEvent("button_release_event", tab.canvas, x_px, y_px, button=1))
         self.assertAlmostEqual(tab.axle().t1, 14.0, delta=0.1)
-        self.assertIn("14.", tab.panel.table.item(tab.panel.table.get_children()[0], "values")[3])
+        rows = tab.panel.table.get_children()
+        self.assertGreaterEqual(len(rows), 2)
+        self.assertIn("14.", tab.panel.table.item(rows[0], "values")[3])
 
     def test_drag_and_drop_to_axle(self):
         from ptbg.gui.tree_panel import TreeRef
@@ -466,9 +470,13 @@ class InterfaceTests(unittest.TestCase):
         tab.add_curves([(source.id, "output", False)], 0)
         auto_pdf = self.files.path / "auto.pdf"
         with mock.patch("ptbg.gui.app.filedialog.asksaveasfilename", return_value=str(auto_pdf)), \
-                mock.patch("ptbg.gui.app.messagebox.askyesno", return_value=False):
+                mock.patch("ptbg.gui.app.messagebox.askyesno", return_value=False), \
+                mock.patch("ptbg.gui.app.OrientationDialog") as orientation:
+            orientation.return_value.result = "portrait"          # choix demandé à chaque rapport
             self.ctl.automatic_report()
-        self.assertTrue(auto_pdf.read_bytes().startswith(b"%PDF"))
+        orientation.assert_called_once()
+        self.assertEqual(self.ctl.settings.report_orientation, "portrait")
+        self.assertIn(b"595.44 841.68", auto_pdf.read_bytes())    # A4 portrait (points)
         with mock.patch("ptbg.gui.app.ask_text", return_value="Vue 1"):
             self.ctl.add_report_page()
             tab.set_cursor_mode("single")
