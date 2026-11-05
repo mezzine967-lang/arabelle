@@ -12,6 +12,7 @@ from ptbg.core.data_package import SourceFile
 from ptbg.core.raw_view import PAGE_ROWS, find_sample, read_rows, time_steps_ms, value_text
 
 MAX_VARIABLES = 6        # variables affichées côte à côte au plus
+CONTEXT_ROWS = 5         # lignes visibles au-dessus de la ligne recherchée
 
 NOTE = ("Texte du fichier : relu sur le disque, tel qu'il est écrit dans le CSV.   "
         "Valeur lue : ce que l'outil utilise pour les courbes et les calculs (une cellule vide reste vide, "
@@ -113,13 +114,23 @@ class RawValuesWindow(tk.Toplevel):
         self.show_page(max(0, self.table.n_samples - PAGE_ROWS))
 
     def go_to_line(self) -> None:
-        """Page commençant à la ligne du fichier saisie (ou à la mesure suivante)."""
+        """Affiche la ligne du fichier saisie (ou la mesure suivante) au milieu de sa page,
+        surlignée, avec les lignes d'avant visibles juste au-dessus."""
         try:
             line = int(self.goto.get().strip())
         except ValueError:
             self.alert.configure(text="Numéro de ligne attendu (nombre entier).")
             return
-        self.show_page(find_sample(self.table, line))
+        target = find_sample(self.table, line)
+        self.show_page(max(0, min(target - PAGE_ROWS // 2, self.table.n_samples - PAGE_ROWS)))
+        items = self.view.get_children()
+        if not items:
+            return
+        item = items[min(max(target - self.first, 0), len(items) - 1)]
+        self.view.selection_set(item)
+        self.view.focus(item)
+        position = items.index(item)
+        self.view.yview_moveto(max(0, position - CONTEXT_ROWS) / len(items))
 
     def copy_page(self) -> None:
         """Copie la page affichée (colonnes séparées par des tabulations)."""

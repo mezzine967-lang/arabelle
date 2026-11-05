@@ -683,7 +683,16 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(window.page[0][0], "502")
         window.goto.set("1000")
         window.go_to_line()
-        self.assertEqual(window.page[0][0], "1000")
+        selected = window.view.item(window.view.selection()[0], "values")
+        self.assertEqual(str(selected[0]), "1000")                      # ligne cherchée surlignée
+        self.root.update()
+        lines_shown = [int(values[0]) for values in window.page]
+        before = window.view.get_children()[lines_shown.index(995)]
+        self.assertTrue(window.view.bbox(before))                       # lignes d'avant visibles à l'écran
+        self.assertTrue(window.view.bbox(window.view.selection()[0]))
+        window.goto.set("3")
+        window.go_to_line()
+        self.assertEqual(window.page[0][0], "2")                        # début du fichier : page 1
         window.last_page()
         self.assertEqual(window.page[-1][0], str(source.table.line_numbers[-1]))
         window.copy_page()

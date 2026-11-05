@@ -97,7 +97,8 @@ Paquet de données 1 (actif)
   | variable (valeur lue) | valeur utilisée par l'outil (« 4.50 » -> 4.5, « true » -> 1, cellule vide -> « (vide) ») |
 
   Pages de 500 lignes (boutons |< < > >|), « Ligne du fichier » + Aller pour sauter à
-  une ligne, « Copier la page » pour la coller dans Excel. Si le fichier a été modifié
+  une ligne (surlignée, les lignes d'avant restent visibles au-dessus et la barre de défilement
+  permet de remonter), « Copier la page » pour la coller dans Excel. Si le fichier a été modifié
   depuis son chargement, un message rouge le signale.
 - **Filtrer** : saisir une partie du nom des variables.
 - **Bulle d'aide** : la souris posée sur une ligne affiche son texte complet (utile quand
