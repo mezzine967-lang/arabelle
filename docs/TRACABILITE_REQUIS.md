@@ -116,7 +116,7 @@ Qualification restant à faire.
 
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
-| REQ_COMMON_KH_5300 | Plusieurs modèles de disposition d'axes | 7 modèles : 1, 2, 3, 4 axes, analogique + logique, grille 2 × 2, temporel + X/Y ; par axe (remarques du relecteur) : titre, unité, hauteur relative ; par courbe : couleur, épaisseur, style de trait (clic droit sur l'axe) | `core/arrangement.py`, `gui/dialogs/analysis_dialogs.py` (`CurveStyleDialog`) | `test_architecture.test_templates_fit_their_grid`, `test_package_report.test_every_template_has_time_base_monitor`, `test_gui.test_curve_selection_title_unit_style_height` | Implémenté et testé |
+| REQ_COMMON_KH_5300 | Plusieurs modèles de disposition d'axes | 7 modèles : 1, 2, 3, 4 axes, analogique + logique, grille 2 × 2, temporel + X/Y ; par axe (remarques du relecteur) : titre, unité, hauteur relative (menu, ou en glissant la séparation entre deux axes) ; par courbe : couleur, épaisseur, style de trait (clic droit sur l'axe) | `core/arrangement.py`, `gui/dialogs/analysis_dialogs.py` (`CurveStyleDialog`) | `test_architecture.test_templates_fit_their_grid`, `test_package_report.test_every_template_has_time_base_monitor`, `test_gui.test_curve_selection_title_unit_style_height`, `test_gui.test_axle_height_dragged_with_the_mouse` | Implémenté et testé |
 
 ## 4.4 Outils graphiques
 

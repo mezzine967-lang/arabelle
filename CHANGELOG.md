@@ -7,7 +7,7 @@ et le nombre de tests.
 
 | Version | Date | En une ligne | Tests |
 |---|---|---|---|
-| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 156 |
+| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 157 |
 | 1.0.0 | 2026-10-29 | première version livrée pour revue des requis | 145 |
 
 ## 1.1.0 — 2026-11-05 — remarques du relecteur sur les premiers essais
@@ -23,7 +23,7 @@ Remarques issues des premiers essais (package simulation10 : 3 producteurs,
 | Condition Bool d'un autre fichier | état inconnu (condition fausse) dans un trou de ce fichier et après sa fin | **anomalie** relevée à l'analyse de la matrice Framatome : un état était inventé pendant une perte |
 | Global | Ctrl+Z / Ctrl+Y (menu Édition) ; bouton « maison » = toute la durée même après un changement d'onglet ; fermer un paquet ferme les onglets qui ne montraient que lui | remarques « fausses manips », « Home sans effet », « onglets 7 à 10 restés ouverts » |
 | Curseurs | activer un curseur désactive la loupe et le place dans la vue affichée (curseur global au centre) | remarques « zoom non volontaire », « curseur à recentrer » |
-| Axes | légende = nom de la variable (fichier seulement en cas d'homonymie) ; clic sur une courbe ou son entrée de légende = la sélectionner ; titre, unité et hauteur de chaque axe ; couleur, épaisseur et trait de chaque courbe | remarques sur la légende, la sélection, le titre, les unités, l'aspect et la hauteur |
+| Axes | légende = nom de la variable (fichier seulement en cas d'homonymie) ; clic sur une courbe ou son entrée de légende = la sélectionner ; titre, unité et hauteur de chaque axe (hauteur aussi en glissant la séparation entre deux axes) ; couleur, épaisseur et trait de chaque courbe | remarques sur la légende, la sélection, le titre, les unités, l'aspect et la hauteur |
 | Rapport | orientation demandée à chaque génération (paysage ou portrait) ; rapport épuré : page graphique avec un bandeau d'une ligne et uniquement les graphiques, pages de lectures, puis une page « Identification et traçabilité » (en-tête complet, tableau des fichiers sources, seuls avertissements et erreurs, environnement) | remarques « paysage ou portrait », « page unique », « trop compact » |
 | Curseurs | mode « suivi souris » retiré ; le panneau de lecture se met à jour en glissant le curseur | demande du relecteur |
 | Nuage X/Y | droite de régression retirée (corrélation r conservée) | remarque « virer la courbe de régression » |

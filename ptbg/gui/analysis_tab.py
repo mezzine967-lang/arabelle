@@ -15,7 +15,8 @@ Requis servis (l'état est dans ``TabState``, le dessin dans plotting/renderer) 
 
 Souris : clic sur une courbe = la sélectionner, clic ailleurs = placer le
 curseur, glisser = le déplacer, Maj+clic = niveau du curseur horizontal, clic
-droit = menu de l'axe (titre, unité, aspect de la courbe, hauteur). Légendes
+droit = menu de l'axe (titre, unité, aspect de la courbe, hauteur), glisser la
+séparation entre deux axes = changer leur hauteur (curseur ↕). Légendes
 (axes, TBM), noms des pistes logiques et étiquettes des curseurs : glisser =
 les déplacer (place conservée à l'écran, dans le projet et le rapport) ; clic
 sur une entrée de la légende = sélectionner cette courbe. Time Base Monitor :
@@ -40,6 +41,7 @@ from tkinter import messagebox, ttk
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 
 from ptbg.core.arrangement import CurveRef, TabState
 from ptbg.core.curves import resolve
@@ -55,6 +57,8 @@ from ptbg.plotting.styles import ACTIVE_AXLE_COLOR, curve_color
 PICK_TOLERANCE_PX = 8
 UNDO_DEPTH = 50         # états d'onglet mémorisés pour Ctrl+Z
 HEIGHT_STEP = 1.5       # facteur appliqué par « Agrandir / Réduire l'axe »
+GAP_MARGIN_PX = 5       # marge (pixels) autour de la séparation de deux axes pour la saisir
+MIN_SHARE = 0.12        # part minimale d'un axe dans la hauteur de deux axes redimensionnés
 FLOW_MARGIN = 4         # marge gauche et droite de la barre d'outils (pixels)
 PANEL_WIDTH = 420       # largeur initiale du panneau de lecture (pixels)
 CURSOR_MODES = (("none", "Aucun curseur vertical"), ("single", "Curseur simple"), ("double", "Double curseur"))
@@ -119,6 +123,8 @@ class AnalysisTab(ttk.Frame):
         self.renderer: TabRenderer | None = None
         self._drag: str | None = None
         self._grab = None                  # ((sorte, élément), x, y) du clic sur un élément déplaçable
+        self._resize = None                # (axe du dessus, axe du dessous) dont on glisse la séparation
+        self._guide = None                 # trait montrant la future séparation pendant le glisser
         self._pending_motion = None
         self._resize_job = None
         self._refresh_job = None
@@ -188,7 +194,8 @@ class AnalysisTab(ttk.Frame):
                          text="Clic sur une courbe ou sur son nom dans la légende : la sélectionner · Clic "
                               "ailleurs : placer le curseur · Glisser : le déplacer · Maj+clic : niveau du "
                               "curseur H · Flèches gauche/droite : échantillon voisin · Légendes, noms des pistes "
-                              "et étiquettes : glisser pour les déplacer · Clic droit : menu de l'axe (titre, "
+                              "et étiquettes : glisser pour les déplacer · Séparation entre deux axes : glisser pour "
+                              "changer leur hauteur · Clic droit : menu de l'axe (titre, "
                               "unité, aspect, hauteur) · TBM : survol d'un marqueur = détail, clic droit = "
                               "diagnostic · Ctrl+Z / Ctrl+Y : annuler / rétablir · Loupe/croix de la barre : "
                               "zoom/déplacement, maison : vue complète", justify="left")
@@ -698,11 +705,76 @@ class AnalysisTab(ttk.Frame):
             setattr(axle, "t1" if target == "C1" else "t2", float(event.xdata))
         self.update_cursors(record=False)
 
+    # ------------------------------------------------- hauteur des axes à la souris
+    def _boundary_at(self, event) -> tuple[int, int] | None:
+        """(axe du dessus, axe du dessous) dont la séparation est sous la souris, ou None."""
+        if self.renderer is None or event.inaxes is not None or event.x is None:
+            return None
+        boxes = [(index, ax.get_window_extent()) for index, (ax, axle)
+                 in enumerate(zip(self.renderer.axes, self.state.axles)) if axle.kind == "time"]
+        best = None
+        for upper, a in boxes:
+            for lower, b in boxes:
+                gap = a.y0 - b.y1
+                if gap < -1 or not (max(a.x0, b.x0) <= event.x <= min(a.x1, b.x1)):
+                    continue
+                if b.y1 - GAP_MARGIN_PX <= event.y <= a.y0 + GAP_MARGIN_PX and (best is None or gap < best[0]):
+                    best = (gap, upper, lower)
+        return None if best is None else (best[1], best[2])
+
+    def _show_resize_cursor(self, visible: bool) -> None:
+        """Curseur de souris « ↕ » au-dessus d'une séparation d'axes."""
+        widget = self.canvas.get_tk_widget()
+        wanted = "sb_v_double_arrow" if visible else ""
+        if widget.cget("cursor") != wanted:
+            widget.configure(cursor=wanted)
+
+    def _move_guide(self, y: float) -> None:
+        """Trait pointillé à la hauteur ``y`` (pixels) : future séparation des deux axes."""
+        fraction = y / self.figure.bbox.height
+        if self._guide is None:
+            self._guide = self.figure.add_artist(Line2D([0.02, 0.99], [fraction, fraction], color=ACTIVE_AXLE_COLOR,
+                                                        lw=1.5, ls="--", animated=True))
+        self._guide.set_ydata([fraction, fraction])
+        if self._background is not None:
+            self.canvas.restore_region(self._background)
+            self.renderer.draw_cursor_artists()
+            self.figure.draw_artist(self._guide)
+            self.canvas.blit(self.figure.bbox)
+
+    def _finish_resize(self, y: float) -> None:
+        """Séparation lâchée à ``y`` : hauteurs des deux rangées d'axes recalculées (leur hauteur
+        totale ne change pas), puis redessin (enregistré pour Ctrl+Z)."""
+        upper, lower = self._resize
+        self._resize = None
+        if self._guide is not None:
+            self._guide.remove()
+            self._guide = None
+        self._show_resize_cursor(False)
+        a = self.renderer.axes[upper].get_window_extent()
+        b = self.renderer.axes[lower].get_window_extent()
+        share = min(max((a.y1 - y) / ((a.y1 - b.y0) or 1.0), MIN_SHARE), 1 - MIN_SHARE)
+        total = a.height + b.height
+        slots = self.state.template.slots
+        for index, wanted in ((upper, share * total), (lower, (1 - share) * total)):
+            factor = wanted / (self.renderer.axes[index].get_window_extent().height or 1.0)
+            row = slots[index].row
+            for slot, axle in zip(slots, self.state.axles):
+                if slot.row == row and slot.rowspan == 1:
+                    axle.height = min(max(axle.height * factor, 0.25), 8.0)
+        self.redraw()
+
     def _on_press(self, event) -> None:
-        """Clic : légende, axe actif, menu contextuel, ou prise d'un curseur / d'un point X/Y."""
+        """Clic : séparation d'axes, légende, axe actif, menu contextuel, ou prise d'un
+        curseur / d'un point X/Y."""
         if self.renderer is None or self.toolbar.mode:
             return
         if event.button == 1:
+            boundary = self._boundary_at(event)
+            if boundary is not None:           # glisser la séparation : hauteur des deux axes
+                self._resize = boundary
+                self._move_guide(event.y)
+                return
             grabbed = self._grab_under(event)
             if grabbed is not None:            # Matplotlib le déplace ; rien d'autre ne bouge
                 self._grab = (grabbed, event.x, event.y)
@@ -756,8 +828,15 @@ class AnalysisTab(ttk.Frame):
     def _on_motion(self, event) -> None:
         """Mouvement : glisser un curseur (mouvements regroupés par ``after_idle``) ;
         bulle de détail au survol d'un marqueur du Time Base Monitor."""
-        if self.renderer is None or self.toolbar.mode or self._grab:
+        if self.renderer is None:
             return
+        if self._resize is not None:
+            if event.y is not None:
+                self._move_guide(event.y)
+            return
+        if self.toolbar.mode or self._grab:
+            return
+        self._show_resize_cursor(not self._drag and self._boundary_at(event) is not None)
         if not self._drag and self.renderer.show_monitor_tip(event):
             self._blit()
         if event.inaxes is None:
@@ -775,7 +854,11 @@ class AnalysisTab(ttk.Frame):
             self._move(target, event)
 
     def _on_release(self, event) -> None:
-        """Fin du glisser (curseur, légende, zoom) : l'action est enregistrée pour Ctrl+Z."""
+        """Fin du glisser (séparation d'axes, curseur, légende, zoom) : l'action est
+        enregistrée pour Ctrl+Z."""
+        if self._resize is not None and self.renderer is not None:
+            self._finish_resize(event.y if event.y is not None else 0.0)
+            return
         self._drag = None
         if self._grab is not None and self.renderer is not None:
             self._released(event)

@@ -603,6 +603,37 @@ class InterfaceTests(unittest.TestCase):
         labels = [a.get_text() for a in tab.renderer._cursor_artists if hasattr(a, "get_text")]
         self.assertTrue(any(text.endswith(" %") for text in labels))
 
+    def test_axle_height_dragged_with_the_mouse(self):
+        """Demande de l'utilisateur : la hauteur des axes se règle en glissant leur séparation
+        (sans passer par le menu) ; la hauteur totale des deux axes ne change pas ; Ctrl+Z."""
+        from matplotlib.backend_bases import MouseEvent
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        self.ctl.close_tab(self.ctl.graph.active_tab())
+        tab = self.ctl.new_tab("2A")
+        tab.add_curves([(source.id, "output", False)], 0)
+        tab.add_curves([(source.id, "pv", False)], 1)
+        self.root.update()
+        tab.redraw()
+        tab.canvas.draw()
+        top, bottom = (ax.get_window_extent() for ax in tab.renderer.axes)
+        x, gap = (top.x0 + top.x1) / 2, (top.y0 + bottom.y1) / 2
+        self.assertEqual(tab._boundary_at(MouseEvent("motion_notify_event", tab.canvas, x, gap)), (0, 1))
+        total = top.height + bottom.height
+        target = gap - 0.25 * total                          # séparation descendue : axe 1 plus haut
+        tab.canvas.callbacks.process("button_press_event", MouseEvent("button_press_event", tab.canvas, x, gap,
+                                                                      button=1))
+        tab.canvas.callbacks.process("motion_notify_event", MouseEvent("motion_notify_event", tab.canvas, x, target,
+                                                                       button=1))
+        tab.canvas.callbacks.process("button_release_event", MouseEvent("button_release_event", tab.canvas, x,
+                                                                        target, button=1))
+        tab.canvas.draw()
+        new_top, new_bottom = (ax.get_window_extent() for ax in tab.renderer.axes)
+        self.assertGreater(new_top.height, 1.6 * new_bottom.height)
+        self.assertAlmostEqual(new_top.height + new_bottom.height, total, delta=0.05 * total)
+        self.assertIsNone(tab._guide)
+        self.ctl.undo()
+        self.assertEqual([a.height for a in tab.state.axles], [1.0, 1.0])
+
     def test_monitor_details_on_hover_not_under_title(self):
         """Remarques du relecteur (REQ 4102) : pas de texte d'avertissement sous le titre du
         TBM ; statut de chaque fichier dans la légende, placée au-dessus de la courbe pour ne

@@ -195,7 +195,7 @@ remettre à sa place automatique, remettre les étiquettes à leur place ;
 |---|---|
 | Titre de l'axe… | remplace « Axe n » (vide = titre automatique) ; repris dans le rapport |
 | Unité de l'axe… | écrite sur l'axe vertical et après les valeurs des curseurs (le CSV ne porte pas d'unité) |
-| Hauteur de l'axe | agrandir, réduire, ou revenir à la hauteur du modèle |
+| Hauteur de l'axe | agrandir, réduire, ou revenir à la hauteur du modèle. Plus direct : **glisser la séparation entre deux axes** (le curseur de la souris devient ↕) ; Ctrl+Z annule |
 | Aspect de la courbe sélectionnée… | couleur (nuancier), épaisseur, trait (continu, tirets, pointillés, tirets-points) |
 
 | Action sur un onglet | Comment |
@@ -328,6 +328,7 @@ traçabilité des requis.
 | clic sur une courbe | la sélectionne (sa valeur est portée par les curseurs) |
 | survol d'un marqueur du TBM | détail de l'anomalie |
 | clic droit sur le TBM | diagnostic complet d'un fichier |
+| glisser la séparation entre deux axes | change leur hauteur |
 | glisser | déplace le curseur |
 | Maj + clic | niveau du curseur horizontal |
 | glisser une légende, un nom de piste ou une étiquette de curseur | le déplace (place conservée, curseur inchangé) |
