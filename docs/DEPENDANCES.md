@@ -72,7 +72,7 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 | `csv` | lecture des CSV, export des résultats du traitement conditionnel |
 | `io` | flux texte décodé sur le fichier binaire (avancement de lecture) |
 | `codecs` | contrôle UTF-8 par blocs et lecture de secours Windows-1252 des octets non UTF-8 (signalée, REQ 2302) |
-| `hashlib` | SHA-256 des CSV, du projet et des modules (en-tête de rapport, Information > Sources) |
+| `hashlib` | SHA-256 des CSV (diagnostic), du projet (en-tête de rapport) et des modules (Information > Sources) |
 | `json` | préférences et fichier projet |
 | `re` | formats de temps, unités dans les en-têtes, groupes binaires `NOM[i]` |
 | `math` | valeurs finies, graduations de l'axe des temps |

@@ -39,10 +39,11 @@ de 11 ms pour T = 10 ms ± 1 ms étaient jugés l'un conforme, l'autre déphasé
 la position de l'horodatage dans le fichier (remarque du relecteur, fichiers
 simulation10_producer1/2/3).
 
-Écart à la grille : distance de chaque mesure à l'horodatage régularisé. Il
-mesure le jitter, mais aussi un recalage ponctuel de la grille (un Δt de 9 ms
-décale d'1 ms toutes les mesures suivantes) : il est donc affiché comme « écart
-max à la grille », sans préjuger de sa cause.
+Jitter max : plus grand écart |Δt − T| d'un intervalle conforme à la période de
+son segment, arrondi à la nanoseconde (résolution des horodatages) : il se
+vérifie directement dans le CSV et, si les temps et la période sont des
+millisecondes entières, c'est un nombre entier de millisecondes (ex. un pas de
+11 ms pour 10 ms -> 1 ms).
 
 Horodatage régularisé (« jitter ignoré », REQ 4107) : dans chaque bloc
 d'échantillons alignés sur la grille, le rang de cycle k de chaque mesure est
@@ -133,8 +134,7 @@ class TimeBaseAnalysis:
     dt_max_s: float = np.nan
     dt_mean_s: float = np.nan
     dt_std_s: float = np.nan
-    grid_offset_max_s: float = 0.0     # écart max à la grille régulière (voir en-tête)
-    grid_offset_std_s: float = 0.0
+    jitter_max_s: float = 0.0          # plus grand |Δt − T| des intervalles conformes (voir en-tête)
     normal_ratio: float = 0.0
     missing_samples: int = 0
     checks: list[Check] = field(default_factory=list)
@@ -162,7 +162,7 @@ class TimeBaseAnalysis:
         counts = ", ".join(f"{count} {kind.short}" for kind, count in self.event_counts.items())
         return (f"T = {ms(self.period_used_s)} ms ± {self.tolerance_pct:g} % ; "
                 f"{self.normal_ratio * 100:.1f} % des Δt conformes ; "
-                f"écart max à la grille {ms(self.grid_offset_max_s)} ms"
+                f"jitter max {ms(self.jitter_max_s)} ms"
                 + (f" ; {counts}" if counts else " ; aucune anomalie"))
 
 
@@ -380,11 +380,16 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
     result.missing_samples = int(np.sum(cycles[codes == DT_MISSING] - 1))
     result.normal_ratio = float(np.count_nonzero(codes == DT_NORMAL) / dt.size)
 
-    # 3) Horodatage régularisé (jitter ignoré) et écart des mesures à cette grille.
+    # 3) Jitter : écart de chaque intervalle conforme à la période de son segment, arrondi
+    #    à la nanoseconde pour effacer les arrondis du calcul en flottant.
+    periods = np.empty(dt.size)
+    for begin, segment in zip(segment_starts, result.segments):
+        periods[begin:] = segment.period_s
+    deviation = np.abs(dt - periods)[codes == DT_NORMAL]
+    if deviation.size:
+        result.jitter_max_s = float(np.round(deviation.max() / TIME_RESOLUTION_S) * TIME_RESOLUTION_S)
+    # 4) Horodatage régularisé (affichage optionnel « jitter ignoré »).
     regular = _regularize(t, codes, cycles, segment_starts)
-    residual = t - regular
-    result.grid_offset_max_s = float(np.max(np.abs(residual)))
-    result.grid_offset_std_s = float(np.std(residual))
     result.regular_s[valid_index] = regular
     result.dt_index, result.dt_values, result.dt_kinds = sample_after, dt, codes
 
@@ -414,8 +419,8 @@ def _add_checks(result: TimeBaseAnalysis, codes: np.ndarray, estimated: float,
         "Stabilité de la période", Severity.WARNING if unstable else Severity.OK,
         f"{result.normal_ratio * 100:.2f} % des Δt à ± {result.tolerance_pct:g} % (± {ms(result.tolerance_s)} ms) ; "
         f"Δt min/moy/max {ms(result.dt_min_s)} / {ms(result.dt_mean_s)} / {ms(result.dt_max_s)} ms, "
-        f"écart-type {ms(result.dt_std_s)} ms ; écart max à la grille régulière {ms(result.grid_offset_max_s)} ms, "
-        f"écart-type {ms(result.grid_offset_std_s)} ms (jitter ou recalage de la grille, toléré) ; "
+        f"écart-type {ms(result.dt_std_s)} ms ; jitter max {ms(result.jitter_max_s)} ms (plus grand écart d'un pas "
+        f"à la période, toléré) ; "
         f"{counts.get(EventKind.PHASE, 0)} déphasage(s), {counts.get(EventKind.FREQUENCY, 0)} "
         "changement(s) de fréquence."))
     # Croissance continue.

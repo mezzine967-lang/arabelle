@@ -110,7 +110,7 @@ Pour chaque fichier, l'outil contrôle :
 | Contrôle | Signification |
 |---|---|
 | Valeur de la période | médiane des Δt, comparée à la période nominale si elle est saisie |
-| Stabilité | part des Δt dans la tolérance, écart max à la grille régulière, déphasages, changements de fréquence |
+| Stabilité | part des Δt dans la tolérance, jitter max, déphasages, changements de fréquence |
 | Croissance continue | aucun horodatage dupliqué ni retour arrière |
 | Données manquantes | trous de k périodes (k − 1 échantillons manquants) |
 | Lisibilité, horodatages aberrants | horodatage illisible ; horodatage isolé à plus de 10 périodes de ses deux voisins (ex. « 00:00:00 » au milieu d'un essai à 18 h, ou « 23:59:59 » au milieu d'un essai à 0 h 10), signalé en erreur et exclu du calcul du raster, sans compter de faux passage de minuit ; il reste affiché à son instant brut (case « Masquer… » de Base de temps > Configurer pour le retirer des courbes ; seuil de 10 périodes réglable dans Outils > Préférences) |
@@ -145,9 +145,9 @@ d'avertissement ni d'erreur ; il réapparaît automatiquement si une alerte surv
 
 Par défaut les courbes sont tracées sur l'**horodatage brut** du fichier : rien n'est
 recalé. Le jitter qui reste dans la tolérance n'est pas compté comme anomalie, il est
-mesuré et affiché (« écart max à la grille » : distance de chaque mesure à une grille
-parfaitement régulière ; un Δt isolé de 9 ms pour 10 ms décale la grille et donne aussi
-un écart d'environ 1 ms). Un Δt pile à la limite de la tolérance est conforme. L'option « Affichage régularisé » remplace l'affichage
+mesuré et affiché : **jitter max** = plus grand écart d'un pas à la période (un pas de
+11 ms pour une période de 10 ms donne 1 ms ; avec des temps entiers en ms, c'est un nombre
+entier, vérifiable directement dans le CSV). Un Δt pile à la limite de la tolérance est conforme. L'option « Affichage régularisé » remplace l'affichage
 par une droite ajustée sur le raster (les trous restent visibles, aucune mesure n'est
 créée) ; le TBM indique toujours lequel des deux affichages est utilisé.
 
@@ -261,7 +261,7 @@ condition est vraie. Copier ou exporter en CSV.
 |---|---|
 | Graphique (une par capture) | l'en-tête, le titre de la capture, puis **uniquement les graphiques** (axes et Time Base Monitor) |
 | Lectures | le tableau des lectures de curseurs de la capture (sur plusieurs pages s'il le faut) |
-| Identification et traçabilité (dernière) | un tableau d'une ligne par fichier source (statut, période, Δt conformes, écart max à la grille, anomalies, SHA-256), les seuls avertissements et erreurs, l'environnement |
+| Identification et traçabilité (dernière) | un tableau d'une ligne par fichier source (statut, période, Δt conformes, jitter max, anomalies), les seuls avertissements et erreurs, l'environnement |
 
 Chaque page porte l'en-tête complet (outil, émetteur, date, projet, unité, référence, empreinte du projet, fichiers sources) ; le pied de page indique qui a émis le rapport et quand. Les étiquettes des curseurs ne se chevauchent jamais : si l'axe est trop bas,
 elles se réduisent à l'instant (la valeur figure dans les pages de lectures).

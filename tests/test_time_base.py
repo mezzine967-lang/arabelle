@@ -36,7 +36,7 @@ class TimeBaseTests(unittest.TestCase):
         t = raster(1000, 0.01) + rng.uniform(-0.0004, 0.0004, 1000)
         result = analyze(t, tolerance_pct=10)
         self.assertIs(result.status, Severity.OK)
-        self.assertGreater(result.grid_offset_max_s, 0.0001)
+        self.assertGreater(result.jitter_max_s, 0.0001)
         np.testing.assert_allclose(np.diff(result.regular_s), 0.01, atol=1e-6)
 
     def test_dt_exactly_at_tolerance_is_conform_wherever_it_is(self):
@@ -49,6 +49,8 @@ class TimeBaseTests(unittest.TestCase):
             result = analyze(np.array(ms_, dtype=float) * 0.001)
             self.assertIs(result.status, Severity.OK, start)
             self.assertEqual(result.normal_ratio, 1.0)
+            # Temps entiers en ms, période de 10 ms : jitter max entier (11 − 10 = 1 ms), sans arrondi.
+            self.assertEqual(round(result.jitter_max_s * 1e3, 9), 1.0)
 
     def test_missing_samples_detected_and_kept_in_regular_time(self):
         """REQ 4101 : trou de 3 échantillons ; le trou reste visible après régularisation."""
@@ -85,7 +87,7 @@ class TimeBaseTests(unittest.TestCase):
         self.assertAlmostEqual(result.segments[1].period_s, 0.04)
         self.assertEqual(result.event_counts[EventKind.FREQUENCY], 1)
         self.assertNotIn(EventKind.MISSING, result.event_counts)
-        self.assertLess(result.grid_offset_max_s, 1e-9)        # régularisation par segment
+        self.assertLess(result.jitter_max_s, 1e-9)            # période propre à chaque segment
 
     def test_user_nominal_period(self):
         """REQ 4106 : raster imposé ; écart signalé avec son diagnostic."""

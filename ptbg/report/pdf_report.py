@@ -13,8 +13,8 @@
 - REQ_COMMON_KH_4104 : le Time Base Monitor figure sur chaque page, ou une
   indication confirmant la bonne construction de la base de temps.
 
-Une dernière page « Traçabilité » donne les empreintes SHA-256 complètes, le
-diagnostic de base de temps de chaque fichier et l'environnement d'exécution.
+Une dernière page « Identification et traçabilité » résume chaque fichier source,
+les points à signaler et l'environnement d'exécution.
 
 Mise en page (demandes du relecteur) : pages A4 en paysage ou en portrait,
 choisies à chaque génération ; rapport épuré :
@@ -25,8 +25,10 @@ choisies à chaque génération ; rapport épuré :
   (axes et Time Base Monitor) ;
 - pages « Lectures » : le tableau des lectures de curseurs de la capture ;
 - dernière page « Identification et traçabilité » : un tableau d'une ligne
-  par fichier source (statut, période, écarts, anomalies, SHA-256), les seuls
-  points à signaler (avertissements et erreurs) et l'environnement d'exécution.
+  par fichier source (statut, période, Δt conformes, jitter max, anomalies),
+  les seuls points à signaler (avertissements et erreurs) et l'environnement
+  d'exécution. L'empreinte SHA-256 de chaque CSV n'y figure pas (non demandée,
+  elle reste dans le diagnostic de chaque fichier, dans l'outil).
 
 Le PDF est d'abord écrit dans un fichier temporaire du même dossier puis
 renommé : un export interrompu ne laisse jamais un PDF partiel.
@@ -109,7 +111,7 @@ def _draw_header(fig: Figure, header: ReportHeader, summary: list[str]) -> None:
     left = [("Outil", header.tool), ("Émetteur", header.issuer), ("Date", header.date),
             ("Projet", header.project_name), ("Unité", header.project_unit),
             ("Référence", header.project_reference), ("Empreinte projet", header.project_hash),
-            ("Source(s)", f"{len(header.sources)} fichier(s) : {sources} (SHA-256 dans le tableau)")]
+            ("Source(s)", f"{len(header.sources)} fichier(s) : {sources}")]
     width = max(len(label) for label, _ in left)
     chars = int(width_in * 0.7 / (7 * CHAR_IN)) - width - 3     # bloc de gauche : 70 % de la largeur
     fig.text(0.03, 1 - 0.2 / height_in,
@@ -216,19 +218,18 @@ def _draw_footer(fig: Figure, header: ReportHeader) -> None:
              fontsize=6.5, color="#777777", family=REPORT_FONT)
 
 
-FILE_COLUMNS = (("Fichier", 0.2), ("Statut", 0.08), ("Période", 0.06), ("Δt conformes", 0.07),
-                ("Écart max à la grille", 0.1), ("Anomalies", 0.14), ("SHA-256", 0.35))
+FILE_COLUMNS = (("Fichier", 0.32), ("Statut", 0.13), ("Période", 0.1), ("Δt conformes", 0.12),
+                ("Jitter max", 0.1), ("Anomalies", 0.23))
 
 
 def _file_row(source) -> list[str]:
     """Ligne du tableau des fichiers sources de la page de traçabilité."""
     if not source.is_loaded:
-        return [source.name, source.status().label, "—", "—", "—", "fichier non lu", source.sha256 or "illisible"]
+        return [source.name, source.status().label, "—", "—", "—", "fichier non lu"]
     analysis = source.analysis
     events = ", ".join(f"{count} {kind.short}" for kind, count in analysis.event_counts.items()) or "aucune"
     return [source.name, source.status().label, f"{ms(analysis.period_used_s)} ms",
-            f"{analysis.normal_ratio * 100:.1f} %", f"{ms(analysis.grid_offset_max_s)} ms", events,
-            source.sha256 or "illisible"]
+            f"{analysis.normal_ratio * 100:.1f} %", f"{ms(analysis.jitter_max_s)} ms", events]
 
 
 def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, settings: Settings,
