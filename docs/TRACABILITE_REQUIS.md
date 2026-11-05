@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Document de référence | **NCS/00/I/COMMON----/ES/010 Rev. A** (13/10/2026) |
+| Document de référence | spécification des besoins de VISU PTBG |
 | Contenu de la spécification | **64 lignes** de requis pour **63 identifiants** (REQ_COMMON_KH_2201 apparaît deux fois : « Analog signal type : float » et « Binary group signal ») |
 | Contrôle automatique | `python tools/verifier_tracabilite.py` (et `tests/test_architecture.py`) relit les identifiants **dans la spécification** et vérifie que chacun est cité ici, dans le code et dans au moins un test |
 | Version tableur | `docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx`, avec l'onglet « Points ouverts » (questions à faire valider par le rédacteur de la spécification) |
@@ -13,7 +13,7 @@
 |---|---|---|
 | **Implémenté et testé** | fonction présente et vérifiée par un test automatique | 45 |
 | **Implémenté — interprétation à valider** | réalisé selon une interprétation ou une valeur par défaut ; la question correspondante est dans l'onglet « Points ouverts » de l'Excel | 16 |
-| **Proposition — énoncé vide** | l'énoncé de la Rev. A est vide ; une fonction est proposée, le requis ne peut pas être déclaré satisfait avant d'être rédigé | 1 |
+| **Proposition — énoncé vide** | l'énoncé de la spécification est vide ; une fonction est proposée, le requis ne peut pas être déclaré satisfait avant d'être rédigé | 1 |
 | **Implémenté — qualification … à faire** | réalisé et couvert par les tests automatiques (données de test) ; l'essai sur les postes cibles (poste Windows, VM Linux SLES 15 SP7 fournie par l'entreprise) ou sur les volumes réels reste à faire (dernière section) | 2 |
 | **Total** | | **64** |
 
@@ -136,7 +136,7 @@ Qualification restant à faire.
 
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
-| REQ_COMMON_KH_5500 | *(énoncé vide dans la Rev. A)* | Proposition : statistiques (durée, min, max, moyenne, écart-type, durée au-dessus d'un seuil) des signaux analogiques pendant qu'une condition Bool est vraie ; export CSV | `core/conditional.py`, `gui/dialogs/analysis_dialogs.py` | `test_analysis_tools.test_conditional_statistics` | Proposition — énoncé vide à rédiger |
+| REQ_COMMON_KH_5500 | *(énoncé vide dans la spécification)* | Proposition : statistiques (durée, min, max, moyenne, écart-type, durée au-dessus d'un seuil) des signaux analogiques pendant qu'une condition Bool est vraie ; export CSV | `core/conditional.py`, `gui/dialogs/analysis_dialogs.py` | `test_analysis_tools.test_conditional_statistics` | Proposition — énoncé vide à rédiger |
 
 ## 5 Sortie (rapport)
 

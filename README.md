@@ -1,8 +1,7 @@
 # VISU PTBG 1.1.0 — analyseur graphique de perturbographie
 
 Outil Python d'analyse des fichiers CSV de **perturbographie (PTBG)** produits par les PLC
-Framatome TXS Compact (projet NPI-NCS), conforme à la spécification
-**NCS/00/I/COMMON----/ES/010 Rev. A**.
+Framatome TXS Compact (projet NPI-NCS), conforme à sa spécification des besoins.
 
 Il lit un ou plusieurs CSV (un par PLC), **contrôle la base de temps** de chacun
 (période, stabilité, croissance continue, trous, déphasage, changements de fréquence),
@@ -69,7 +68,7 @@ Les 64 lignes de la spécification sont tracées dans
 |---|---|
 | Implémenté et testé | 45 |
 | Implémenté selon une interprétation à valider (questions dans l'Excel, onglet « Points ouverts ») | 16 |
-| Proposition (énoncé vide dans la Rev. A) | 1 |
+| Proposition (énoncé vide dans la spécification) | 1 |
 | Implémenté, qualification sur cible ou sur volumes réels à faire | 2 |
 | **Total** | **64** |
 

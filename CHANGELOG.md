@@ -28,7 +28,7 @@ Remarques issues des premiers essais (package simulation10 : 3 producteurs,
 | Curseurs | mode « suivi souris » retiré ; le panneau de lecture se met à jour en glissant le curseur | demande du relecteur |
 | Nuage X/Y | droite de régression retirée (corrélation r conservée) | remarque « virer la courbe de régression » |
 | Interface | plus aucun numéro de requis ni référence du document de spécification affichés dans les fenêtres, messages, diagnostics et rapports (ils restent dans le code et la traçabilité) | lisibilité |
-| Time Base Monitor | à l'écran, plus de texte sous le titre : statut par fichier au coin de la courbe, détail d'une anomalie au survol, diagnostic au clic droit ; le rapport garde le texte détaillé | remarque « ne pas afficher les avertissements sous le titre » |
+| Time Base Monitor | à l’écran, plus de texte sous le titre : statut par fichier au coin de la courbe, légende des anomalies en bas, détail d’une anomalie au survol, diagnostic au clic droit ; le rapport garde le texte détaillé | remarque « ne pas afficher les avertissements sous le titre » |
 
 Deux nouveaux points ouverts (n° 19 et 20) portent sur le détail du TBM à l'écran et sur
 l'énoncé du requis « tracking reading mode », à mettre à jour après le retrait du suivi souris.

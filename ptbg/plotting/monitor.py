@@ -156,7 +156,8 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
         plot_ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
                        fontsize=FONT_SMALL - 1, frameon=False)
     elif handles:
-        plot_ax.legend(handles=handles, loc="upper left", fontsize=FONT_SMALL - 1, framealpha=0.8,
+        # En bas à gauche : le haut à droite porte le statut de chaque fichier.
+        plot_ax.legend(handles=handles, loc="lower left", fontsize=FONT_SMALL - 1, framealpha=0.8,
                        ncol=len(handles))
     plot_ax.set_ylim(0, top * 1.08)
     return lines, markers

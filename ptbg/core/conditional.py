@@ -7,7 +7,7 @@ termes « signal Bool = état attendu » par ET ou OU. Elle sert :
 - au curseur horizontal : seuls les franchissements survenant pendant que la
   condition est vraie sont retenus ;
 - au traitement conditionnel (section 4.5, REQ_COMMON_KH_5500 dont l'énoncé
-  est VIDE dans la Rev. A) : statistiques des signaux analogiques pendant les
+  est VIDE dans la spécification) : statistiques des signaux analogiques pendant les
   périodes où la condition est vraie. Ce comportement est une proposition à
   valider (onglet « Points ouverts » du récapitulatif Excel), construite uniquement sur 5407.
 
