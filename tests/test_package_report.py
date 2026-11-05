@@ -224,7 +224,7 @@ class RenderAndReportTests(unittest.TestCase):
         """REQ 6001 / 5401 / 4102 : page à 4 axes de pistes logiques, deux doubles curseurs
         et un curseur global, sur une hauteur de rapport : aucune étiquette de curseur ni
         nom de piste ne se chevauche, le temps n'est gradué que sur l'axe du bas, et la
-        légende du TBM n'a qu'une entrée par anomalie (placée à droite de la courbe)."""
+        légende du TBM n'a qu'une entrée par anomalie (placée au-dessus de la courbe, qu'elle ne masque pas)."""
         from matplotlib.text import Annotation
         for name in ("simulation10_execution1.csv", "simulation10_execution2.csv"):
             self.ws.active_package.files.append(load_source(EXAMPLES / name, self.settings))
@@ -260,7 +260,7 @@ class RenderAndReportTests(unittest.TestCase):
         legend = renderer.tbm_plot.get_legend()
         names = [text.get_text().split(" (")[0] for text in legend.get_texts()]
         self.assertEqual(len(names), len(set(names)))
-        self.assertGreater(legend.get_window_extent().x0, renderer.tbm_plot.get_window_extent().x1)
+        self.assertGreaterEqual(legend.get_window_extent().y0, renderer.tbm_plot.get_window_extent().y1)  # au-dessus
 
     def test_report_page_layout_like_project_test_reports(self):
         """REQ 6001 / 6005 : en-tête à chasse fixe, identification à gauche avec tous les
@@ -328,7 +328,7 @@ class RenderAndReportTests(unittest.TestCase):
                 sizes = re.findall(rb"/MediaBox \[ ?0 0 ([\d.]+) ([\d.]+) ?\]", target.read_bytes())
                 self.assertEqual({(float(w), float(h)) for w, h in sizes}, {box})
                 tables = [any(isinstance(a, Table) for a in fig.findobj()) for fig in figures]
-                self.assertEqual(tables, [False, True, False])     # graphique, lectures, traçabilité
+                self.assertEqual(tables, [False, True, True])      # graphique seul, lectures, traçabilité
                 self.assertIn("Lectures de curseurs", " ".join(text.get_text() for text in figures[1].texts))
 
     def test_legend_names_variable_only_unless_ambiguous(self):

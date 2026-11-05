@@ -178,9 +178,7 @@ class TabRenderer:
         ratios = _row_ratios(tpl, self.tab.axles)
         total = float(sum(ratios))
         if with_tbm:
-            # Rapport : le texte détaillé grandit avec le nombre de fichiers ; écran : titre seul.
-            growth = 1 + 0.3 * max(len(sources) - 1, 0) if self.for_print else 1.0
-            ratios.append(min(0.8 * total, 0.38 * total * growth))
+            ratios.append(0.38 * total)
         elif with_note:
             ratios.append(0.12 * total * (1 + 0.5 * len(sources)))
         # Caractères par ligne du texte du TBM : largeur de la zone / largeur d'un caractère.
@@ -192,7 +190,7 @@ class TabRenderer:
             # lisible (sans dépasser 60 % de la hauteur), au lieu que le texte morde la courbe.
             rows, others = len(ratios), sum(ratios[:-1])
             scale = self.height_in * 0.89 * rows / (rows + HSPACE * (rows - 1))
-            needed = monitor.text_height_in(sources, chars, self.for_print) + MIN_TBM_PLOT_IN
+            needed = monitor.text_height_in(sources, width_pt / 72.0) + MIN_TBM_PLOT_IN
             if scale > needed:
                 ratios[-1] = max(ratios[-1], min(needed * others / (scale - needed), 1.5 * others))
         grid = self.container.add_gridspec(
@@ -225,14 +223,13 @@ class TabRenderer:
             rows = len(ratios)
             band_in = (self.height_in * 0.89 * rows * ratios[-1]
                        / (sum(ratios) * (rows + HSPACE * (rows - 1))))
-            text_in = monitor.text_height_in(sources, chars, self.for_print)
+            text_in = monitor.text_height_in(sources, width_pt / 72.0)
             text_share = text_in / max(band_in - text_in, 0.35)
             band = grid[tpl.nrows, :].subgridspec(2, 1, height_ratios=[text_share, 1], hspace=0.04)
             text_ax = self.container.add_subplot(band[0])
             self.tbm_plot = self.container.add_subplot(band[1], sharex=master)
             lines, self._tbm_markers = monitor.draw_monitor(
-                text_ax, self.tbm_plot, sources, self.timeline, chars, outside=self.for_print,
-                legend_xy=self.tab.tbm_legend_xy, detailed=self.for_print)
+                text_ax, self.tbm_plot, sources, self.timeline, legend_xy=self.tab.tbm_legend_xy)
             for line, x, y in lines:
                 self._lines.append((self.tbm_plot, line, DisplayCurve(x, y)))
             if not self.for_print:

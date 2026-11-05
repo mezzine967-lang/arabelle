@@ -17,9 +17,16 @@ Une dernière page « Traçabilité » donne les empreintes SHA-256 complètes, 
 diagnostic de base de temps de chaque fichier et l'environnement d'exécution.
 
 Mise en page (demandes du relecteur) : pages A4 en paysage ou en portrait,
-choisies à chaque génération ; la zone graphique d'un onglet occupe SEULE sa
-page (pas de tableau dessous) ; ses lectures de curseurs suivent sur une ou
-plusieurs pages « Lectures », puis vient la page de traçabilité.
+choisies à chaque génération ; rapport épuré :
+
+- page graphique : un bandeau d'une ligne (outil, projet, page), le titre de
+  la capture, puis UNIQUEMENT la zone graphique (axes et Time Base Monitor) ;
+  le pied de page dit qui a émis le rapport et quand ;
+- pages « Lectures » : le tableau des lectures de curseurs de la capture ;
+- dernière page « Identification et traçabilité » : l'en-tête complet
+  (REQ 6005), un tableau d'une ligne par fichier source (statut, période,
+  écarts, anomalies, SHA-256), les seuls points à signaler (avertissements et
+  erreurs) et l'environnement d'exécution.
 
 Le PDF est d'abord écrit dans un fichier temporaire du même dossier puis
 renommé : un export interrompu ne laisse jamais un PDF partiel.
@@ -39,9 +46,11 @@ from matplotlib.lines import Line2D
 
 from ptbg.config import Settings
 from ptbg.core.data_package import Timeline, Workspace
+from ptbg.core.diagnostics import Severity
 from ptbg.core.multi_source import compare_sources
 from ptbg.core.project import ReportPage
 from ptbg.core.readings import HEADER as READING_HEADER, compute_readings
+from ptbg.core.time_base import ms
 from ptbg.plotting.monitor import monitor_status
 from ptbg.plotting.renderer import TabRenderer
 from ptbg.plotting.styles import REPORT_FONT
@@ -49,7 +58,8 @@ from ptbg.system.environment import collect_environment
 from ptbg.version import full_name
 
 A4_IN = (11.69, 8.27)           # format A4 (grand côté, petit côté), en pouces
-HEADER_IN = 1.5                 # hauteur de l'en-tête et du titre de page
+HEADER_IN = 1.5                 # hauteur de l'en-tête complet (page de traçabilité)
+BANNER_IN = 0.75                # bandeau d'une ligne + titre (pages graphiques et lectures)
 FOOTER_IN = 0.35                # pied de page
 ROW_IN = 0.17                   # hauteur d'une ligne du tableau des lectures (pouces)
 READING_FONT = 6.5              # police du tableau des lectures
@@ -96,11 +106,11 @@ def _draw_header(fig: Figure, header: ReportHeader, summary: list[str]) -> None:
     sur le modèle des rapports de test du projet : identification à gauche (REQ 6005),
     bilan de la page à droite ; les lignes longues sont raccourcies à la largeur de la page."""
     width_in, height_in = fig.get_size_inches()
-    sources = [f"{name} (SHA-256 {digest[:16]}…)" for name, digest in header.sources] or ["aucune"]
+    sources = ", ".join(name for name, _ in header.sources) or "aucune"
     left = [("Outil", header.tool), ("Émetteur", header.issuer), ("Date", header.date),
             ("Projet", header.project_name), ("Unité", header.project_unit),
             ("Référence", header.project_reference), ("Empreinte projet", header.project_hash),
-            ("Source(s)", " ; ".join(sources))]
+            ("Source(s)", f"{len(header.sources)} fichier(s) : {sources} (SHA-256 dans le tableau)")]
     width = max(len(label) for label, _ in left)
     chars = int(width_in * 0.7 / (7 * CHAR_IN)) - width - 3     # bloc de gauche : 70 % de la largeur
     fig.text(0.03, 1 - 0.2 / height_in,
@@ -120,7 +130,25 @@ def _timeline(page: ReportPage, workspace: Workspace) -> Timeline:
 
 def _rows_per_page(height_in: float) -> int:
     """Lignes de lecture qui tiennent sur une page « Lectures »."""
-    return max(int((height_in - HEADER_IN - FOOTER_IN - 0.3) / ROW_IN) - 1, 5)
+    return max(int((height_in - BANNER_IN - FOOTER_IN - 0.3) / ROW_IN) - 1, 5)
+
+
+def _draw_banner(fig: Figure, header: ReportHeader, number: int, count: int) -> None:
+    """Bandeau d'une ligne des pages graphiques et lectures : outil, projet et unité, page."""
+    height_in = fig.get_size_inches()[1]
+    y = 1 - 0.22 / height_in
+    project = " · ".join(part for part in (header.project_name, header.project_unit) if part != "—")
+    fig.text(0.03, y, header.tool + (f" · {project}" if project else ""), fontsize=7.5, va="center",
+             family=REPORT_FONT, color="#333333")
+    fig.text(0.97, y, f"Page {number}/{count}", fontsize=7.5, va="center", ha="right", family=REPORT_FONT,
+             color="#333333")
+    line = 1 - 0.36 / height_in
+    fig.add_artist(Line2D([0.03, 0.97], [line, line], color="#999999", lw=0.5))
+
+
+def _fit(text: str, chars: int) -> str:
+    """Texte coupé à ``chars`` caractères (« … » en dernier) pour tenir dans sa colonne."""
+    return text if len(text) <= chars else text[:max(chars - 1, 1)] + "…"
 
 
 def _draw_readings(fig: Figure, rows, bottom: float, height: float, font: float) -> None:
@@ -131,7 +159,7 @@ def _draw_readings(fig: Figure, rows, bottom: float, height: float, font: float)
     # Texte de chaque cellule raccourci à la largeur de sa colonne.
     table_in = fig.get_size_inches()[0] * 0.94
     chars = [max(int(share * table_in / (font * CHAR_IN)) - 1, 6) for share in TABLE_COLUMNS]
-    table = ax.table(cellText=[[textwrap.shorten(str(c), n) for c, n in zip(r, chars)] for r in shown],
+    table = ax.table(cellText=[[_fit(str(c), n) for c, n in zip(r, chars)] for r in shown],
                      colLabels=READING_HEADER, loc="upper center", cellLoc="left", colWidths=list(TABLE_COLUMNS))
     table.auto_set_font_size(False)
     table.set_fontsize(font)
@@ -140,22 +168,16 @@ def _draw_readings(fig: Figure, rows, bottom: float, height: float, font: float)
 
 
 def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspace: Workspace,
-                 settings: Settings, rows: list, number: int, count: int) -> None:
-    """Page graphique : en-tête, titre, zone graphique seule sur la page, pied de page."""
+                 settings: Settings, number: int, count: int) -> None:
+    """Page graphique : bandeau, titre, puis uniquement la zone graphique."""
     width_in, height_in = page_size(settings.report_orientation)
     fig = Figure(figsize=(width_in, height_in), dpi=100)
-    files = [s for s in (workspace.find(fid) for fid in page.tab.file_ids()) if s is not None]
-    # Courbes tracées : celles des axes temporels, plus un nuage par axe X/Y renseigné.
-    curves = sum(len(axle.curves) + (axle.xy_x is not None and axle.xy_y is not None) for axle in page.tab.axles)
-    readings = f"Lectures de curseurs : {len(rows)}" + (f" (page {number + 1})" if rows else "")
-    _draw_header(fig, header, [f"Page {number}/{count}", f"Fichiers sources : {len(files)}",
-                               f"Courbes : {curves}", readings,
-                               f"Base de temps : {monitor_status(files).label if files else '—'}"])
+    _draw_banner(fig, header, number, count)
     _draw_title(fig, page)
-    top_in = HEADER_IN + (0.15 if page.tab.comment else 0.0)
+    top_in = BANNER_IN + (0.15 if page.tab.comment else 0.0)
     graph_in = height_in - top_in - FOOTER_IN
     # Une sous-figure n'utilise que les RATIOS de sa grille (pas top/bottom) :
-    # 3 bandes = en-tête (masqué ici), zone graphique, pied de page.
+    # 3 bandes = bandeau et titre (masqués ici), zone graphique, pied de page.
     bands = fig.add_gridspec(3, 1, height_ratios=[top_in, graph_in, FOOTER_IN], hspace=0)
     area = fig.add_subfigure(bands[1])
     TabRenderer(area, page.tab, workspace, _timeline(page, workspace), settings.max_points_per_curve * 2,
@@ -173,78 +195,125 @@ def _render_readings(pdf: PdfPages, page: ReportPage, header: ReportHeader, sett
     chunks = [rows[i:i + per_page] for i in range(0, len(rows), per_page)]
     for part, chunk in enumerate(chunks, 1):
         fig = Figure(figsize=(width_in, height_in), dpi=100)
-        suite = f" ({part}/{len(chunks)})" if len(chunks) > 1 else ""
-        _draw_header(fig, header, [f"Page {number + part - 1}/{count}", f"Lectures de curseurs{suite}",
-                                   f"Capture : {page.tab.title}"])
-        _draw_title(fig, page, "Lectures de curseurs — ")
+        _draw_banner(fig, header, number + part - 1, count)
+        suite = f" (suite {part}/{len(chunks)})" if part > 1 else ""
+        _draw_title(fig, page, "Lectures de curseurs — ", suite)
         table_in = (len(chunk) + 1) * ROW_IN
-        top = 1 - (HEADER_IN + 0.25) / height_in
+        top = 1 - (BANNER_IN + 0.2) / height_in
         _draw_readings(fig, chunk, top - table_in / height_in, table_in / height_in, READING_FONT)
         _draw_footer(fig, header)
         pdf.savefig(fig)
     return len(chunks)
 
 
-def _draw_title(fig: Figure, page: ReportPage, prefix: str = "") -> None:
-    """Titre de la capture (et son commentaire) sous l'en-tête."""
+def _draw_title(fig: Figure, page: ReportPage, prefix: str = "", suffix: str = "") -> None:
+    """Titre de la capture (et son commentaire) sous le bandeau."""
     width_in, height_in = fig.get_size_inches()
     chars = int(width_in * 0.94 / (10 * CHAR_IN))
-    title = f"{prefix}{page.tab.title} — capture du {page.captured_at}"
-    fig.text(0.5, 1 - 1.36 / height_in, textwrap.shorten(title, chars), fontsize=10, fontweight="bold",
+    title = f"{prefix}{page.tab.title} — capture du {page.captured_at}{suffix}"
+    fig.text(0.5, 1 - 0.58 / height_in, textwrap.shorten(title, chars), fontsize=10, fontweight="bold",
              ha="center", family=REPORT_FONT)
     if page.tab.comment:
-        fig.text(0.5, 1 - 1.52 / height_in, textwrap.shorten(page.tab.comment, int(chars * 1.3)),
+        fig.text(0.5, 1 - 0.76 / height_in, textwrap.shorten(page.tab.comment, int(chars * 1.3)),
                  fontsize=7.5, style="italic", ha="center", family=REPORT_FONT)
 
 
 def _draw_footer(fig: Figure, header: ReportHeader) -> None:
-    """Pied de page : nom et version de l'outil."""
-    fig.text(0.5, 0.1 / fig.get_size_inches()[1], header.tool, ha="center", fontsize=6.5, color="#555555",
-             family=REPORT_FONT)
+    """Pied de page : émetteur et date du rapport."""
+    fig.text(0.5, 0.12 / fig.get_size_inches()[1], f"Émis par {header.issuer} le {header.date}", ha="center",
+             fontsize=6.5, color="#777777", family=REPORT_FONT)
+
+
+FILE_COLUMNS = (("Fichier", 0.2), ("Statut", 0.08), ("Période", 0.06), ("Δt conformes", 0.07),
+                ("Écart max à la grille", 0.1), ("Anomalies", 0.14), ("SHA-256", 0.35))
+
+
+def _file_row(source) -> list[str]:
+    """Ligne du tableau des fichiers sources de la page de traçabilité."""
+    if not source.is_loaded:
+        return [source.name, source.status().label, "—", "—", "—", "fichier non lu", source.sha256 or "illisible"]
+    analysis = source.analysis
+    events = ", ".join(f"{count} {kind.short}" for kind, count in analysis.event_counts.items()) or "aucune"
+    return [source.name, source.status().label, f"{ms(analysis.period_used_s)} ms",
+            f"{analysis.normal_ratio * 100:.1f} %", f"{ms(analysis.grid_offset_max_s)} ms", events,
+            source.sha256 or "illisible"]
 
 
 def _render_annex(pdf: PdfPages, header: ReportHeader, workspace: Workspace, settings: Settings,
                   pages: list[ReportPage], number: int, count: int) -> None:
-    """Page de traçabilité : empreintes, diagnostics de base de temps, environnement."""
+    """Page « Identification et traçabilité » (voir l'en-tête du module)."""
     width_in, height_in = page_size(settings.report_orientation)
     fig = Figure(figsize=(width_in, height_in), dpi=100)
-    lines = ["TRAÇABILITÉ DES SOURCES ET DE LA BASE DE TEMPS", ""]
     names = {name for name, _ in header.sources}
     files = [s for s in workspace.files() if s.name in names]
-    _draw_header(fig, header, [f"Page {number}/{count}", "Annexe de traçabilité",
-                               f"Fichiers sources : {len(files)}",
+    _draw_header(fig, header, [f"Page {number}/{count}", "Identification et traçabilité",
                                f"Base de temps : {monitor_status(files).label if files else '—'}"])
+    y_in = HEADER_IN
+
+    def heading(text: str) -> None:
+        """Titre de section, puis descente sous lui."""
+        nonlocal y_in
+        fig.text(0.03, 1 - y_in / height_in, text, fontsize=9, fontweight="bold", va="top", family=REPORT_FONT)
+        y_in += 0.3
+
+    heading("Fichiers sources")
+    if files:
+        rows = [_file_row(source) for source in files]
+        table_in = (len(rows) + 1) * ROW_IN
+        ax = fig.add_axes([0.03, 1 - (y_in + table_in) / height_in, 0.94, table_in / height_in])
+        ax.set_axis_off()
+        font = 6 if width_in > 9 else 5
+        table_width = width_in * 0.94
+        chars = [max(int(share * table_width / (font * CHAR_IN)) - 2, 6) for _, share in FILE_COLUMNS]
+        table = ax.table(cellText=[[_fit(str(c), n) for c, n in zip(row, chars)] for row in rows],
+                         colLabels=[label for label, _ in FILE_COLUMNS], loc="upper center", cellLoc="left",
+                         colWidths=[share for _, share in FILE_COLUMNS])
+        table.auto_set_font_size(False)
+        table.set_fontsize(font)
+        for cell in table.get_celld().values():
+            cell.set_height(1.0 / (len(rows) + 1))
+        y_in += table_in + 0.35
+    # Points à signaler : avertissements et erreurs seulement (les constats « OK » et
+    # les informations sont dans le diagnostic de chaque fichier, dans l'outil).
+    notes = []
     for source in files:
-        lines.append(f"■ {source.name} — {source.path}")
-        lines.append(f"   SHA-256 : {source.sha256} ; taille : {source.table.size_bytes if source.table else 0} octets ; "
-                     f"statut : {source.status().label}")
+        notes += [f"{source.name} : {issue.as_text()}" for issue in source.all_issues()
+                  if issue.severity >= Severity.WARNING][:6]
         if source.is_loaded:
-            lines.append(f"   Conversion : {source.conversion.description}")
-            for check in source.analysis.checks:
-                lines.append(f"   {check.name} [{check.severity.label}] : {check.text}")
-        for issue in source.all_issues()[:6]:
-            lines.append(f"   {issue.as_text()}")
-    timelines = {(p.time_mode, p.ref_ns) for p in pages}
-    for mode, ref in sorted(timelines, key=str):
-        for issue in compare_sources(files, Timeline(mode, ref)):
-            lines.append(f"Inter-sources : {issue.as_text()}")
-    environment = collect_environment()
-    lines += ["", f"Environnement : Python {environment.python_version} ({environment.python_bits} bits), "
-              f"{environment.os_description}, {environment.tk_version}"]
-    lines.append("Bibliothèques : " + ", ".join(f"{p.name} {p.installed}" for p in environment.packages if p.installed))
+            notes += [f"{source.name} : {check.name} [{check.severity.label}] — {check.text}"
+                      for check in source.analysis.checks if check.severity >= Severity.WARNING]
+            if source.time_settings.operator_note:
+                notes.append(f"{source.name} : diagnostic de l'opérateur — {source.time_settings.operator_note}")
+    for mode, ref in sorted({(p.time_mode, p.ref_ns) for p in pages}, key=str):
+        notes += [f"Entre sources : {issue.as_text()}" for issue in compare_sources(files, Timeline(mode, ref))
+                  if issue.severity >= Severity.WARNING]
+    heading("Points à signaler")
+    chars = int(width_in * 0.92 / (6.5 * CHAR_IN))
     wrapped = []
-    for line in lines:
-        wrapped += textwrap.wrap(line, int(width_in * 0.94 / (6.5 * CHAR_IN)), subsequent_indent="      ") or [""]
-    room = int((height_in - HEADER_IN - FOOTER_IN) * 72 / (6.5 * 1.2))       # lignes qui tiennent
-    fig.text(0.03, 1 - (HEADER_IN - 0.1) / height_in, "\n".join(wrapped[:room]), fontsize=6.5, va="top",
-             family="DejaVu Sans Mono")
+    for note in notes or ["Aucun avertissement ni erreur."]:
+        wrapped += textwrap.wrap("• " + note, chars, subsequent_indent="  ")
+    room = max(int((height_in - y_in - FOOTER_IN - 0.9) * 72 / (6.5 * 1.35)), 3)
+    if len(wrapped) > room:
+        wrapped = wrapped[:room - 1] + [f"… ({len(wrapped) - room + 1} ligne(s) de plus : voir le diagnostic "
+                                        "de chaque fichier dans l'outil)"]
+    fig.text(0.03, 1 - y_in / height_in, "\n".join(wrapped), fontsize=6.5, va="top", family=REPORT_FONT,
+             linespacing=1.35)
+    y_in += len(wrapped) * 6.5 * 1.35 / 72 + 0.3
+    environment = collect_environment()
+    heading("Environnement")
+    text = (f"Python {environment.python_version} ({environment.python_bits} bits), {environment.os_description}, "
+            f"{environment.tk_version} ; " + ", ".join(f"{p.name} {p.installed}" for p in environment.packages
+                                                         if p.installed))
+    fig.text(0.03, 1 - y_in / height_in, "\n".join(textwrap.wrap(text, chars)), fontsize=6.5, va="top",
+             family=REPORT_FONT, linespacing=1.35)
+    _draw_footer(fig, header)
     pdf.savefig(fig)
 
 
 def export_pdf(path: Path, pages: list[ReportPage], header: ReportHeader, workspace: Workspace,
                settings: Settings, progress=None) -> None:
     """Écrit le rapport : pour chaque capture, sa page graphique puis ses pages de
-    lectures ; enfin l'annexe de traçabilité.
+    lectures ; enfin la page d'identification et de traçabilité.
 
     ``progress(i, n)`` est appelé après chaque capture (i = dernière page écrite).
     """
@@ -264,7 +333,7 @@ def export_pdf(path: Path, pages: list[ReportPage], header: ReportHeader, worksp
         with style.context("default"), PdfPages(temporary, metadata=metadata) as pdf:
             number = 1
             for page, rows in zip(pages, readings):
-                _render_page(pdf, page, header, workspace, settings, rows, number, count)
+                _render_page(pdf, page, header, workspace, settings, number, count)
                 number += 1 + _render_readings(pdf, page, header, settings, rows, number + 1, count)
                 if progress:
                     progress(number - 1, count)

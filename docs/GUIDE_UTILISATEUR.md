@@ -119,12 +119,12 @@ Le **Time Base Monitor**, en bas de chaque onglet, montre les Δt de chaque fich
 (ou Δt / période quand les fichiers ont des périodes différentes), la période et sa bande
 de tolérance, et les anomalies (▼ trou, ◆ déphasage, ✖ doublon / retour arrière,
 ✚ horodatage illisible, ★ horodatage aberrant, trait mixte = changement de fréquence).
-À l'écran, le titre donne le statut général et le coin de la courbe le statut de chaque
-fichier (« fichier : T = 10 ms — OK ») ; **survoler un marqueur** affiche le détail de
-l'anomalie (fichier, instant, ligne du CSV, Δt) et un **clic droit** sur la courbe ouvre le
-diagnostic complet d'un fichier. Le rapport PDF garde, sous le titre du TBM, le texte
-détaillé de la conversion (format, unité, origine, affichage brut ou régularisé) et du
-statut, puisqu'il ne se survole pas.
+Le titre donne le statut général. La légende, placée **au-dessus** de la courbe pour ne
+jamais la masquer, donne la couleur, la période et le statut de chaque fichier
+(« fichier : T = 10 ms — OK ») puis le nombre de chaque sorte d'anomalie. À l'écran,
+**survoler un marqueur** affiche le détail de l'anomalie (fichier, instant, ligne du CSV,
+Δt) et un **clic droit** sur la courbe ouvre le diagnostic complet d'un fichier. Dans le
+rapport PDF, le résumé de chaque fichier est sur la page de traçabilité.
 
 **Masquer le TBM** n'est possible que si aucune base de temps affichée n'a
 d'avertissement ni d'erreur ; il réapparaît automatiquement si une alerte survient.
@@ -253,20 +253,20 @@ condition est vraie. Copier ou exporter en CSV.
 | **Gérer les pages…** | ordonner, commenter, supprimer les captures, puis **Générer le PDF** |
 
 À chaque génération, l'outil demande l'orientation des pages A4 : **paysage** ou
-**portrait** (le dernier choix est proposé). Chaque capture occupe **une page à elle
-seule** (en-tête, titre, zone graphique avec son Time Base Monitor) ; ses **lectures de
-curseurs** suivent sur une ou plusieurs pages « Lectures », puis vient la page de
-traçabilité. Les étiquettes des curseurs ne se chevauchent jamais : si l'axe est trop bas,
+**portrait** (le dernier choix est proposé). Le rapport est épuré :
+
+| Page | Contenu |
+|---|---|
+| Graphique (une par capture) | un bandeau d'une ligne (outil, projet, n° de page), le titre de la capture, puis **uniquement les graphiques** (axes et Time Base Monitor) |
+| Lectures | le tableau des lectures de curseurs de la capture (sur plusieurs pages s'il le faut) |
+| Identification et traçabilité (dernière) | l'en-tête complet (outil, émetteur, date, projet, unité, référence, empreinte), un tableau d'une ligne par fichier source (statut, période, Δt conformes, écart max à la grille, anomalies, SHA-256), les seuls avertissements et erreurs, l'environnement |
+
+Le pied de chaque page indique qui a émis le rapport et quand. Les étiquettes des curseurs ne se chevauchent jamais : si l'axe est trop bas,
 elles se réduisent à l'instant (la valeur figure dans les pages de lectures).
 
-Chaque page, au format des rapports de test du projet (police à chasse fixe, axes
-quadrillés, légendes à droite), comporte l'en-tête — à gauche : version de l'outil,
-émetteur, date, projet et unité, référence et empreinte du projet, fichiers sources et
-SHA-256 ; à droite : page, nombre de fichiers, de courbes, de lectures et statut de la base
-de temps —, le titre de la capture, la zone graphique avec le
-**Time Base Monitor** (ou, s'il a été masqué, l'indication de conformité de la base de
-temps) et le tableau des lectures de curseurs. Une dernière page de **traçabilité** reprend
-empreintes complètes, diagnostics de base de temps et environnement d'exécution.
+Le style suit celui des rapports de test du projet : police à chasse fixe, axes quadrillés,
+légendes des courbes à droite. Si le Time Base Monitor a été masqué, la page graphique porte
+à sa place l'indication de conformité de la base de temps.
 
 ## 9. Projet
 

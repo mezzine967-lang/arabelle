@@ -11,12 +11,13 @@
   la mise en page, le rapport porte une indication confirmant la bonne
   construction de la base de temps (``confirmation_text``).
 
-À l'écran (remarque du relecteur), le titre n'est plus suivi du texte de
-conversion et des avertissements : le statut de chaque fichier est écrit au
-coin de la courbe des Δt, chaque anomalie est un marqueur dont le détail
-(fichier, instant, ligne CSV, Δt) s'affiche au survol, et le diagnostic
-complet s'ouvre par un clic droit. Le rapport, qui ne se survole pas, garde
-le texte détaillé sous le titre.
+Présentation (remarques du relecteur) : sous le titre, rien que la courbe des
+Δt. Une seule légende, HORS de la courbe pour ne jamais la masquer, donne la
+couleur, la période et le statut de chaque fichier puis le compte de chaque
+sorte d'anomalie, au-dessus de la courbe (écran et rapport). À l'écran, le détail d'une anomalie (fichier, instant, ligne CSV,
+Δt) s'affiche au survol de son marqueur et le diagnostic complet s'ouvre par
+un clic droit ; dans le rapport, le détail de la conversion et des contrôles
+de chaque fichier est sur la page de traçabilité.
 """
 from __future__ import annotations
 
@@ -32,8 +33,9 @@ from ptbg.core.time_parser import format_absolute
 from ptbg.plotting.styles import CURVE_COLORS, EVENT_STYLE, FONT_SMALL, SEVERITY_COLORS, apply_grid
 
 TITLE = "Time Base Monitor"
-LINE_HEIGHT_PT = 8.5      # interligne des étiquettes « fichier : T = … » (points)
-LEGEND_WIDTH = 22         # caractères par ligne de la légende placée dans la marge du rapport
+LEGEND_COLUMNS = 4        # colonnes au plus de la légende placée au-dessus de la courbe
+LEGEND_COLUMN_IN = 2.7    # largeur d'une colonne de cette légende (pouces)
+LEGEND_ROW_IN = 0.17      # hauteur d'une rangée de cette légende (pouces)
 
 
 def monitor_status(sources: list[SourceFile]) -> Severity:
@@ -80,13 +82,39 @@ def wrap_text(text: str, chars: int) -> str:
     return "\n".join(out)
 
 
-def text_height_in(sources: list[SourceFile], chars: int, detailed: bool = True) -> float:
-    """Hauteur (pouces) du bandeau texte : titre, plus les lignes de description coupées
-    à ``chars`` si ``detailed`` (rapport)."""
-    if not detailed:
-        return 0.22
-    lines = sum(wrap_text(describe_source(source), chars).count("\n") + 1 for source in sources) or 1
-    return 0.28 + 0.118 * lines             # marge sous le texte : il ne touche pas la courbe
+def legend_columns(width_in: float) -> int:
+    """Colonnes de la légende pour une courbe large de ``width_in`` pouces."""
+    return max(1, min(LEGEND_COLUMNS, int(width_in / LEGEND_COLUMN_IN)))
+
+
+def text_height_in(sources: list[SourceFile], width_in: float) -> float:
+    """Hauteur (pouces) du bandeau au-dessus de la courbe : titre et rangées de la légende."""
+    entries = len(_legend_handles(_loaded(sources)))
+    return 0.24 + LEGEND_ROW_IN * -(-entries // legend_columns(width_in))
+
+
+def _loaded(sources: list[SourceFile]) -> list[SourceFile]:
+    """Fichiers dont la courbe des Δt peut être tracée."""
+    return [s for s in sources if s.is_loaded and s.analysis.dt_values.size]
+
+
+def _legend_handles(loaded: list[SourceFile]) -> list:
+    """Entrées de la légende : chaque fichier (couleur, période, statut), puis chaque
+    sorte d'anomalie avec son total."""
+    handles = [Line2D([], [], color=CURVE_COLORS[position % len(CURVE_COLORS)], lw=1.5,
+                      label=f"{source.name} : T = {ms(source.analysis.period_used_s)} ms — "
+                            f"{source.time_status().label}")
+               for position, source in enumerate(loaded)]
+    totals = {kind: sum(s.analysis.event_counts[kind] for s in loaded) for kind in EVENT_STYLE
+              if kind is not EventKind.FREQUENCY}
+    handles += [Line2D([], [], marker=EVENT_STYLE[kind][0], ls="none", ms=6, color=EVENT_STYLE[kind][1],
+                       mec="white", mew=0.5, label=f"{kind.label} ({count})")
+                for kind, count in totals.items() if count]
+    changes = sum(s.analysis.event_counts[EventKind.FREQUENCY] for s in loaded)
+    if changes:
+        handles.append(Line2D([], [], color=EVENT_STYLE[EventKind.FREQUENCY][1], ls="-.", lw=1.2,
+                              label=f"{EventKind.FREQUENCY.label} ({changes})"))
+    return handles
 
 
 def confirmation_text(sources: list[SourceFile], chars: int) -> str:
@@ -99,14 +127,12 @@ def confirmation_text(sources: list[SourceFile], chars: int) -> str:
     return wrap_text("\n".join(lines), chars)
 
 
-def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline, chars: int,
-                 outside: bool = False, legend_xy=None, detailed: bool = True) -> tuple[list, list]:
-    """Dessine le TBM : titre (et, si ``detailed``, texte de conversion et de statut coupé
-    à ``chars`` caractères par ligne) + courbe des Δt.
+def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline,
+                 legend_xy=None) -> tuple[list, list]:
+    """Dessine le TBM : titre + courbe des Δt, avec une légende hors de la courbe.
 
-    Légende des anomalies : une entrée par sorte d'anomalie (total des
-    fichiers) ; ``outside`` (rapport) la place à droite de la courbe ; ``legend_xy`` :
-    place choisie à la souris (coin bas-gauche, fraction de la courbe).
+    Légende (voir l'en-tête) : au-dessus de la courbe ; ``legend_xy`` : place
+    choisie à la souris (coin bas-gauche, fraction de la courbe).
     Renvoie les (ligne, x, y) des courbes de Δt, que le rendu réduit au zoom comme
     les autres courbes, et les marqueurs d'anomalie (x, y, texte du détail)."""
     status = monitor_status(sources) if sources else Severity.OK
@@ -115,17 +141,11 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     title = f"{TITLE} — statut : {status.label if sources else 'aucun fichier affiché'}"
     text_ax.text(0.0, 1.0, title, transform=text_ax.transAxes, va="top", ha="left",
                  fontsize=FONT_SMALL + 1, fontweight="bold", color=color)
-    if detailed:
-        body = wrap_text("\n".join(describe_source(source) for source in sources), chars)
-        # Corps placé juste sous le titre (décalage en points, indépendant de la hauteur).
-        text_ax.annotate(body, xy=(0.0, 1.0), xycoords="axes fraction", xytext=(0, -13),
-                         textcoords="offset points", va="top", ha="left",
-                         fontsize=FONT_SMALL - 0.5, family="DejaVu Sans Mono")
     plot_ax.tick_params(labelsize=FONT_SMALL)
     apply_grid(plot_ax)
     for spine in plot_ax.spines.values():
         spine.set_edgecolor(color)
-    loaded = [s for s in sources if s.is_loaded and s.analysis.dt_values.size]
+    loaded = _loaded(sources)
     if not loaded:
         plot_ax.set_ylabel("Δt (ms)", fontsize=FONT_SMALL)
         return [], []
@@ -138,34 +158,18 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     lines, markers = [], []
     for position, source in enumerate(loaded):
         lines.append(_draw_source(plot_ax, source, timeline, CURVE_COLORS[position % len(CURVE_COLORS)],
-                                  top, position, relative, markers))
-    wrap = outside and not legend_xy        # libellés coupés seulement dans la marge du rapport
-    totals = {kind: sum(s.analysis.event_counts[kind] for s in loaded) for kind in EVENT_STYLE
-              if kind is not EventKind.FREQUENCY}
-    handles = [Line2D([], [], marker=EVENT_STYLE[kind][0], ls="none", ms=6, color=EVENT_STYLE[kind][1],
-                      mec="white", mew=0.5, label=_legend_label(f"{kind.label} ({count})", wrap))
-               for kind, count in totals.items() if count]
-    changes = sum(s.analysis.event_counts[EventKind.FREQUENCY] for s in loaded)
-    if changes:
-        handles.append(Line2D([], [], color=EVENT_STYLE[EventKind.FREQUENCY][1], ls="-.", lw=1.2,
-                              label=_legend_label(f"{EventKind.FREQUENCY.label} ({changes})", wrap)))
-    if handles and legend_xy:
-        plot_ax.legend(handles=handles, loc=tuple(legend_xy), fontsize=FONT_SMALL - 1, framealpha=0.8,
-                       ncol=len(handles))
-    elif handles and outside:
-        plot_ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0,
-                       fontsize=FONT_SMALL - 1, frameon=False)
-    elif handles:
-        # En bas à gauche : le haut à droite porte le statut de chaque fichier.
-        plot_ax.legend(handles=handles, loc="lower left", fontsize=FONT_SMALL - 1, framealpha=0.8,
-                       ncol=len(handles))
+                                  top, relative, markers))
+    handles = _legend_handles(loaded)
+    columns = legend_columns(plot_ax.bbox.width / plot_ax.figure.dpi)
+    if legend_xy:
+        plot_ax.legend(handles=handles, loc=tuple(legend_xy), fontsize=FONT_SMALL - 1, framealpha=0.85,
+                       ncol=columns)
+    else:
+        # Au-dessus de la courbe, sous le titre : aucune partie de la courbe n'est masquée.
+        plot_ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(0.0, 1.01), borderaxespad=0.0,
+                       fontsize=FONT_SMALL - 1, frameon=False, ncol=columns, columnspacing=1.6)
     plot_ax.set_ylim(0, top * 1.08)
     return lines, markers
-
-
-def _legend_label(text: str, wrap: bool) -> str:
-    """Libellé de légende ; ``wrap`` (légende dans la marge du rapport) : coupé pour y tenir."""
-    return "\n".join(textwrap.wrap(text, LEGEND_WIDTH)) if wrap else text
 
 
 def _readable_neighbour_x(x_all: np.ndarray, indices: list[int]) -> np.ndarray:
@@ -186,7 +190,7 @@ def _event_detail(source, timeline, event, x: float) -> str:
                                         event.detail) if part)
 
 
-def _draw_source(ax, source, timeline, color, top, position, relative, markers: list):
+def _draw_source(ax, source, timeline, color, top, relative, markers: list):
     """Δt d'un fichier, période de référence par segment, bande de tolérance,
     anomalies ; les Δt hors échelle sont posés sur le bord supérieur (▲).
     ``relative`` : ordonnée = Δt / période du segment (sans unité). Chaque anomalie
@@ -228,11 +232,4 @@ def _draw_source(ax, source, timeline, color, top, position, relative, markers: 
             ax.plot(ex, ey, marker, ls="none", ms=6, color=event_color, mec="white", mew=0.5)
         markers += [(float(x), float(y), _event_detail(source, timeline, event, x))
                     for x, y, event in zip(ex, ey, events)]
-    # Une ligne par fichier, empilées en points : elles ne se recouvrent pas sur une courbe basse.
-    # Statut du fichier écrit à côté de sa période (il n'est plus sous le titre à l'écran).
-    ax.annotate(f"{source.name} : T = {ms(analysis.period_used_s)} ms — {source.time_status().label}",
-                xy=(0.995, 1.0),
-                xycoords="axes fraction", xytext=(0, -2 - position * LINE_HEIGHT_PT), textcoords="offset points",
-                ha="right", va="top", fontsize=FONT_SMALL - 1, color=color,
-                bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.3))
     return line, x, shown

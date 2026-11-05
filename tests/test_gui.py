@@ -604,21 +604,24 @@ class InterfaceTests(unittest.TestCase):
         self.assertTrue(any(text.endswith(" %") for text in labels))
 
     def test_monitor_details_on_hover_not_under_title(self):
-        """Remarque du relecteur (REQ 4102) : à l'écran, pas de texte d'avertissement sous le
-        titre du TBM ; statut au coin de la courbe ; détail d'une anomalie au survol."""
+        """Remarques du relecteur (REQ 4102) : pas de texte d'avertissement sous le titre du
+        TBM ; statut de chaque fichier dans la légende, placée au-dessus de la courbe pour ne
+        pas la masquer ; détail d'une anomalie au survol."""
         from matplotlib.backend_bases import MouseEvent
         (source,) = self.load(DEMO / "PLC_B_20ms_dephase.csv")
         tab = self.ctl.graph.active_tab()
         tab.add_curves([(source.id, source.float_names()[0], False)], 0)
-        renderer = tab.renderer
-        texts = " ".join(t.get_text() for ax in tab.figure.axes for t in ax.texts)
-        self.assertNotIn("Stabilité", texts)
-        self.assertNotIn(source.conversion.description, texts)
-        self.assertIn(f"{source.name} : T = 20 ms — {source.time_status().label}", texts)
         self.root.update()
         tab.redraw()                                     # rendu définitif à la taille de la fenêtre
         tab.canvas.draw()
         renderer = tab.renderer
+        texts = " ".join(t.get_text() for ax in tab.figure.axes for t in ax.texts)
+        self.assertNotIn("Stabilité", texts)
+        self.assertNotIn(source.conversion.description, texts)
+        legend = renderer.tbm_plot.get_legend()
+        self.assertIn(f"{source.name} : T = 20 ms — {source.time_status().label}",
+                      [text.get_text() for text in legend.get_texts()])
+        self.assertGreaterEqual(legend.get_window_extent().y0, renderer.tbm_plot.get_window_extent().y1)
         self.assertTrue(renderer._tbm_markers)
         x, y, detail = renderer._tbm_markers[0]
         x_px, y_px = renderer.tbm_plot.transData.transform((x, y))
