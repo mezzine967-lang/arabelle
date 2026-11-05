@@ -12,15 +12,21 @@
   construction de la base de temps (``confirmation_text``).
 
 Présentation (remarques du relecteur) : sous le titre, rien que la courbe des
-Δt. Une seule légende, HORS de la courbe pour ne jamais la masquer, donne la
-couleur, la période et le statut de chaque fichier puis le compte de chaque
-sorte d'anomalie, au-dessus de la courbe (écran et rapport). À l'écran, le détail d'une anomalie (fichier, instant, ligne CSV,
+Δt, qui garde toute la hauteur de la bande. Une seule légende, HORS de la
+courbe pour ne jamais la masquer, sur la ligne du titre quand elle y tient :
+nom court de chaque fichier (préfixe commun et « .csv » retirés), période,
+statut s'il n'est pas OK, puis le compte de chaque sorte d'anomalie. L'échelle
+verticale s'adapte aux Δt mesurés (0,5 à 1,5 période pour un raster régulier,
+jusqu'à 2,6 périodes s'il y a des trous) : les écarts restent visibles au lieu
+d'être écrasés sur une ligne. À l'écran, le détail d'une anomalie (fichier, instant, ligne CSV,
 Δt) s'affiche au survol de son marqueur et le diagnostic complet s'ouvre par
 un clic droit ; dans le rapport, le détail de la conversion et des contrôles
 de chaque fichier est sur la page de traçabilité.
 """
 from __future__ import annotations
 
+import os
+import re
 import textwrap
 
 import numpy as np
@@ -33,9 +39,9 @@ from ptbg.core.time_parser import format_absolute
 from ptbg.plotting.styles import CURVE_COLORS, EVENT_STYLE, FONT_SMALL, SEVERITY_COLORS, apply_grid
 
 TITLE = "Time Base Monitor"
-LEGEND_COLUMNS = 4        # colonnes au plus de la légende placée au-dessus de la courbe
-LEGEND_COLUMN_IN = 2.7    # largeur d'une colonne de cette légende (pouces)
-LEGEND_ROW_IN = 0.17      # hauteur d'une rangée de cette légende (pouces)
+LEGEND_ROW_IN = 0.17      # hauteur d'une rangée de légende placée sous le titre (pouces)
+LEGEND_CHAR_IN = 0.55 * (FONT_SMALL - 1) / 72   # largeur moyenne d'un caractère de la légende (pouces)
+LEGEND_HANDLE_IN = 0.5    # trait et espacements d'une entrée de légende (pouces)
 
 
 def monitor_status(sources: list[SourceFile]) -> Severity:
@@ -82,15 +88,37 @@ def wrap_text(text: str, chars: int) -> str:
     return "\n".join(out)
 
 
-def legend_columns(width_in: float) -> int:
-    """Colonnes de la légende pour une courbe large de ``width_in`` pouces."""
-    return max(1, min(LEGEND_COLUMNS, int(width_in / LEGEND_COLUMN_IN)))
+def _title(sources: list[SourceFile]) -> str:
+    """Titre du TBM avec le statut général."""
+    status = monitor_status(sources) if sources else Severity.OK
+    return f"{TITLE} — statut : {status.label if sources else 'aucun fichier affiché'}"
+
+
+def _legend_layout(handles: list, width_in: float, title: str) -> tuple[int, int, bool]:
+    """(colonnes, rangées, sur la ligne du titre ?) de la légende pour une courbe large
+    de ``width_in`` pouces : une seule ligne à droite du titre si elle y tient, sinon
+    sous le titre, en autant de colonnes que la largeur le permet."""
+    widths = [len(handle.get_label()) * LEGEND_CHAR_IN + LEGEND_HANDLE_IN for handle in handles]
+    title_in = len(title) * 0.6 * (FONT_SMALL + 1) / 72 + 0.3
+    if sum(widths) <= width_in - title_in:
+        return len(handles), 1, True
+    # Sous le titre : le plus de colonnes possible (largeur de chaque colonne = son entrée la
+    # plus large, entrées rangées ligne par ligne), donc le moins de rangées.
+    for columns in range(len(handles), 0, -1):
+        span = sum(max(widths[start::columns]) for start in range(columns))
+        if span <= width_in:
+            return columns, -(-len(handles) // columns), False
+    return 1, len(handles), False
 
 
 def text_height_in(sources: list[SourceFile], width_in: float) -> float:
-    """Hauteur (pouces) du bandeau au-dessus de la courbe : titre et rangées de la légende."""
-    entries = len(_legend_handles(_loaded(sources)))
-    return 0.24 + LEGEND_ROW_IN * -(-entries // legend_columns(width_in))
+    """Hauteur (pouces) du bandeau au-dessus de la courbe : ligne du titre, plus les
+    rangées de la légende quand elle ne tient pas sur cette ligne."""
+    handles = _legend_handles(_loaded(sources))
+    if not handles:
+        return 0.24
+    _, rows, inline = _legend_layout(handles, width_in, _title(sources))
+    return 0.24 if inline else 0.24 + LEGEND_ROW_IN * rows
 
 
 def _loaded(sources: list[SourceFile]) -> list[SourceFile]:
@@ -98,13 +126,26 @@ def _loaded(sources: list[SourceFile]) -> list[SourceFile]:
     return [s for s in sources if s.is_loaded and s.analysis.dt_values.size]
 
 
+def _short_names(loaded: list[SourceFile]) -> list[str]:
+    """Noms courts des fichiers pour la légende : préfixe commun (s'il fait au moins
+    4 caractères) et extension « .csv » retirés ; le nom complet reste dans la bulle
+    de survol, le diagnostic et le rapport."""
+    names = [re.sub(r"\.csv$", "", source.name, flags=re.IGNORECASE) for source in loaded]
+    prefix = os.path.commonprefix(names) if len(names) > 1 else ""
+    if len(prefix) >= 4 and all(len(name) > len(prefix) for name in names):
+        names = [name[len(prefix):] for name in names]
+    return names
+
+
 def _legend_handles(loaded: list[SourceFile]) -> list:
-    """Entrées de la légende : chaque fichier (couleur, période, statut), puis chaque
-    sorte d'anomalie avec son total."""
-    handles = [Line2D([], [], color=CURVE_COLORS[position % len(CURVE_COLORS)], lw=1.5,
-                      label=f"{source.name} : T = {ms(source.analysis.period_used_s)} ms — "
-                            f"{source.time_status().label}")
-               for position, source in enumerate(loaded)]
+    """Entrées de la légende : chaque fichier (nom court, période, statut s'il n'est pas
+    OK), puis chaque sorte d'anomalie avec son total."""
+    handles = []
+    for position, (source, name) in enumerate(zip(loaded, _short_names(loaded))):
+        status = source.time_status()
+        label = f"{name} : {ms(source.analysis.period_used_s)} ms" + (
+            f" — {status.label}" if status > Severity.OK else "")
+        handles.append(Line2D([], [], color=CURVE_COLORS[position % len(CURVE_COLORS)], lw=1.5, label=label))
     totals = {kind: sum(s.analysis.event_counts[kind] for s in loaded) for kind in EVENT_STYLE
               if kind is not EventKind.FREQUENCY}
     handles += [Line2D([], [], marker=EVENT_STYLE[kind][0], ls="none", ms=6, color=EVENT_STYLE[kind][1],
@@ -138,7 +179,7 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     status = monitor_status(sources) if sources else Severity.OK
     color = SEVERITY_COLORS[status]
     text_ax.set_axis_off()
-    title = f"{TITLE} — statut : {status.label if sources else 'aucun fichier affiché'}"
+    title = _title(sources)
     text_ax.text(0.0, 1.0, title, transform=text_ax.transAxes, va="top", ha="left",
                  fontsize=FONT_SMALL + 1, fontweight="bold", color=color)
     plot_ax.tick_params(labelsize=FONT_SMALL)
@@ -154,21 +195,31 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     # de chaque fichier, sinon le petit raster serait écrasé en bas de l'axe.
     relative = max(periods) > 1.5 * min(periods)
     plot_ax.set_ylabel("Δt / période" if relative else "Δt (ms)", fontsize=FONT_SMALL)
-    top = 2.6 if relative else 2.6 * max(periods) * 1e3
+    # Échelle adaptée aux Δt mesurés, en périodes (voir l'en-tête) : de 0,5 à 1,5 pour un
+    # raster régulier, jusqu'à 0 en bas (doublons) et 2,6 en haut (trous, ▲ au-delà).
+    ratios = np.concatenate([s.analysis.dt_values / s.analysis.period_used_s for s in loaded])
+    ratios = ratios[np.isfinite(ratios)]
+    high = min(2.6, max(1.5, float(ratios.max()) * 1.1)) if ratios.size else 2.6
+    low = max(0.0, min(0.5, float(ratios.min()) - 0.15)) if ratios.size else 0.0
+    unit = 1.0 if relative else max(periods) * 1e3
+    top, bottom = high * unit, low * (1.0 if relative else min(periods) * 1e3)
     lines, markers = [], []
     for position, source in enumerate(loaded):
         lines.append(_draw_source(plot_ax, source, timeline, CURVE_COLORS[position % len(CURVE_COLORS)],
                                   top, relative, markers))
     handles = _legend_handles(loaded)
-    columns = legend_columns(plot_ax.bbox.width / plot_ax.figure.dpi)
+    columns, _, inline = _legend_layout(handles, plot_ax.bbox.width / plot_ax.figure.dpi, title)
     if legend_xy:
         plot_ax.legend(handles=handles, loc=tuple(legend_xy), fontsize=FONT_SMALL - 1, framealpha=0.85,
                        ncol=columns)
     else:
-        # Au-dessus de la courbe, sous le titre : aucune partie de la courbe n'est masquée.
-        plot_ax.legend(handles=handles, loc="lower left", bbox_to_anchor=(0.0, 1.01), borderaxespad=0.0,
-                       fontsize=FONT_SMALL - 1, frameon=False, ncol=columns, columnspacing=1.6)
-    plot_ax.set_ylim(0, top * 1.08)
+        # Hors de la courbe, qu'elle ne masque jamais : à droite sur la ligne du titre, ou
+        # sous le titre si elle n'y tient pas.
+        plot_ax.legend(handles=handles, loc="lower right" if inline else "lower left",
+                       bbox_to_anchor=(1.0, 1.0) if inline else (0.0, 1.01), borderaxespad=0.1,
+                       fontsize=FONT_SMALL - 1, frameon=False, ncol=columns, columnspacing=1.4,
+                       handlelength=1.6)
+    plot_ax.set_ylim(bottom, top + 0.05 * (top - bottom))
     return lines, markers
 
 

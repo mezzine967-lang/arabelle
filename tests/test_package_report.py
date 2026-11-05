@@ -331,6 +331,27 @@ class RenderAndReportTests(unittest.TestCase):
                 self.assertEqual(tables, [False, True, True])      # graphique seul, lectures, traçabilité
                 self.assertIn("Lectures de curseurs", " ".join(text.get_text() for text in figures[1].texts))
 
+    def test_monitor_scale_and_short_legend(self):
+        """Remarque du relecteur (TBM écrasé) : échelle adaptée aux Δt (raster régulier :
+        0,5 à 1,5 période), légende hors de la courbe avec des noms courts."""
+        from ptbg.core.time_parser import TimeBaseSettings as TB
+        files = []
+        for name in ("simulation10_a.csv", "simulation10_b.csv"):
+            path = self.files.write(name, counter_csv(list(range(0, 2000, 10)), {"x": [1.0] * 200}))
+            source = load_source(path, self.settings)
+            configure_time(source, self.settings, TB(unit="ms"))
+            self.ws.active_package.files.append(source)
+            files.append(source)
+        tab = TabState.from_template("1A", "TBM")
+        tab.axles[0].curves = [CurveRef(s.id, "x") for s in files]
+        _, renderer = self._render(tab)
+        low, high = renderer.tbm_plot.get_ylim()
+        self.assertGreaterEqual(low, 0.5 * 10 - 1e-9)
+        self.assertLess(high, 1.6 * 10)
+        legend = renderer.tbm_plot.get_legend()
+        self.assertEqual([t.get_text() for t in legend.get_texts()], ["a : 10 ms", "b : 10 ms"])
+        self.assertGreaterEqual(legend.get_window_extent().y0, renderer.tbm_plot.get_window_extent().y1 - 1)
+
     def test_legend_names_variable_only_unless_ambiguous(self):
         """Remarque du relecteur : légende = nom de la variable ; le fichier n'est ajouté que si
         deux fichiers de l'axe ont une variable du même nom."""

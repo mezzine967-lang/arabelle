@@ -98,7 +98,7 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 
 ## 4. Tests à réaliser
 
-La suite complète (`python -m unittest discover -s tests -v`, 155 tests, interface comprise)
+La suite complète (`python -m unittest discover -s tests -v`, 156 tests, interface comprise)
 est à lancer sur chaque poste, puis la fiche d'essai de COMPATIBILITE_OS.md § 5.
 
 | Poste | Python | Tcl/Tk | numpy | matplotlib | État |

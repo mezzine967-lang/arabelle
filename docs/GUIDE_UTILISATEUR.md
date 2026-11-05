@@ -119,9 +119,11 @@ Le **Time Base Monitor**, en bas de chaque onglet, montre les Δt de chaque fich
 (ou Δt / période quand les fichiers ont des périodes différentes), la période et sa bande
 de tolérance, et les anomalies (▼ trou, ◆ déphasage, ✖ doublon / retour arrière,
 ✚ horodatage illisible, ★ horodatage aberrant, trait mixte = changement de fréquence).
-Le titre donne le statut général. La légende, placée **au-dessus** de la courbe pour ne
-jamais la masquer, donne la couleur, la période et le statut de chaque fichier
-(« fichier : T = 10 ms — OK ») puis le nombre de chaque sorte d'anomalie. À l'écran,
+Le titre donne le statut général. La légende, **hors de la courbe** pour ne jamais la
+masquer (sur la ligne du titre quand elle y tient), donne pour chaque fichier son nom court
+et sa période, son statut s'il n'est pas OK, puis le nombre de chaque sorte d'anomalie.
+L'échelle verticale s'adapte aux Δt mesurés : de 0,5 à 1,5 période pour un raster régulier
+(les petits écarts restent visibles), jusqu'à 2,6 périodes s'il y a des trous. À l'écran,
 **survoler un marqueur** affiche le détail de l'anomalie (fichier, instant, ligne du CSV,
 Δt) et un **clic droit** sur la courbe ouvre le diagnostic complet d'un fichier. Dans le
 rapport PDF, le résumé de chaque fichier est sur la page de traçabilité.

@@ -7,7 +7,7 @@ et le nombre de tests.
 
 | Version | Date | En une ligne | Tests |
 |---|---|---|---|
-| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 155 |
+| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 156 |
 | 1.0.0 | 2026-10-29 | première version livrée pour revue des requis | 145 |
 
 ## 1.1.0 — 2026-11-05 — remarques du relecteur sur les premiers essais
@@ -28,7 +28,7 @@ Remarques issues des premiers essais (package simulation10 : 3 producteurs,
 | Curseurs | mode « suivi souris » retiré ; le panneau de lecture se met à jour en glissant le curseur | demande du relecteur |
 | Nuage X/Y | droite de régression retirée (corrélation r conservée) | remarque « virer la courbe de régression » |
 | Interface | plus aucun numéro de requis ni référence du document de spécification affichés dans les fenêtres, messages, diagnostics et rapports (ils restent dans le code et la traçabilité) | lisibilité |
-| Time Base Monitor | plus de texte sous le titre ; une seule légende, au-dessus de la courbe pour ne jamais la masquer (période et statut de chaque fichier, nombre de chaque anomalie) ; détail d’une anomalie au survol, diagnostic au clic droit | remarques « avertissements sous le titre », « légendes qui cachent la courbe » |
+| Time Base Monitor | plus de texte sous le titre ; une seule légende, hors de la courbe pour ne jamais la masquer (sur la ligne du titre quand elle y tient : nom court et période de chaque fichier, statut s'il n'est pas OK, nombre de chaque anomalie) ; échelle verticale adaptée aux Δt (0,5 à 1,5 période pour un raster régulier) au lieu d'une courbe écrasée ; détail d’une anomalie au survol, diagnostic au clic droit | remarques « avertissements sous le titre », « légendes qui cachent la courbe », « courbes écrasées » |
 
 Deux nouveaux points ouverts (n° 19 et 20) portent sur le détail du TBM à l'écran et sur
 l'énoncé du requis « tracking reading mode », à mettre à jour après le retrait du suivi souris.

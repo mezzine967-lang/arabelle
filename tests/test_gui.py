@@ -619,7 +619,7 @@ class InterfaceTests(unittest.TestCase):
         self.assertNotIn("Stabilité", texts)
         self.assertNotIn(source.conversion.description, texts)
         legend = renderer.tbm_plot.get_legend()
-        self.assertIn(f"{source.name} : T = 20 ms — {source.time_status().label}",
+        self.assertIn(f"PLC_B_20ms_dephase : 20 ms — {source.time_status().label}",   # nom court, statut
                       [text.get_text() for text in legend.get_texts()])
         self.assertGreaterEqual(legend.get_window_extent().y0, renderer.tbm_plot.get_window_extent().y1)
         self.assertTrue(renderer._tbm_markers)
