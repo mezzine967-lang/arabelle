@@ -22,6 +22,7 @@ ptbg/
 │   ├── multi_source.py      comparaison inter-PLC (REQ 2102, 2104)
 │   ├── sampling.py          lecture d'échantillons, réduction d'affichage, franchissements
 │   ├── conditional.py       conditions Bool et statistiques (REQ 5407, 5500)
+│   ├── raw_view.py          relecture des cellules d'origine du CSV (fenêtre « Valeurs du CSV »)
 │   ├── xy.py                nuage X/Y et corrélation (REQ 5408)
 │   ├── curves.py            courbe = variable ou groupe binaire
 │   ├── readings.py          lectures des curseurs (panneau droit et PDF)
@@ -45,6 +46,7 @@ ptbg/
     ├── reading_panel.py     panneau de lecture à droite (REQ 5402)
     ├── status_bar.py        barre d'état (REQ 5102)
     ├── info_windows.py      fenêtres Information et visualiseur Markdown (REQ 5101)
+    ├── raw_values_window.py fenêtre « Valeurs du CSV » (texte du fichier / valeur lue)
     ├── tasks.py             fils de travail (REQ 4105)
     ├── tooltip.py           bulle d'aide des lignes tronquées (arbre, lectures)
     ├── icons.py             icônes de statut dessinées
@@ -103,6 +105,8 @@ Deux règles transversales :
 | Ligne au mauvais nombre de champs rejetée, jamais complétée | sa dernière valeur pourrait être tronquée : mieux vaut un trou signalé qu'une valeur fausse |
 | Robustesse vérifiée par des tests de fichiers abîmés | `tests/test_robustesse.py` : lignes tronquées ou en trop, guillemets, octets nuls, encodages, en-têtes absents ou répétés, horodatages aberrants, valeurs extrêmes, 40 corruptions aléatoires |
 | Nanosecondes entières pour les dates | pas d'arrondi flottant sur des horodatages absolus à la nanoseconde (REQ 2306) |
+| Pas de temps (Δt), périodes et tolérances en nanosecondes entières | 4988 − 4977 ms donne 11 ms tout rond : un Δt pile à la limite de la tolérance ne bascule jamais à cause d'un arrondi de flottant, et le jitter max d'un fichier aux temps entiers est entier |
+| Fenêtre « Valeurs du CSV » qui relit le fichier sur le disque | le texte montré est celui du fichier, pas une valeur recalculée : on vérifie ligne par ligne que l'outil n'ajoute rien |
 | État des onglets en données pures | captures de rapport, projet JSON et tests sans écran |
 
 ## 4. Conventions de code

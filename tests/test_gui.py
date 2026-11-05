@@ -661,6 +661,35 @@ class InterfaceTests(unittest.TestCase):
         self.assertTrue(renderer._tip.get_visible())
         self.assertIn("ligne CSV", renderer._tip.get_text())
 
+    def test_raw_values_window_from_tree(self):
+        """REQ 4100 / 5202 : clic droit sur une variable -> valeurs du CSV, texte d'origine et valeur lue."""
+        from ptbg.gui.tree_panel import TreeRef
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        menu = self.ctl.tree_context_menu(self.ctl.tree, [TreeRef("var", source.id, "output")])
+        labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)
+                  if menu.type(i) == "command"]
+        self.assertIn("Voir les valeurs du CSV…", labels)
+        window = self.ctl.show_raw_values(source, ["output", "init"])
+        self.root.update()
+        lines = (EXAMPLES / "Test_PID_P_AS_scenari0045.csv").read_text(encoding="utf-8").splitlines()
+        first = window.page[0]
+        self.assertEqual(first[0], "2")
+        fields = lines[1].split(",")
+        output = next(c for c in source.table.columns if c.name == "output")
+        self.assertEqual(first[1], fields[0])
+        self.assertEqual(first[3], fields[output.index])                # texte exact du fichier
+        self.assertEqual(len(window.view.get_children()), 500)
+        window.next_page()
+        self.assertEqual(window.page[0][0], "502")
+        window.goto.set("1000")
+        window.go_to_line()
+        self.assertEqual(window.page[0][0], "1000")
+        window.last_page()
+        self.assertEqual(window.page[-1][0], str(source.table.line_numbers[-1]))
+        window.copy_page()
+        self.assertTrue(self.root.clipboard_get().startswith("Ligne\t"))
+        window.destroy()
+
     def test_absolute_time_mode(self):
         """REQ 4107 : axe absolu refusé sans origine, accepté pour l'horodatage hh:mm:ss."""
         self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")

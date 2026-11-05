@@ -84,7 +84,21 @@ Paquet de données 1 (actif)
 - **Glisser-déposer** une variable sur un axe précis.
 - **Clic droit** : ajouter à l'axe actif ou dans un nouvel onglet, **forcer le type**
   (Bool, Float, Texte, automatique), créer un groupe binaire avec la sélection,
-  configurer la base de temps, diagnostic complet, fermer.
+  **voir les valeurs du CSV**, configurer la base de temps, diagnostic complet, fermer.
+- **Voir les valeurs du CSV…** (clic droit sur une ou plusieurs variables, 6 au plus) :
+  tableau de contrôle, une ligne par mesure :
+
+  | Colonne | Contenu |
+  |---|---|
+  | Ligne | n° de la ligne dans le fichier CSV |
+  | temps (fichier) | texte de la 1re colonne, tel qu'il est écrit dans le CSV |
+  | Δt (ms) | écart avec la mesure précédente, calculé en nanosecondes entières (temps entiers en ms -> Δt entier) |
+  | variable (fichier) | texte de la cellule, relu sur le disque tel quel |
+  | variable (valeur lue) | valeur utilisée par l'outil (« 4.50 » -> 4.5, « true » -> 1, cellule vide -> « (vide) ») |
+
+  Pages de 500 lignes (boutons |< < > >|), « Ligne du fichier » + Aller pour sauter à
+  une ligne, « Copier la page » pour la coller dans Excel. Si le fichier a été modifié
+  depuis son chargement, un message rouge le signale.
 - **Filtrer** : saisir une partie du nom des variables.
 - **Bulle d'aide** : la souris posée sur une ligne affiche son texte complet (utile quand
   l'arbre est étroit et que les colonnes sont tronquées). Idem dans le panneau de lecture.
@@ -335,5 +349,6 @@ traçabilité des requis.
 | clic sur un nom ou un trait de la légende | sélectionne cette courbe |
 | clic droit sur un axe | menu de l'axe (titre, unité, hauteur, curseurs, courbe sélectionnée et son aspect, échelle, légende) |
 | double-clic sur une variable de l'arbre | l'ajoute à l'axe actif |
+| clic droit sur une variable de l'arbre > Voir les valeurs du CSV… | cellules du fichier à côté des valeurs lues |
 | glisser une variable de l'arbre sur un axe | l'ajoute à cet axe |
 | clic molette sur le titre d'un onglet | ferme l'onglet |

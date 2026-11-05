@@ -10,6 +10,7 @@ from ptbg.core.csv_reader import (KIND_BOOL, KIND_EMPTY, KIND_NONFINITE, KIND_NU
                                   ReadCancelled, read_csv)
 from ptbg.core.data_package import load_source
 from ptbg.core.diagnostics import Severity
+from ptbg.core.raw_view import find_sample, read_rows, time_steps_ms, value_text
 from ptbg.core.signals import SignalType, auto_type, detect_indexed_groups, interpret
 from ptbg.core.vector_parse import parse_numbers
 
@@ -214,6 +215,52 @@ class SignalTypeTests(unittest.TestCase):
         word = groups[0].word([signals[m].values for m in groups[0].members])
         self.assertEqual(list(word[:2]), [5.0, 6.0])
         self.assertTrue(np.isnan(word[2]))                 # un bit manquant : mot indéfini
+
+
+class RawViewTests(unittest.TestCase):
+    """Fenêtre « Valeurs du CSV » : texte d'origine relu à côté de la valeur lue."""
+
+    def setUp(self):
+        self.files = TempFiles()
+
+    def tearDown(self):
+        self.files.cleanup()
+
+    def test_cells_are_reread_exactly_as_written(self):
+        """REQ 4100 / 5202 : texte du fichier inchangé, ligne physique, valeur lue sans ajout."""
+        text = ("t_ms,P,cond,label\r\n4977,4.50,true,a\r\n# commentaire\r\n4988,,false,\"b,c\"\r\n"
+                "4998,1e3,TRUE,a\r\n")
+        path = self.files.write("v.csv", text)
+        source = load_source(path, Settings())
+        table = source.table
+        p, cond, label = table.columns
+        rows, changed = read_rows(table, [p.index, cond.index, label.index], 0)
+        self.assertFalse(changed)
+        self.assertEqual([r.line for r in rows], [2, 4, 5])
+        self.assertEqual([r.time_text for r in rows], ["4977", "4988", "4998"])
+        self.assertEqual([r.cells for r in rows], [["4.50", "true", "a"], ["", "false", "b,c"],
+                                                   ["1e3", "TRUE", "a"]])
+        self.assertEqual([value_text(p, i) for i in range(3)], ["4.5", "(vide)", "1000"])
+        self.assertEqual([value_text(cond, i) for i in range(3)], ["1", "0", "1"])
+        self.assertEqual(value_text(label, 1), "texte « b,c »")
+        # Δt en nanosecondes entières : 4988 − 4977 = 11 ms tout rond.
+        self.assertEqual(time_steps_ms(source.conversion.seconds, 0, 3), ["", "11", "10"])
+        self.assertEqual(time_steps_ms(source.conversion.seconds, 1, 2), ["11", "10"])
+        self.assertEqual(find_sample(table, 3), 1)
+        page, _ = read_rows(table, [p.index], 2, 5)
+        self.assertEqual([(r.sample, r.line) for r in page], [(2, 5)])
+
+    def test_changed_or_missing_file_is_reported(self):
+        """Fichier modifié après chargement : signalé ; fichier supprimé : OSError (jamais de plantage)."""
+        path = self.files.write("w.csv", counter_csv([0, 10, 20], {"P": [1, 2, 3]}))
+        table = read_csv(path)
+        self.files.write("w.csv", counter_csv([0, 10, 25], {"P": [1, 2, 9]}))
+        rows, changed = read_rows(table, [1], 0)
+        self.assertTrue(changed)
+        self.assertEqual(rows[2].cells, ["9"])
+        path.unlink()
+        with self.assertRaises(OSError):
+            read_rows(table, [1], 0)
 
 
 if __name__ == "__main__":

@@ -32,12 +32,13 @@ Vocabulaire :
                        de fréquence est une suite d'au moins N intervalles
                        consécutifs hors raster et cohérents entre eux.
 
-Les comparaisons à la tolérance acceptent ``TIME_RESOLUTION_S`` (1 ns) de plus :
-les horodatages ne sont pas plus fins que la nanoseconde, un écart plus petit
-n'est qu'un arrondi du calcul en flottant. Sans cette marge, deux Δt identiques
-de 11 ms pour T = 10 ms ± 1 ms étaient jugés l'un conforme, l'autre déphasé selon
-la position de l'horodatage dans le fichier (remarque du relecteur, fichiers
-simulation10_producer1/2/3).
+Calcul en nanosecondes entières : les instants sont ramenés à la nanoseconde
+la plus proche (résolution des horodatages), puis les Δt, les périodes et les
+tolérances sont comparés en nombres entiers de nanosecondes. Aucun arrondi de
+calcul en flottant ne peut donc faire basculer un Δt : deux pas de 11 ms pour
+T = 10 ms ± 1 ms sont tous les deux conformes, où qu'ils soient dans le fichier
+(remarque du relecteur, fichiers simulation10_producer1/2/3). Les résultats
+(Δt, période, jitter) sont rendus en secondes à la fin seulement.
 
 Jitter max : plus grand écart |Δt − T| d'un intervalle conforme à la période de
 son segment, arrondi à la nanoseconde (résolution des horodatages) : il se
@@ -173,7 +174,18 @@ _KIND_OF_CODE = {DT_MISSING: EventKind.MISSING, DT_PHASE: EventKind.PHASE,
 
 
 OUTLIER_JUMP = 10      # écart minimal par défaut (en périodes) d'un horodatage aberrant isolé (préférence)
-TIME_RESOLUTION_S = 1e-9   # résolution des horodatages : marge des comparaisons (voir en-tête)
+NS_PER_S = 1e9         # les calculs de pas se font en nanosecondes entières (voir en-tête)
+
+
+def to_ns(seconds):
+    """Secondes -> nombre entier de nanosecondes (porté par un flottant 64 bits exact
+    jusqu'à 2^53 ns, soit 104 jours ; NaN conservé)."""
+    return np.rint(np.asarray(seconds, dtype=np.float64) * NS_PER_S)
+
+
+def _tolerance_ns(tol_frac: float, period_ns):
+    """Tolérance absolue arrondie à la nanoseconde entière."""
+    return np.rint(tol_frac * np.asarray(period_ns, dtype=np.float64))
 
 
 def _isolated_outliers(t: np.ndarray, nominal: float | None, jump_periods: float = OUTLIER_JUMP) -> np.ndarray:
@@ -208,7 +220,7 @@ def _run_starts(mask: np.ndarray, min_length: int) -> np.ndarray:
 
 def _split_frequency_segments(dt: np.ndarray, period: float, tol_frac: float,
                               min_run: int) -> list[tuple[int, int, float]]:
-    """Découpe les Δt en segments de période constante.
+    """Découpe les Δt (en nanosecondes entières) en segments de période constante.
 
     Un changement de fréquence est déclaré quand ``min_run`` intervalles
     consécutifs sont tous hors raster ET cohérents entre eux (écart relatif
@@ -228,8 +240,8 @@ def _split_frequency_segments(dt: np.ndarray, period: float, tol_frac: float,
         while True:
             rest = dt[start:start + window]
             if rest.size >= max(min_run, 2):
-                abnormal = (np.abs(rest - current) > tol_frac * current + TIME_RESOLUTION_S) & (rest > 0)
-                steady = np.abs(np.diff(rest)) <= tol_frac * np.maximum(rest[:-1], rest[1:]) + TIME_RESOLUTION_S
+                abnormal = (np.abs(rest - current) > _tolerance_ns(tol_frac, current)) & (rest > 0)
+                steady = np.abs(np.diff(rest)) <= _tolerance_ns(tol_frac, np.maximum(rest[:-1], rest[1:]))
                 linked = abnormal[:-1] & abnormal[1:] & steady
                 starts = _run_starts(linked, min_run - 1)
                 if not first:
@@ -252,12 +264,14 @@ def _split_frequency_segments(dt: np.ndarray, period: float, tol_frac: float,
 
 
 def _classify(dt: np.ndarray, period: float, tol: float) -> tuple[np.ndarray, np.ndarray]:
-    """Classe chaque Δt (codes DT_*) et renvoie aussi le nombre de cycles k."""
+    """Classe chaque Δt (codes DT_*) et renvoie aussi le nombre de cycles k.
+
+    ``dt``, ``period`` et ``tol`` sont en nanosecondes entières."""
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         cycles = np.rint(dt / period)
-        # Un Δt gigantesque (horodatage corrompu) ne peut pas être situé sur la
-        # grille à la tolérance près en flottant 64 bits : il reste « hors raster ».
-        on_grid = (np.abs(dt - cycles * period) <= tol + TIME_RESOLUTION_S) & (np.abs(dt) * 1e-12 <= tol)
+        # Un Δt gigantesque (horodatage corrompu, au-delà de 2^53 ns) n'est plus un
+        # entier exact en flottant 64 bits : il reste « hors raster ».
+        on_grid = (np.abs(dt - cycles * period) <= tol) & (np.abs(dt) < 2.0 ** 53)
     codes = np.full(dt.size, DT_PHASE, dtype=np.int8)
     codes[on_grid & (cycles == 1)] = DT_NORMAL
     codes[on_grid & (cycles >= 2)] = DT_MISSING
@@ -334,18 +348,20 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
         return result
 
     t = seconds[valid_index]
-    dt = np.diff(t)
+    dt_ns = np.diff(to_ns(t))        # pas en nanosecondes entières (voir en-tête)
+    dt = dt_ns / NS_PER_S
     result.start_s, result.end_s = float(np.min(t)), float(np.max(t))
-    positive = dt[dt > 0]
-    estimated = float(np.median(positive)) if positive.size else np.nan
-    result.period_estimated_s = estimated
-    reference = nominal_period_s or estimated
-    if not np.isfinite(reference) or reference <= 0:
+    positive = dt_ns[dt_ns > 0]
+    estimated_ns = float(np.median(positive)) if positive.size else np.nan
+    result.period_estimated_s = estimated_ns / NS_PER_S
+    reference_ns = float(to_ns(nominal_period_s)) if nominal_period_s else estimated_ns
+    if not np.isfinite(reference_ns) or reference_ns <= 0:
         result.checks.append(Check("Croissance continue", Severity.ERROR,
                                    "Aucun intervalle positif : le temps ne progresse pas."))
         return result
     tol_frac = tolerance_pct / 100.0
-    result.period_used_s, result.tolerance_s = reference, tol_frac * reference
+    result.period_used_s = reference_ns / NS_PER_S
+    result.tolerance_s = float(_tolerance_ns(tol_frac, reference_ns)) / NS_PER_S
     result.dt_min_s, result.dt_max_s = float(dt.min()), float(dt.max())
     result.dt_mean_s, result.dt_std_s = float(dt.mean()), float(dt.std())
 
@@ -354,12 +370,16 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
     cycles = np.empty(dt.size)
     frequency_changes = []
     segment_starts = []
-    for position, (begin, end, period) in enumerate(_split_frequency_segments(dt, reference, tol_frac, min_run)):
+    periods_ns = np.empty(dt.size)
+    for position, (begin, end, period) in enumerate(_split_frequency_segments(dt_ns, reference_ns,
+                                                                              tol_frac, min_run)):
         segment_starts.append(begin)
-        codes[begin:end], cycles[begin:end] = _classify(dt[begin:end], period, tol_frac * period)
-        result.segments.append(Segment(int(valid_index[begin]), int(valid_index[end]), period))
+        periods_ns[begin:end] = period
+        codes[begin:end], cycles[begin:end] = _classify(dt_ns[begin:end], period,
+                                                        _tolerance_ns(tol_frac, period))
+        result.segments.append(Segment(int(valid_index[begin]), int(valid_index[end]), period / NS_PER_S))
         if position > 0:
-            frequency_changes.append((begin, period))
+            frequency_changes.append((begin, period / NS_PER_S))
     # 2) Événements (plafonnés), en indices d'échantillons du fichier.
     sample_after = valid_index[1:]
     for code, kind in _KIND_OF_CODE.items():
@@ -380,36 +400,38 @@ def analyze(seconds: np.ndarray, nominal_period_s: float | None = None,
     result.missing_samples = int(np.sum(cycles[codes == DT_MISSING] - 1))
     result.normal_ratio = float(np.count_nonzero(codes == DT_NORMAL) / dt.size)
 
-    # 3) Jitter : écart de chaque intervalle conforme à la période de son segment, arrondi
-    #    à la nanoseconde pour effacer les arrondis du calcul en flottant.
-    periods = np.empty(dt.size)
-    for begin, segment in zip(segment_starts, result.segments):
-        periods[begin:] = segment.period_s
-    deviation = np.abs(dt - periods)[codes == DT_NORMAL]
+    # 3) Jitter : écart de chaque intervalle conforme à la période de son segment, en
+    #    nanosecondes entières.
+    deviation = np.abs(dt_ns - periods_ns)[codes == DT_NORMAL]
     if deviation.size:
-        result.jitter_max_s = float(np.round(deviation.max() / TIME_RESOLUTION_S) * TIME_RESOLUTION_S)
+        result.jitter_max_s = float(deviation.max()) / NS_PER_S
     # 4) Horodatage régularisé (affichage optionnel « jitter ignoré »).
     regular = _regularize(t, codes, cycles, segment_starts)
     result.regular_s[valid_index] = regular
     result.dt_index, result.dt_values, result.dt_kinds = sample_after, dt, codes
 
-    _add_checks(result, codes, estimated, nominal_period_s, tol_frac, preferred_periods_ms)
+    _add_checks(result, estimated_ns, nominal_period_s, tol_frac, preferred_periods_ms)
     return result
 
 
-def _add_checks(result: TimeBaseAnalysis, codes: np.ndarray, estimated: float,
-                nominal: float | None, tol_frac: float, preferred_periods_ms) -> None:
-    """Traduit les comptages en contrôles lisibles (REQ 4100 / 4101)."""
+def _add_checks(result: TimeBaseAnalysis, estimated_ns: float, nominal: float | None,
+                tol_frac: float, preferred_periods_ms) -> None:
+    """Traduit les comptages en contrôles lisibles (REQ 4100 / 4101).
+
+    Les périodes sont comparées en nanosecondes entières (voir en-tête)."""
+    estimated = estimated_ns / NS_PER_S
     counts = result.event_counts
     # Valeur de la période.
     text = f"Période mesurée (médiane des Δt) : {ms(estimated)} ms"
     severity = Severity.OK
     if nominal:
         text += f" ; période nominale saisie : {ms(nominal)} ms"
-        if abs(estimated - nominal) > tol_frac * nominal + TIME_RESOLUTION_S:
+        nominal_ns = to_ns(nominal)
+        if abs(estimated_ns - nominal_ns) > _tolerance_ns(tol_frac, nominal_ns):
             severity = Severity.WARNING
             text += " -> ÉCART supérieur à la tolérance"
-    elif not any(abs(estimated * 1e3 - p) <= tol_frac * p + TIME_RESOLUTION_S * 1e3 for p in preferred_periods_ms):
+    elif not any(abs(estimated_ns - to_ns(p / 1e3)) <= _tolerance_ns(tol_frac, to_ns(p / 1e3))
+                 for p in preferred_periods_ms):
         text += " (hors des valeurs préférées " + "/".join(f"{p:g}" for p in preferred_periods_ms) \
                 + " ms : information seulement)"
     result.checks.append(Check("Valeur de la période", severity, text))

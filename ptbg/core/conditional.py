@@ -27,7 +27,7 @@ from dataclasses import asdict, dataclass, field
 import numpy as np
 
 from ptbg.core.data_package import SourceFile, Timeline
-from ptbg.core.time_base import TIME_RESOLUTION_S
+from ptbg.core.time_base import to_ns
 
 
 @dataclass
@@ -76,10 +76,12 @@ def _term_state(term: ConditionTerm, target: SourceFile, find, timeline: Timelin
         if analysis is not None and np.isfinite(analysis.period_used_s):
             # Durée de maintien de chaque échantillon : jusqu'au suivant s'il n'y a pas
             # de trou, une période après la dernière mesure ; au-delà, état inconnu.
-            period, hold = analysis.period_used_s, analysis.period_used_s + analysis.tolerance_s
+            # Comparaisons en nanosecondes entières (aucun arrondi de flottant).
+            period = analysis.period_used_s
+            hold_ns = to_ns(period) + to_ns(analysis.tolerance_s)
             following = np.append(known[1:], known[-1] + period) if known.size else known
-            reach = np.where(following - known <= hold + TIME_RESOLUTION_S, following, known)
-            inside &= xt <= reach[np.clip(position, 0, None)] if known.size else False
+            reach = np.where(to_ns(following) - to_ns(known) <= hold_ns, following, known)
+            inside &= to_ns(xt) <= to_ns(reach[np.clip(position, 0, None)]) if known.size else False
         state[inside] = values[order][position[inside]]
     finite = np.isfinite(state)
     return finite & ((state >= 0.5) == term.expected)

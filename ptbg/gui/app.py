@@ -34,6 +34,7 @@ from ptbg.gui.dialogs.base import ask_text
 from ptbg.gui.dialogs.report_dialogs import HeaderDialog, OrientationDialog, PagesWindow, PreferencesDialog
 from ptbg.gui.dialogs.time_base_dialog import TimeBaseDialog
 from ptbg.gui.info_windows import TextWindow, read_document, sources_text, version_text
+from ptbg.gui.raw_values_window import MAX_VARIABLES, RawValuesWindow
 from ptbg.gui.tasks import BackgroundTask
 from ptbg.gui.tree_panel import TreeRef
 from ptbg.plotting.styles import curve_color
@@ -349,6 +350,7 @@ class Application:
             menu.add_cascade(label="Type de la variable", menu=types)
             menu.add_command(label="Créer un groupe binaire avec la sélection…",
                              command=lambda: self.create_group(source, names))
+            menu.add_command(label="Voir les valeurs du CSV…", command=lambda: self.show_raw_values(source, names))
         if "group" in kinds and source is not None:
             menu.add_command(label="Supprimer le groupe",
                              command=lambda: self._delete_groups(source, [r.name for r in refs if r.kind == "group"]))
@@ -506,6 +508,14 @@ class Application:
         if source is not None:
             TextWindow(self.root, f"Diagnostic — {source.name}", file_report(source, self.workspace.timeline()),
                        markdown=True)
+
+    def show_raw_values(self, source: SourceFile, names: list[str]) -> RawValuesWindow | None:
+        """Fenêtre des cellules d'origine du CSV à côté des valeurs lues (variables choisies)."""
+        if not source.is_loaded:
+            return None
+        if len(names) > MAX_VARIABLES:
+            self.notify(f"Valeurs du CSV : les {MAX_VARIABLES} premières variables sélectionnées sont affichées.")
+        return RawValuesWindow(self.root, source, names)
 
     def compare_sources(self, package_id: str | None = None) -> None:
         """Fenêtre de comparaison des sources du paquet (REQ 2102, 2104)."""

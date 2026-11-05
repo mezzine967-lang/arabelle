@@ -42,7 +42,9 @@ class TimeBaseTests(unittest.TestCase):
     def test_dt_exactly_at_tolerance_is_conform_wherever_it_is(self):
         """REQ 4100 (remarque du relecteur, simulation10_producer1/2/3) : un Δt de 11 ms
         pour T = 10 ms ± 10 % est pile à la limite ; il est conforme quelle que soit sa
-        position dans le fichier (l'arrondi flottant le rendait parfois « déphasé »)."""
+        position dans le fichier (l'arrondi flottant le rendait parfois « déphasé »).
+        Les pas sont calculés en nanosecondes entières : 4988 − 4977 ms donne exactement
+        11 ms, jamais 11,000000000000001 ms."""
         for start in (34, 377, 438):                       # débuts des trois fichiers reçus
             ms_ = list(range(start, 4980, 10))
             ms_ += [ms_[-1] + 11] + [ms_[-1] + 11 + 10 * k for k in range(1, 400)]
@@ -50,7 +52,10 @@ class TimeBaseTests(unittest.TestCase):
             self.assertIs(result.status, Severity.OK, start)
             self.assertEqual(result.normal_ratio, 1.0)
             # Temps entiers en ms, période de 10 ms : jitter max entier (11 − 10 = 1 ms), sans arrondi.
-            self.assertEqual(round(result.jitter_max_s * 1e3, 9), 1.0)
+            self.assertEqual(result.jitter_max_s, 0.001)
+            self.assertEqual(result.period_used_s, 0.010)
+            self.assertEqual(result.tolerance_s, 0.001)
+            self.assertEqual(sorted(set(result.dt_values.tolist())), [0.010, 0.011])
 
     def test_missing_samples_detected_and_kept_in_regular_time(self):
         """REQ 4101 : trou de 3 échantillons ; le trou reste visible après régularisation."""

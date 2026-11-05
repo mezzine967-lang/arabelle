@@ -7,7 +7,7 @@ et le nombre de tests.
 
 | Version | Date | En une ligne | Tests |
 |---|---|---|---|
-| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 157 |
+| 1.1.0 | 2026-11-05 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 160 |
 | 1.0.0 | 2026-10-29 | première version livrée pour revue des requis | 145 |
 
 ## 1.1.0 — 2026-11-05 — remarques du relecteur sur les premiers essais
@@ -18,13 +18,14 @@ Remarques issues des premiers essais (package simulation10 : 3 producteurs,
 
 | Domaine | Changement | Pourquoi |
 |---|---|---|
-| Base de temps | un Δt pile à la limite de la tolérance (11 ms pour 10 ms ± 10 %) est conforme où qu'il soit dans le fichier | **anomalie** : producer2 et producer3 étaient en avertissement et pas producer1, avec les mêmes Δt (arrondi du calcul en flottant) |
-| Base de temps | « jitter max » = plus grand écart d'un pas à la période, arrondi à la nanoseconde (1 ms pour un pas de 11 ms sur 10 ms) ; l'ancien calcul par rapport à une droite ajustée est retiré | la valeur doit se vérifier dans le CSV (temps entiers -> jitter entier) |
+| Base de temps | un Δt pile à la limite de la tolérance (11 ms pour 10 ms ± 10 %) est conforme où qu'il soit dans le fichier : les pas, périodes et tolérances sont calculés en nanosecondes entières (4988 − 4977 = 11 ms tout rond, plus aucun arrondi de flottant) | **anomalie** : producer2 et producer3 étaient en avertissement et pas producer1, avec les mêmes Δt (arrondi du calcul en flottant) |
+| Base de temps | « jitter max » = plus grand écart d'un pas à la période, en nanosecondes entières (1 ms pour un pas de 11 ms sur 10 ms) ; l'ancien calcul par rapport à une droite ajustée est retiré | la valeur doit se vérifier dans le CSV (temps entiers -> jitter entier) |
 | Condition Bool d'un autre fichier | état inconnu (condition fausse) dans un trou de ce fichier et après sa fin | **anomalie** relevée à l'analyse de la matrice Framatome : un état était inventé pendant une perte |
 | Global | Ctrl+Z / Ctrl+Y (menu Édition) ; bouton « maison » = toute la durée même après un changement d'onglet ; fermer un paquet ferme les onglets qui ne montraient que lui | remarques « fausses manips », « Home sans effet », « onglets 7 à 10 restés ouverts » |
 | Curseurs | activer un curseur désactive la loupe et le place dans la vue affichée (curseur global au centre) | remarques « zoom non volontaire », « curseur à recentrer » |
 | Axes | légende = nom de la variable (fichier seulement en cas d'homonymie) ; clic sur une courbe ou son entrée de légende = la sélectionner ; titre, unité et hauteur de chaque axe (hauteur aussi en glissant la séparation entre deux axes) ; couleur, épaisseur et trait de chaque courbe | remarques sur la légende, la sélection, le titre, les unités, l'aspect et la hauteur |
 | Rapport | orientation demandée à chaque génération (paysage ou portrait) ; rapport épuré : en-tête complet sur chaque page ; page graphique avec uniquement les graphiques, pages de lectures, puis une page « Identification et traçabilité » (tableau des fichiers sources sans empreintes SHA-256, seuls avertissements et erreurs, environnement) | remarques « paysage ou portrait », « page unique », « trop compact » |
+| Arbre des données | clic droit sur une ou plusieurs variables > « Voir les valeurs du CSV… » : pour chaque mesure, ligne du fichier, temps et cellules relus tels qu'ils sont écrits dans le CSV, à côté de la valeur lue par l'outil, et Δt avec la mesure précédente ; par pages de 500 lignes, « aller à la ligne », copie ; fichier modifié depuis le chargement signalé | vérifier que l'outil n'ajoute ni ne modifie aucune valeur |
 | Curseurs | mode « suivi souris » retiré ; le panneau de lecture se met à jour en glissant le curseur | demande du relecteur |
 | Nuage X/Y | droite de régression retirée (corrélation r conservée) | remarque « virer la courbe de régression » |
 | Interface | plus aucun numéro de requis ni référence du document de spécification affichés dans les fenêtres, messages, diagnostics et rapports (ils restent dans le code et la traçabilité) | lisibilité |

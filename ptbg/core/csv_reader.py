@@ -124,6 +124,7 @@ class CsvTable:
     line_numbers: np.ndarray        # int64 : ligne physique de chaque échantillon
     columns: list[RawColumn]        # variables, dans l'ordre du CSV
     issues: list[Issue] = field(default_factory=list)
+    decoding: tuple[str, str] = ("utf-8", "strict")   # (encodage, gestion d'erreur) de la lecture
 
     @property
     def time_name(self) -> str:
@@ -565,6 +566,7 @@ def read_csv(path, max_size_mb: float = 500.0, progress: ProgressCallback | None
         except CsvReadError as exc:
             raise CsvReadError(issues + exc.issues)
         table = _parse(first_rows, chain(rest, blocks), raw, size, path, sha, issues, stats, progress, cancel)
+    table.decoding = (encoding, errors)       # relecture à l'identique (fenêtre « Valeurs du CSV »)
     return table
 
 
