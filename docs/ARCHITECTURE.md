@@ -5,7 +5,7 @@
 ```
 MAIN.py                      assemble la fenêtre (REQ 3002) — aucune logique métier
 ptbg/
-├── version.py               nom, version, spécification, Python minimal
+├── version.py               nom, version, date, Python minimal
 ├── config.py                préférences persistantes (taille max, tolérance, en-tête…)
 ├── system/                  dépendances au système (REQ 3000, 3004, 3005)
 │   ├── compat.py            TOUTES les différences Windows / SLES

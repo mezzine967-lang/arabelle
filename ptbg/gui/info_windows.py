@@ -26,7 +26,7 @@ from ptbg.gui.icons import bold_font
 from ptbg.plotting.styles import SEVERITY_COLORS
 from ptbg.system.compat import project_root
 from ptbg.system.environment import collect_environment
-from ptbg.version import MIN_PYTHON, SPECIFICATION, TOOL_DATE, full_name
+from ptbg.version import MIN_PYTHON, TOOL_DATE, full_name
 
 TABLE_WIDTH = 118        # largeur maximale d'un tableau (caractères à chasse fixe)
 MIN_COLUMN = 8           # largeur minimale d'une colonne avant retour à la ligne
@@ -219,7 +219,6 @@ def version_text() -> str:
         f"# {full_name()}",
         "",
         f"- Date de version : {TOOL_DATE}",
-        f"- Spécification : {SPECIFICATION}",
         "- Objet : analyseur graphique des fichiers CSV de perturbographie (PTBG), TXS Compact, NPI-NCS",
         f"- Python minimal vérifié : {MIN_PYTHON[0]}.{MIN_PYTHON[1]} (référence de développement : 3.11)",
         "- Cibles : Windows 11 64 bits (Spyder 6) et SUSE Linux Enterprise Server 15 SP7",

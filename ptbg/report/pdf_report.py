@@ -48,7 +48,7 @@ from ptbg.plotting.monitor import monitor_status
 from ptbg.plotting.renderer import TabRenderer
 from ptbg.plotting.styles import REPORT_FONT
 from ptbg.system.environment import collect_environment
-from ptbg.version import SPECIFICATION, full_name
+from ptbg.version import full_name
 
 A4_IN = (11.69, 8.27)           # format A4 (grand côté, petit côté), en pouces
 HEADER_IN = 1.5                 # hauteur de l'en-tête et du titre de page
@@ -178,7 +178,7 @@ def _render_page(pdf: PdfPages, page: ReportPage, header: ReportHeader, workspac
                 height_in=graph_in).draw()
     if rows:
         _draw_readings(fig, rows, (FOOTER_IN - 0.05) / height_in, table_in / height_in, limit, font)
-    fig.text(0.5, 0.1 / height_in, f"{header.tool} — {SPECIFICATION}", ha="center", fontsize=6.5,
+    fig.text(0.5, 0.1 / height_in, header.tool, ha="center", fontsize=6.5,
              color="#555555", family=REPORT_FONT)
     pdf.savefig(fig)
     return rows[limit:]

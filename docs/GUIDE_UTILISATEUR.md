@@ -41,7 +41,7 @@ La fenêtre comprend :
 les `.csv` du dossier et de ses sous-dossiers). La lecture se fait en arrière-plan : la
 fenêtre reste utilisable et **Annuler** interrompt la lecture.
 
-Format attendu (section 2.3 de la spécification) : CSV, séparateur virgule, UTF-8, sans
+Format attendu : CSV, séparateur virgule, UTF-8, sans
 métadonnées, 1re ligne = noms des variables PLC, 1re colonne = base de temps. Un écart
 est signalé dans le nœud **Diagnostic** du fichier, avec le numéro de ligne. Seul un
 séparateur autre que la virgule (« ; », tabulation…) rend le fichier illisible, sans
