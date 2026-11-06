@@ -44,7 +44,7 @@ Même fichier pour Windows 11 64 bits et SLES 15 SP7, de Python 3.11 à 3.14.
 | fonttools | 4.65.0 | transitive (matplotlib) | sous-ensembles de polices du PDF | ≥ 3.10 | win_amd64 ; manylinux2014 (ou pur Python) | MIT |
 | kiwisolver | 1.4.9 | transitive (matplotlib) | non utilisée directement | ≥ 3.10 | win_amd64 ; manylinux2014 | BSD-3-Clause |
 | packaging | 26.2 | transitive (matplotlib) | non utilisée directement | ≥ 3.8 (pur Python) | py3-none-any | Apache-2.0 ou BSD-2-Clause |
-| pillow | 12.3.0 | transitive (matplotlib) | icônes de la barre d'outils, images | ≥ 3.10 | win_amd64 ; manylinux_2_27/2_28 | MIT-CMU |
+| pillow | 12.3.0 | transitive (matplotlib) | images (PNG de « Enregistrer l'image… ») | ≥ 3.10 | win_amd64 ; manylinux_2_27/2_28 | MIT-CMU |
 | pyparsing | 3.3.2 | transitive (matplotlib) | non utilisée directement | ≥ 3.9 (pur Python) | py3-none-any | MIT |
 | python-dateutil | 2.9.0.post0 | transitive (matplotlib) | non utilisée directement | ≥ 2.7 (pur Python) | py2.py3-none-any | Apache-2.0 / BSD-3-Clause |
 | six | 1.17.0 | transitive (python-dateutil) | non utilisée directement | ≥ 2.7 (pur Python) | py2.py3-none-any | MIT |
@@ -98,7 +98,7 @@ Fournie avec l'interpréteur : rien à installer, version = celle de Python.
 
 ## 4. Tests à réaliser
 
-La suite complète (`python -m unittest discover -s tests -v`, 160 tests, interface comprise)
+La suite complète (`python -m unittest discover -s tests -v`, 161 tests, interface comprise)
 est à lancer sur chaque poste, puis la fiche d'essai de COMPATIBILITE_OS.md § 5.
 
 | Poste | Python | Tcl/Tk | numpy | matplotlib | État |

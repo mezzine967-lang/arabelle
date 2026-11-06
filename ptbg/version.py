@@ -8,7 +8,7 @@ ajouter une entrée dans ``CHANGELOG.md``.
 
 TOOL_NAME = "VISU PTBG"
 TOOL_VERSION = "1.1.0"
-TOOL_DATE = "2026-11-05"
+TOOL_DATE = "2026-11-06"
 
 # Plus ancienne version de Python sur laquelle le code est vérifié.
 # Voir docs/DEPENDANCES.md pour la matrice complète (REQ_COMMON_KH_3001).

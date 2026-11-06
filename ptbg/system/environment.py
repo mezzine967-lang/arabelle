@@ -35,7 +35,7 @@ RUNTIME_PACKAGES = {
     "fonttools": "transitive (matplotlib) — polices intégrées au PDF",
     "kiwisolver": "transitive (matplotlib) — calcul de mise en page",
     "packaging": "transitive (matplotlib) — comparaison de versions",
-    "pillow": "transitive (matplotlib) — images (icônes de la barre d'outils)",
+    "pillow": "transitive (matplotlib) — images (PNG de « Enregistrer l'image… »)",
     "pyparsing": "transitive (matplotlib) — analyse du texte mathématique",
     "python-dateutil": "transitive (matplotlib) — dates",
     "six": "transitive (python-dateutil) — compatibilité Python 2/3",

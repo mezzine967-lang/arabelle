@@ -183,10 +183,18 @@ flux décalée, fréquences, déphasage entre grilles d'échantillonnage.
 
 **Nouvel onglet** (barre rapide ou menu Affichage) propose 7 modèles : 1, 2, 3 ou 4 axes,
 analogique + logique, grille 2 × 2, temporel + nuage X/Y. Les axes temporels d'un onglet
-partagent le même temps : zoom et déplacement (loupe et croix de la barre d'outils)
-s'appliquent à tous. Le bouton **maison** de la barre de zoom réaffiche toute la durée des
-fichiers avec les échelles verticales automatiques, même après être passé par un autre
-onglet. Le bouton **Vue d'origine** (aussi Affichage > Vue d'origine, Ctrl+0) fait de même
+partagent le même temps : zoom et déplacement s'appliquent à tous.
+
+**Barre de navigation** (sous le graphique ; bulle d'aide au survol de chaque bouton) :
+
+| Bouton | Rôle |
+|---|---|
+| Vue complète | toute la durée des fichiers, échelles verticales automatiques, même après être passé par un autre onglet |
+| Zoom | reste enfoncé (bleuté) : tracer un rectangle à la souris pour zoomer ; recliquer pour revenir aux curseurs |
+| Déplacer | reste enfoncé : glisser le graphique (clic droit glissé : étirer ou resserrer l'échelle) ; recliquer pour revenir aux curseurs |
+| Annuler / Rétablir | comme Ctrl+Z / Ctrl+Y (même historique, 50 actions par onglet) |
+| Enregistrer l'image… | image PNG, SVG ou PDF de l'onglet tel qu'il est affiché, curseurs compris |
+ Le bouton **Vue d'origine** (aussi Affichage > Vue d'origine, Ctrl+0) fait de même
 et remet en plus les légendes déplacées à leur place ; courbes et curseurs sont conservés.
 
 **Annuler / rétablir** : **Ctrl+Z** annule la dernière action de l'onglet (courbe ajoutée ou
@@ -245,8 +253,8 @@ Souris : **clic sur une courbe** = la sélectionner ; **clic ailleurs** = placer
 **glisser** = le déplacer (un curseur se saisit en priorité sur la courbe qu'il recouvre) ;
 **Maj + clic** = niveau du curseur horizontal ; **clic droit** = menu de l'axe. Clavier :
 **flèches gauche / droite** = échantillon précédent / suivant de la courbe sélectionnée.
-Quand la loupe ou la croix de la barre d'outils est active, les clics servent au zoom ;
-activer un curseur (simple, double, global, suivi, horizontal) la désactive et place le
+Quand le bouton Zoom ou Déplacer est enfoncé, les clics servent au zoom ;
+activer un curseur (simple, double, global, horizontal) le relâche et place le
 curseur dans la vue affichée : pas de zoom involontaire.
 
 Les valeurs lues sont celles des **échantillons réels** : le plus proche pour un Float,
@@ -314,7 +322,7 @@ traçabilité des requis.
 |---|---|
 | Fichier rouge « ILLISIBLE » | voir son nœud Diagnostic : séparateur, encodage, taille maximale (Préférences) |
 | TBM impossible à masquer | une base de temps affichée a un avertissement ou une erreur (voir le TBM) |
-| Curseur qui ne bouge pas au clic | la loupe ou la croix de la barre d'outils est active : la désactiver (activer un curseur le fait automatiquement) |
+| Curseur qui ne bouge pas au clic | le bouton Zoom ou Déplacer (sous le graphique) est enfoncé : recliquer dessus (activer un curseur le fait automatiquement) |
 | Fausse manipulation | Ctrl+Z (Édition > Annuler) |
 | Axe absolu refusé | un fichier n'a pas d'origine absolue : la saisir dans Base de temps > Configurer |
 | Rien ne s'affiche sous SLES à distance | se connecter avec `ssh -X` (session graphique requise) |

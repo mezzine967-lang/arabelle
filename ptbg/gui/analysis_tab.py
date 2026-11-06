@@ -23,11 +23,15 @@ sur une entrée de la légende = sélectionner cette courbe. Time Base Monitor :
 survol d'un marqueur = détail de l'anomalie, clic droit = diagnostic complet.
 Clavier : flèches gauche / droite = échantillon précédent / suivant de la
 courbe sélectionnée ; Ctrl+Z / Ctrl+Y = annuler / rétablir (contrôleur).
-Quand un outil de zoom ou de déplacement de la barre Matplotlib est actif,
-les clics lui sont réservés ; activer un curseur désactive cet outil (pas de
-zoom involontaire) et place le curseur dans la vue affichée. Le bouton
-« maison » de la barre revient à toute la durée et aux échelles automatiques,
-même après un changement d'onglet.
+Barre de navigation sous le graphique (la nôtre, en français, à la place de
+celle de Matplotlib dont les boutons, les fenêtres en anglais et l'historique
+de vues séparé n'étaient pas maîtrisés) : Vue complète, Zoom, Déplacer,
+Annuler, Rétablir, Enregistrer l'image. Seuls les mécanismes publics de
+Matplotlib pour le zoom au rectangle et le déplacement sont réutilisés
+(``Navigation``). Quand Zoom ou Déplacer est enfoncé, les clics lui sont
+réservés ; activer un curseur relâche ce bouton (pas de zoom involontaire) et
+place le curseur dans la vue affichée. « Vue complète » revient à toute la
+durée et aux échelles automatiques, même après un changement d'onglet.
 
 Annulation : chaque action terminée (clic relâché, menu, touche) enregistre
 l'état précédent de l'onglet (``UNDO_DEPTH`` états au plus).
@@ -36,10 +40,12 @@ from __future__ import annotations
 
 import copy
 import tkinter as tk
-from tkinter import messagebox, ttk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backend_bases import NavigationToolbar2
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
@@ -50,6 +56,7 @@ from ptbg.core.sampling import step_index
 from ptbg.core.signals import SignalType
 from ptbg.core.xy import nearest_point
 from ptbg.gui.reading_panel import ReadingPanel
+from ptbg.gui.tooltip import WidgetTooltip
 from ptbg.plotting import monitor
 from ptbg.plotting.renderer import TabRenderer
 from ptbg.plotting.styles import ACTIVE_AXLE_COLOR, curve_color
@@ -61,6 +68,9 @@ GAP_MARGIN_PX = 5       # marge (pixels) autour de la séparation de deux axes p
 MIN_SHARE = 0.12        # part minimale d'un axe dans la hauteur de deux axes redimensionnés
 FLOW_MARGIN = 4         # marge gauche et droite de la barre d'outils (pixels)
 PANEL_WIDTH = 420       # largeur initiale du panneau de lecture (pixels)
+TOGGLE_ON_COLOR = "#cfe3f7"   # fond d'un bouton Zoom / Déplacer enfoncé
+IMAGE_DPI = 150         # résolution de « Enregistrer l'image » (PNG)
+IMAGE_TYPES = [("Image PNG", "*.png"), ("Image vectorielle SVG", "*.svg"), ("Document PDF", "*.pdf")]
 CURSOR_MODES = (("none", "Aucun curseur vertical"), ("single", "Curseur simple"), ("double", "Double curseur"))
 
 
@@ -96,19 +106,45 @@ class FlowBar(ttk.Frame):
         self.configure(height=y + row_height + 2)
 
 
-class TabToolbar(NavigationToolbar2Tk):
-    """Barre de zoom Matplotlib dont le bouton « maison » revient à la vue complète
-    de l'onglet (toute la durée, échelles automatiques) : la vue d'origine de
-    Matplotlib serait celle du dernier redessin, souvent déjà zoomée."""
+class Navigation(NavigationToolbar2):
+    """Zoom au rectangle et déplacement de Matplotlib, SANS sa barre de boutons.
 
-    def __init__(self, canvas, window, tab) -> None:
-        """Barre de l'onglet ``tab`` (non placée : l'onglet la range lui-même)."""
+    Seuls les mécanismes publics de Matplotlib sont gardés (modes « zoom » et
+    « déplacer », tracé du rectangle) ; les boutons sont ceux de l'onglet
+    (``AnalysisTab._build_navigation``), qui restent enfoncés tant que le mode
+    est actif."""
+
+    def __init__(self, canvas, tab) -> None:
+        """Branche le zoom et le déplacement sur la figure de l'onglet ``tab``."""
         self._tab = tab
-        super().__init__(canvas, window, pack_toolbar=False)
+        self._rubberband: list[int] = []        # rectangle de zoom dessiné sur le canevas Tk
+        super().__init__(canvas)
 
-    def home(self, *_args) -> None:
-        """Bouton « maison » : vue complète de l'onglet."""
-        self._tab.home_view()
+    def zoom(self, *args) -> None:
+        """Active / désactive le zoom au rectangle ; le bouton suit l'état réel."""
+        super().zoom(*args)
+        self._tab.sync_navigation()
+
+    def pan(self, *args) -> None:
+        """Active / désactive le déplacement ; le bouton suit l'état réel."""
+        super().pan(*args)
+        self._tab.sync_navigation()
+
+    def draw_rubberband(self, event, x0, y0, x1, y1) -> None:
+        """Rectangle de zoom en cours (trait noir doublé d'un pointillé blanc)."""
+        self.remove_rubberband()
+        widget = self.canvas.get_tk_widget()
+        height = self.canvas.figure.bbox.height
+        y0, y1 = height - y0, height - y1          # Matplotlib compte les y depuis le bas
+        self._rubberband = [widget.create_rectangle(x0, y0, x1, y1),
+                            widget.create_rectangle(x0, y0, x1, y1, outline="white", dash=(3, 3))]
+
+    def remove_rubberband(self) -> None:
+        """Efface le rectangle de zoom."""
+        widget = self.canvas.get_tk_widget()
+        for item in self._rubberband:
+            widget.delete(item)
+        self._rubberband = []
 
 
 class AnalysisTab(ttk.Frame):
@@ -183,9 +219,8 @@ class AnalysisTab(ttk.Frame):
         holder = ttk.Frame(self.paned)
         self.figure = Figure(figsize=(9, 6), dpi=100)
         self.canvas = FigureCanvasTkAgg(self.figure, master=holder)
-        self.toolbar = TabToolbar(self.canvas, holder, self)
-        self.toolbar.update()
-        self.toolbar.pack(side="bottom", fill="x")
+        self.toolbar = Navigation(self.canvas, self)
+        self._build_navigation(holder)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
         self.paned.add(holder, minsize=400, stretch="always")
         self.panel = ReadingPanel(self.paned)
@@ -197,8 +232,8 @@ class AnalysisTab(ttk.Frame):
                               "et étiquettes : glisser pour les déplacer · Séparation entre deux axes : glisser pour "
                               "changer leur hauteur · Clic droit : menu de l'axe (titre, "
                               "unité, aspect, hauteur) · TBM : survol d'un marqueur = détail, clic droit = "
-                              "diagnostic · Ctrl+Z / Ctrl+Y : annuler / rétablir · Loupe/croix de la barre : "
-                              "zoom/déplacement, maison : vue complète", justify="left")
+                              "diagnostic · Ctrl+Z / Ctrl+Y : annuler / rétablir · Zoom / Déplacer (sous le "
+                              "graphique) : recliquer pour revenir aux curseurs", justify="left")
         hint.pack(fill="x")
         hint.bind("<Configure>", lambda e: hint.configure(wraplength=max(e.width - 8, 200)))
         for name, handler in (("button_press_event", self._on_press), ("motion_notify_event", self._on_motion),
@@ -206,6 +241,67 @@ class AnalysisTab(ttk.Frame):
                               ("draw_event", self._on_draw)):
             self.canvas.mpl_connect(name, handler)
         self.canvas.get_tk_widget().bind("<Configure>", self._on_resize, add=True)
+
+    def _build_navigation(self, holder) -> None:
+        """Barre sous le graphique : vue complète, zoom, déplacement, annuler / rétablir,
+        image ; chaque bouton a sa bulle d'aide."""
+        bar = ttk.Frame(holder, padding=(2, 2))
+        bar.pack(side="bottom", fill="x")
+        self.zoom_on = tk.BooleanVar(value=False)
+        self.pan_on = tk.BooleanVar(value=False)
+        self.navigation_buttons = {}
+        for label, kind, command, help_text in (
+                ("Vue complète", "button", self.home_view,
+                 "Toute la durée des fichiers et échelles verticales automatiques."),
+                ("Zoom", self.zoom_on, self.toolbar.zoom,
+                 "Tracer un rectangle à la souris pour zoomer. Recliquer sur Zoom pour revenir "
+                 "aux curseurs."),
+                ("Déplacer", self.pan_on, self.toolbar.pan,
+                 "Glisser le graphique (clic gauche) ; clic droit glissé : étirer ou resserrer "
+                 "l'échelle. Recliquer sur Déplacer pour revenir aux curseurs."),
+                ("Annuler", "button", self.controller.undo, "Annuler la dernière action de l'onglet (Ctrl+Z)."),
+                ("Rétablir", "button", self.controller.redo, "Rétablir l'action annulée (Ctrl+Y)."),
+                ("Enregistrer l'image…", "button", self.save_image,
+                 "Image PNG, SVG ou PDF de l'onglet tel qu'il est affiché, curseurs compris.")):
+            if kind == "button":
+                widget = ttk.Button(bar, text=label, command=command)
+            else:
+                # Bouton à bascule Tk : il reste enfoncé (et bleuté) tant que le mode est actif.
+                widget = tk.Checkbutton(bar, text=label, variable=kind, command=command, indicatoron=False,
+                                        padx=10, pady=3, selectcolor=TOGGLE_ON_COLOR)
+            widget.pack(side="left", padx=(0, 10 if label in ("Déplacer", "Rétablir") else 2))
+            WidgetTooltip(widget, help_text)
+            self.navigation_buttons[label] = widget
+
+    def sync_navigation(self) -> None:
+        """Boutons Zoom / Déplacer enfoncés selon le mode réellement actif."""
+        self.zoom_on.set(self.toolbar.mode == "zoom rect")
+        self.pan_on.set(self.toolbar.mode == "pan/zoom")
+
+    def save_image(self) -> None:
+        """« Enregistrer l'image… » : choix du fichier puis écriture."""
+        name = "".join(c if c.isalnum() or c in "-_ " else "_" for c in self.state.title).strip() or "onglet"
+        path = filedialog.asksaveasfilename(parent=self, title="Enregistrer l'image de l'onglet",
+                                            defaultextension=".png", initialfile=f"{name}.png",
+                                            filetypes=IMAGE_TYPES)
+        if path:
+            self.write_image(Path(path))
+
+    def write_image(self, path: Path) -> bool:
+        """Image de l'onglet tel qu'il est affiché, curseurs compris (Matplotlib dessine les
+        éléments « animés » quand il enregistre). Renvoie vrai si l'image est écrite ; une
+        erreur est affichée, jamais levée."""
+        if self.renderer is None:
+            return False
+        try:
+            self.figure.savefig(path, dpi=IMAGE_DPI, facecolor="white")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Enregistrer l'image", f"Image non enregistrée :\n{exc}", parent=self)
+            return False
+        finally:
+            self._full_draw()
+        self.controller.notify(f"Image enregistrée : {path.name}.")
+        return True
 
     # --------------------------------------------------------------- dessin
     def sources(self):
@@ -227,7 +323,7 @@ class AnalysisTab(ttk.Frame):
         master = self.renderer.axes_time_master()
         if master is not None:
             master.callbacks.connect("xlim_changed", self._on_xlim_changed)
-        self.toolbar.update()               # repère « origine » de la barre = vue actuelle
+        self.toolbar.update()               # vide la pile de vues de Matplotlib (Ctrl+Z la remplace)
         self._full_draw()
         self.tbm_button.configure(text="Masquer le TBM" if self.state.tbm_visible else "Afficher le TBM")
         self._sync_toolbar()
@@ -478,8 +574,8 @@ class AnalysisTab(ttk.Frame):
         return lo <= instant <= hi
 
     def leave_navigation(self) -> None:
-        """Désactive la loupe ou la croix de déplacement de la barre Matplotlib : le clic
-        suivant place le curseur au lieu de zoomer (remarque du relecteur)."""
+        """Relâche les boutons Zoom ou Déplacer : le clic suivant place le curseur au lieu
+        de zoomer (remarque du relecteur)."""
         if self.toolbar.mode == "zoom rect":
             self.toolbar.zoom()
         elif self.toolbar.mode == "pan/zoom":

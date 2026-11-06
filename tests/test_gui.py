@@ -519,7 +519,7 @@ class InterfaceTests(unittest.TestCase):
         self.ctl.graph.notebook.select(tab)
         tab.redraw()
         self.assertEqual(tab.state.xlim, [2.0, 4.0])
-        tab.toolbar.home()
+        tab.navigation_buttons["Vue complète"].invoke()
         self.assertIsNone(tab.state.xlim)
         self.assertEqual(tab.renderer.axes_time_master().get_xlim(), full)
         tab.add_curves([(source.id, "pv", False)], 0)
@@ -530,6 +530,62 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual([c.name for c in tab.state.axles[0].curves], ["output"])
         self.ctl.redo()
         self.assertEqual([c.name for c in tab.state.axles[0].curves], ["output", "pv"])
+
+    def test_navigation_bar_is_ours_and_in_french(self):
+        """Remarque du relecteur : la barre de Matplotlib (boutons, fenêtres en anglais,
+        historique de vues séparé) est remplacée par notre barre de navigation."""
+        import matplotlib.image as mpimg
+        import numpy as np
+        from matplotlib.backend_bases import MouseEvent
+        from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+        (source,) = self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "output", False)], 0)
+        self.root.update()
+        self.assertEqual(list(tab.navigation_buttons), ["Vue complète", "Zoom", "Déplacer", "Annuler",
+                                                        "Rétablir", "Enregistrer l'image…"])
+        widgets, pending = [], [tab]
+        while pending:
+            widget = pending.pop()
+            widgets.append(widget)
+            pending.extend(widget.winfo_children())
+        self.assertFalse(any(isinstance(w, NavigationToolbar2Tk) for w in widgets))
+        # Zoom : bouton enfoncé, rectangle tracé à la souris, puis relâché par un curseur.
+        tab.navigation_buttons["Zoom"].invoke()
+        self.assertEqual(tab.toolbar.mode, "zoom rect")
+        self.assertTrue(tab.zoom_on.get())
+        ax = tab.renderer.axes[0]
+        x0, y0 = ax.transData.transform((2.0, 0.0))
+        x1, y1 = ax.transData.transform((4.0, 0.0))
+        steps = (("button_press_event", x0, y0 + 20), ("motion_notify_event", x1, y0 + 80),
+                 ("button_release_event", x1, y0 + 80))
+        for name, x, y in steps:                                         # vrai rectangle (> 5 px)
+            tab.canvas.callbacks.process(name, MouseEvent(name, tab.canvas, x, y, button=1))
+            if name == "motion_notify_event":
+                self.assertEqual(len(tab.toolbar._rubberband), 2)         # rectangle visible
+        self.assertEqual(tab.toolbar._rubberband, [])
+        lo, hi = tab.renderer.axes_time_master().get_xlim()
+        self.assertAlmostEqual(lo, 2.0, delta=0.05)
+        self.assertAlmostEqual(hi, 4.0, delta=0.05)
+        tab.navigation_buttons["Déplacer"].invoke()
+        self.assertEqual((tab.zoom_on.get(), tab.pan_on.get()), (False, True))
+        tab.set_cursor_mode("single")
+        self.assertEqual((tab.toolbar.mode, tab.pan_on.get()), ("", False))
+        # Image : curseurs compris (vert du curseur global présent).
+        tab.global_cursor.set(True)
+        tab._toggle_global()
+        image = self.files.path / "onglet.png"
+        self.assertTrue(tab.write_image(image))
+        pixels = (mpimg.imread(image)[:, :, :3] * 255).round()
+        self.assertTrue(np.any(np.all(np.abs(pixels - (0x2e, 0x7d, 0x32)) <= 3, axis=-1)))
+        with mock.patch("ptbg.gui.analysis_tab.messagebox.showerror") as error:
+            self.assertFalse(tab.write_image(self.files.path / "absent" / "x.png"))
+        error.assert_called_once()
+        # Annuler / Rétablir passent par le même historique que Ctrl+Z / Ctrl+Y.
+        tab.navigation_buttons["Annuler"].invoke()
+        self.assertFalse(tab.state.global_cursor)
+        tab.navigation_buttons["Rétablir"].invoke()
+        self.assertTrue(tab.state.global_cursor)
 
     def test_closing_package_closes_emptied_tabs(self):
         """Remarque du relecteur : fermer un paquet ferme les onglets qui ne montraient que
