@@ -519,7 +519,7 @@ class InterfaceTests(unittest.TestCase):
         self.ctl.graph.notebook.select(tab)
         tab.redraw()
         self.assertEqual(tab.state.xlim, [2.0, 4.0])
-        tab.navigation_buttons["Vue complète"].invoke()
+        tab.navigation_buttons["home"].invoke()
         self.assertIsNone(tab.state.xlim)
         self.assertEqual(tab.renderer.axes_time_master().get_xlim(), full)
         tab.add_curves([(source.id, "pv", False)], 0)
@@ -542,8 +542,10 @@ class InterfaceTests(unittest.TestCase):
         tab = self.ctl.graph.active_tab()
         tab.add_curves([(source.id, "output", False)], 0)
         self.root.update()
-        self.assertEqual(list(tab.navigation_buttons), ["Vue complète", "Zoom", "Déplacer", "Annuler",
-                                                        "Rétablir", "Enregistrer l'image…"])
+        labels = [tab.navigation_buttons[key].cget("text") for key in tab.navigation_buttons]
+        self.assertEqual(labels, ["Réinitialiser la vue", "Zoomer", "Déplacer la vue", "← Retour arrière",
+                                  "Refaire →", "Enregistrer en image…"])
+        self.assertTrue(tab.navigation_buttons["redo"].instate(["disabled"]))   # rien à refaire
         widgets, pending = [], [tab]
         while pending:
             widget = pending.pop()
@@ -551,7 +553,7 @@ class InterfaceTests(unittest.TestCase):
             pending.extend(widget.winfo_children())
         self.assertFalse(any(isinstance(w, NavigationToolbar2Tk) for w in widgets))
         # Zoom : bouton enfoncé, rectangle tracé à la souris, puis relâché par un curseur.
-        tab.navigation_buttons["Zoom"].invoke()
+        tab.navigation_buttons["zoom"].invoke()
         self.assertEqual(tab.toolbar.mode, "zoom rect")
         self.assertTrue(tab.zoom_on.get())
         ax = tab.renderer.axes[0]
@@ -567,7 +569,13 @@ class InterfaceTests(unittest.TestCase):
         lo, hi = tab.renderer.axes_time_master().get_xlim()
         self.assertAlmostEqual(lo, 2.0, delta=0.05)
         self.assertAlmostEqual(hi, 4.0, delta=0.05)
-        tab.navigation_buttons["Déplacer"].invoke()
+        self.assertEqual(tab.toolbar.mode, "zoom rect")                  # toujours en mode zoom
+        self.ctl.escape()                                                # Échap : quitte le mode zoom…
+        self.assertEqual((tab.toolbar.mode, tab.zoom_on.get()), ("", False))
+        self.assertIsNotNone(tab.state.xlim)                            # … la vue reste zoomée
+        self.ctl.escape()                                                # sans mode actif : rien ne change
+        self.assertIsNotNone(tab.state.xlim)
+        tab.navigation_buttons["pan"].invoke()
         self.assertEqual((tab.zoom_on.get(), tab.pan_on.get()), (False, True))
         tab.set_cursor_mode("single")
         self.assertEqual((tab.toolbar.mode, tab.pan_on.get()), ("", False))
@@ -582,10 +590,12 @@ class InterfaceTests(unittest.TestCase):
             self.assertFalse(tab.write_image(self.files.path / "absent" / "x.png"))
         error.assert_called_once()
         # Annuler / Rétablir passent par le même historique que Ctrl+Z / Ctrl+Y.
-        tab.navigation_buttons["Annuler"].invoke()
+        tab.navigation_buttons["undo"].invoke()
         self.assertFalse(tab.state.global_cursor)
-        tab.navigation_buttons["Rétablir"].invoke()
+        self.assertTrue(tab.navigation_buttons["redo"].instate(["!disabled"]))  # « Refaire » possible
+        tab.navigation_buttons["redo"].invoke()
         self.assertTrue(tab.state.global_cursor)
+        self.assertTrue(tab.navigation_buttons["redo"].instate(["disabled"]))
 
     def test_closing_package_closes_emptied_tabs(self):
         """Remarque du relecteur : fermer un paquet ferme les onglets qui ne montraient que

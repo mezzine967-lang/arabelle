@@ -22,16 +22,20 @@ les déplacer (place conservée à l'écran, dans le projet et le rapport) ; cli
 sur une entrée de la légende = sélectionner cette courbe. Time Base Monitor :
 survol d'un marqueur = détail de l'anomalie, clic droit = diagnostic complet.
 Clavier : flèches gauche / droite = échantillon précédent / suivant de la
-courbe sélectionnée ; Ctrl+Z / Ctrl+Y = annuler / rétablir (contrôleur).
+courbe sélectionnée ; Ctrl+Z / Ctrl+Y = retour arrière / refaire (contrôleur) ;
+Échap = relâcher Zoomer / Déplacer la vue (la vue reste telle quelle).
 Barre de navigation sous le graphique (la nôtre, en français, à la place de
 celle de Matplotlib dont les boutons, les fenêtres en anglais et l'historique
-de vues séparé n'étaient pas maîtrisés) : Vue complète, Zoom, Déplacer,
-Annuler, Rétablir, Enregistrer l'image. Seuls les mécanismes publics de
-Matplotlib pour le zoom au rectangle et le déplacement sont réutilisés
-(``Navigation``). Quand Zoom ou Déplacer est enfoncé, les clics lui sont
-réservés ; activer un curseur relâche ce bouton (pas de zoom involontaire) et
-place le curseur dans la vue affichée. « Vue complète » revient à toute la
-durée et aux échelles automatiques, même après un changement d'onglet.
+de vues séparé n'étaient pas maîtrisés), en trois groupes :
+  - Réinitialiser la vue (toute la durée, échelles automatiques, même après un
+    changement d'onglet), Zoomer, Déplacer la vue ;
+  - ← Retour arrière, Refaire → (grisés s'il n'y a rien à défaire ou refaire) ;
+  - Enregistrer en image.
+Seuls les mécanismes publics de Matplotlib pour le zoom au rectangle et le
+déplacement sont réutilisés (``Navigation``). Quand Zoomer ou Déplacer la vue
+est enfoncé, les clics lui sont réservés ; Échap ou l'activation d'un curseur
+relâche ce bouton (pas de zoom involontaire) et le curseur est placé dans la
+vue affichée.
 
 Annulation : chaque action terminée (clic relâché, menu, touche) enregistre
 l'état précédent de l'onglet (``UNDO_DEPTH`` états au plus).
@@ -68,7 +72,8 @@ GAP_MARGIN_PX = 5       # marge (pixels) autour de la séparation de deux axes p
 MIN_SHARE = 0.12        # part minimale d'un axe dans la hauteur de deux axes redimensionnés
 FLOW_MARGIN = 4         # marge gauche et droite de la barre d'outils (pixels)
 PANEL_WIDTH = 420       # largeur initiale du panneau de lecture (pixels)
-TOGGLE_ON_COLOR = "#cfe3f7"   # fond d'un bouton Zoom / Déplacer enfoncé
+GROUP_GAP_PX = 22      # espace entre deux groupes de boutons de la barre de navigation
+TOGGLE_ON_COLOR = "#cfe3f7"   # fond d'un bouton Zoomer / Déplacer la vue enfoncé
 IMAGE_DPI = 150         # résolution de « Enregistrer l'image » (PNG)
 IMAGE_TYPES = [("Image PNG", "*.png"), ("Image vectorielle SVG", "*.svg"), ("Document PDF", "*.pdf")]
 CURSOR_MODES = (("none", "Aucun curseur vertical"), ("single", "Curseur simple"), ("double", "Double curseur"))
@@ -232,8 +237,8 @@ class AnalysisTab(ttk.Frame):
                               "et étiquettes : glisser pour les déplacer · Séparation entre deux axes : glisser pour "
                               "changer leur hauteur · Clic droit : menu de l'axe (titre, "
                               "unité, aspect, hauteur) · TBM : survol d'un marqueur = détail, clic droit = "
-                              "diagnostic · Ctrl+Z / Ctrl+Y : annuler / rétablir · Zoom / Déplacer (sous le "
-                              "graphique) : recliquer pour revenir aux curseurs", justify="left")
+                              "diagnostic · Ctrl+Z : retour arrière, Ctrl+Y : refaire · Zoomer / Déplacer la "
+                              "vue (sous le graphique) : Échap ou recliquer pour revenir aux curseurs", justify="left")
         hint.pack(fill="x")
         hint.bind("<Configure>", lambda e: hint.configure(wraplength=max(e.width - 8, 200)))
         for name, handler in (("button_press_event", self._on_press), ("motion_notify_event", self._on_motion),
@@ -243,40 +248,53 @@ class AnalysisTab(ttk.Frame):
         self.canvas.get_tk_widget().bind("<Configure>", self._on_resize, add=True)
 
     def _build_navigation(self, holder) -> None:
-        """Barre sous le graphique : vue complète, zoom, déplacement, annuler / rétablir,
-        image ; chaque bouton a sa bulle d'aide."""
-        bar = ttk.Frame(holder, padding=(2, 2))
-        bar.pack(side="bottom", fill="x")
+        """Barre sous le graphique, en trois groupes espacés : la vue (tout afficher,
+        zoomer, déplacer), l'historique (retour arrière, refaire) et l'image. Chaque
+        bouton a sa bulle d'aide. La barre passe à la ligne si la largeur manque."""
+        bar = FlowBar(holder)
+        bar.pack(side="bottom", fill="x", pady=2)
         self.zoom_on = tk.BooleanVar(value=False)
         self.pan_on = tk.BooleanVar(value=False)
         self.navigation_buttons = {}
-        for label, kind, command, help_text in (
-                ("Vue complète", "button", self.home_view,
-                 "Toute la durée des fichiers et échelles verticales automatiques."),
-                ("Zoom", self.zoom_on, self.toolbar.zoom,
-                 "Tracer un rectangle à la souris pour zoomer. Recliquer sur Zoom pour revenir "
-                 "aux curseurs."),
-                ("Déplacer", self.pan_on, self.toolbar.pan,
-                 "Glisser le graphique (clic gauche) ; clic droit glissé : étirer ou resserrer "
-                 "l'échelle. Recliquer sur Déplacer pour revenir aux curseurs."),
-                ("Annuler", "button", self.controller.undo, "Annuler la dernière action de l'onglet (Ctrl+Z)."),
-                ("Rétablir", "button", self.controller.redo, "Rétablir l'action annulée (Ctrl+Y)."),
-                ("Enregistrer l'image…", "button", self.save_image,
-                 "Image PNG, SVG ou PDF de l'onglet tel qu'il est affiché, curseurs compris.")):
-            if kind == "button":
-                widget = ttk.Button(bar, text=label, command=command)
-            else:
-                # Bouton à bascule Tk : il reste enfoncé (et bleuté) tant que le mode est actif.
-                widget = tk.Checkbutton(bar, text=label, variable=kind, command=command, indicatoron=False,
-                                        padx=10, pady=3, selectcolor=TOGGLE_ON_COLOR)
-            widget.pack(side="left", padx=(0, 10 if label in ("Déplacer", "Rétablir") else 2))
-            WidgetTooltip(widget, help_text)
-            self.navigation_buttons[label] = widget
+        groups = (
+            (("home", "Réinitialiser la vue", None, self.home_view,
+              "Annuler le zoom et le déplacement : toute la durée des fichiers, échelles verticales "
+              "automatiques.\nLes légendes déplacées restent où elles sont (« Vue d'origine », en haut, les "
+              "replace aussi)."),
+             ("zoom", "Zoomer", self.zoom_on, self.toolbar.zoom,
+              "Tracer un rectangle à la souris sur la zone à agrandir.\nRecliquer sur « Zoomer » (ou Échap) "
+              "pour revenir aux curseurs."),
+             ("pan", "Déplacer la vue", self.pan_on, self.toolbar.pan,
+              "Faire glisser le graphique avec le clic gauche (clic droit glissé : étirer ou resserrer "
+              "l'échelle).\nRecliquer sur « Déplacer la vue » pour revenir aux curseurs.")),
+            (("undo", "← Retour arrière", None, self.controller.undo,
+              "Défaire la dernière action de l'onglet : courbe ajoutée, curseur, zoom, titre… (Ctrl+Z)."),
+             ("redo", "Refaire →", None, self.controller.redo,
+              "Refaire ce que « Retour arrière » vient de défaire, si on est revenu trop loin (Ctrl+Y).")),
+            (("image", "Enregistrer en image…", None, self.save_image,
+              "Enregistrer l'onglet tel qu'il est affiché, curseurs compris : image PNG, SVG ou PDF."),))
+        for group in groups:
+            for position, (key, label, variable, command, help_text) in enumerate(group):
+                if variable is None:
+                    widget = ttk.Button(bar, text=label, command=command)
+                else:
+                    # Bouton à bascule Tk : il reste enfoncé (et bleuté) tant que le mode est actif.
+                    widget = tk.Checkbutton(bar, text=label, variable=variable, command=command,
+                                            indicatoron=False, padx=10, pady=3, selectcolor=TOGGLE_ON_COLOR)
+                bar.add(widget, gap=GROUP_GAP_PX if position == len(group) - 1 else 3)
+                WidgetTooltip(widget, help_text)
+                self.navigation_buttons[key] = widget
+        self.sync_history()
 
     def sync_navigation(self) -> None:
-        """Boutons Zoom / Déplacer enfoncés selon le mode réellement actif."""
+        """Boutons Zoomer / Déplacer enfoncés selon le mode réellement actif."""
         self.zoom_on.set(self.toolbar.mode == "zoom rect")
         self.pan_on.set(self.toolbar.mode == "pan/zoom")
+
+    def sync_history(self) -> None:
+        """« Retour arrière » et « Refaire » grisés quand il n'y a rien à défaire ou à refaire."""
+        for key, stack in (("undo", self._undo), ("redo", self._redo)):
+            self.navigation_buttons[key].state(["!disabled"] if stack else ["disabled"])
 
     def save_image(self) -> None:
         """« Enregistrer l'image… » : choix du fichier puis écriture."""
@@ -363,6 +381,7 @@ class AnalysisTab(ttk.Frame):
             del self._undo[:-UNDO_DEPTH]
             self._redo.clear()
         self._snapshot = current
+        self.sync_history()
 
     def undo(self) -> bool:
         """Ctrl+Z : revient à l'état précédent de l'onglet ; faux s'il n'y en a pas."""
@@ -381,6 +400,7 @@ class AnalysisTab(ttk.Frame):
         restored = TabState.from_dict(copy.deepcopy(previous))
         self.state.__dict__.update(restored.__dict__)      # même objet : le contrôleur le garde
         self._snapshot = previous
+        self.sync_history()
         self.active_axle = min(self.active_axle, len(self.state.axles) - 1)
         self.global_cursor.set(self.state.global_cursor)
         self.master.tab(self, text=self.state.title)
@@ -574,7 +594,7 @@ class AnalysisTab(ttk.Frame):
         return lo <= instant <= hi
 
     def leave_navigation(self) -> None:
-        """Relâche les boutons Zoom ou Déplacer : le clic suivant place le curseur au lieu
+        """Relâche les boutons Zoomer ou Déplacer la vue : le clic suivant place le curseur au lieu
         de zoomer (remarque du relecteur)."""
         if self.toolbar.mode == "zoom rect":
             self.toolbar.zoom()
@@ -616,7 +636,7 @@ class AnalysisTab(ttk.Frame):
             self.paned.forget(self.panel)
 
     def home_view(self) -> None:
-        """Vue complète : toute la durée des fichiers et échelles verticales automatiques
+        """« Réinitialiser la vue » : toute la durée des fichiers et échelles verticales automatiques
         (légendes et étiquettes déplacées restent où l'utilisateur les a mises)."""
         self.state.xlim = None
         for axle in self.state.axles:

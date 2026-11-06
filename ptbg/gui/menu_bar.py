@@ -39,8 +39,8 @@ class MenuBar:
 
         # Édition : annuler / rétablir les actions de l'onglet actif (remarque du relecteur).
         edit = tk.Menu(bar, tearoff=False)
-        edit.add_command(label="Annuler", accelerator="Ctrl+Z", command=c.undo)
-        edit.add_command(label="Rétablir", accelerator="Ctrl+Y", command=c.redo)
+        edit.add_command(label="Retour arrière", accelerator="Ctrl+Z", command=c.undo)
+        edit.add_command(label="Refaire", accelerator="Ctrl+Y", command=c.redo)
         bar.add_cascade(label="Édition", menu=edit)
 
         # Affichage : arbre masquable (REQ 5105), onglets / modèles (REQ 5106, 5300), axe des temps (REQ 4107).
@@ -114,3 +114,6 @@ class MenuBar:
         for sequence, action in (("<Control-z>", c.undo), ("<Control-y>", c.redo), ("<Control-Z>", c.redo)):
             root.bind_all(sequence, lambda event, action=action: None if isinstance(event.widget, (tk.Entry, tk.Text))
                           else action())
+        # Échap : seulement dans la fenêtre principale (dans une boîte de dialogue, il la ferme).
+        root.bind_all("<Escape>", lambda event: c.escape() if hasattr(event.widget, "winfo_toplevel")
+                      and event.widget.winfo_toplevel() is root else None)

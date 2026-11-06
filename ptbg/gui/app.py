@@ -432,6 +432,12 @@ class Application:
         if tab is not None and not tab.redo():
             self.notify("Rien à rétablir dans cet onglet.")
 
+    def escape(self) -> None:
+        """Échap : relâche Zoomer / Déplacer la vue dans l'onglet actif (la vue ne change pas)."""
+        tab = self.graph.active_tab()
+        if tab is not None:
+            tab.leave_navigation()
+
     def rename_tab(self) -> None:
         """Renomme l'onglet actif (titre repris dans le rapport)."""
         tab = self.graph.active_tab()

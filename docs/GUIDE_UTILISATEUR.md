@@ -189,12 +189,15 @@ partagent le même temps : zoom et déplacement s'appliquent à tous.
 
 | Bouton | Rôle |
 |---|---|
-| Vue complète | toute la durée des fichiers, échelles verticales automatiques, même après être passé par un autre onglet |
-| Zoom | reste enfoncé (bleuté) : tracer un rectangle à la souris pour zoomer ; recliquer pour revenir aux curseurs |
-| Déplacer | reste enfoncé : glisser le graphique (clic droit glissé : étirer ou resserrer l'échelle) ; recliquer pour revenir aux curseurs |
-| Annuler / Rétablir | comme Ctrl+Z / Ctrl+Y (même historique, 50 actions par onglet) |
-| Enregistrer l'image… | image PNG, SVG ou PDF de l'onglet tel qu'il est affiché, curseurs compris |
- Le bouton **Vue d'origine** (aussi Affichage > Vue d'origine, Ctrl+0) fait de même
+| Réinitialiser la vue | toute la durée des fichiers, échelles verticales automatiques, même après être passé par un autre onglet |
+| Zoomer | reste enfoncé (bleuté) : tracer un rectangle sur la zone à agrandir ; recliquer (ou Échap) pour revenir aux curseurs |
+| Déplacer la vue | reste enfoncé : faire glisser le graphique (clic droit glissé : étirer ou resserrer l'échelle) ; recliquer (ou Échap) pour revenir aux curseurs |
+| ← Retour arrière | défait la dernière action de l'onglet : courbe ajoutée, curseur, zoom, titre… (Ctrl+Z, 50 actions) |
+| Refaire → | refait ce que « Retour arrière » vient de défaire, si on est revenu trop loin (Ctrl+Y) |
+| Enregistrer en image… | image PNG, SVG ou PDF de l'onglet tel qu'il est affiché, curseurs compris |
+
+Retour arrière et Refaire sont grisés quand il n'y a rien à défaire ou à refaire.
+Le bouton **Vue d'origine** (aussi Affichage > Vue d'origine, Ctrl+0) fait de même
 et remet en plus les légendes déplacées à leur place ; courbes et curseurs sont conservés.
 
 **Annuler / rétablir** : **Ctrl+Z** annule la dernière action de l'onglet (courbe ajoutée ou
@@ -253,7 +256,7 @@ Souris : **clic sur une courbe** = la sélectionner ; **clic ailleurs** = placer
 **glisser** = le déplacer (un curseur se saisit en priorité sur la courbe qu'il recouvre) ;
 **Maj + clic** = niveau du curseur horizontal ; **clic droit** = menu de l'axe. Clavier :
 **flèches gauche / droite** = échantillon précédent / suivant de la courbe sélectionnée.
-Quand le bouton Zoom ou Déplacer est enfoncé, les clics servent au zoom ;
+Quand le bouton Zoomer ou Déplacer la vue est enfoncé, les clics servent au zoom ;
 activer un curseur (simple, double, global, horizontal) le relâche et place le
 curseur dans la vue affichée : pas de zoom involontaire.
 
@@ -322,7 +325,7 @@ traçabilité des requis.
 |---|---|
 | Fichier rouge « ILLISIBLE » | voir son nœud Diagnostic : séparateur, encodage, taille maximale (Préférences) |
 | TBM impossible à masquer | une base de temps affichée a un avertissement ou une erreur (voir le TBM) |
-| Curseur qui ne bouge pas au clic | le bouton Zoom ou Déplacer (sous le graphique) est enfoncé : recliquer dessus (activer un curseur le fait automatiquement) |
+| Curseur qui ne bouge pas au clic | le bouton Zoomer ou Déplacer la vue (sous le graphique) est enfoncé : recliquer dessus (activer un curseur le fait automatiquement) |
 | Fausse manipulation | Ctrl+Z (Édition > Annuler) |
 | Axe absolu refusé | un fichier n'a pas d'origine absolue : la saisir dans Base de temps > Configurer |
 | Rien ne s'affiche sous SLES à distance | se connecter avec `ssh -X` (session graphique requise) |
@@ -340,6 +343,7 @@ traçabilité des requis.
 | Ctrl+Z / Ctrl+Y | annuler / rétablir la dernière action de l'onglet |
 | Ctrl+P | rapport automatique de l'onglet actif |
 | Ctrl+K | ajouter la vue active au rapport pas à pas |
+| Échap | relâche Zoomer / Déplacer la vue (la vue zoomée reste telle quelle) |
 | F9 | afficher / masquer l'arbre des données |
 | F1 | cette aide |
 | Ctrl+Q | quitter |
