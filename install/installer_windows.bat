@@ -1,5 +1,5 @@
 @echo off
-rem Installation de VISU PTBG sur Windows 11 64 bits HORS Spyder (REQ_COMMON_KH_3000).
+rem Installation de VISU PTBG sur Windows 11 ou Windows Server 2025 64 bits HORS Spyder (REQ_COMMON_KH_3000).
 rem Sous Spyder 6, aucune installation n'est nécessaire : ouvrir MAIN.py et appuyer sur F5.
 rem
 rem Prérequis : Python 3.11 64 bits de python.org, option « tcl/tk and IDLE » cochée.

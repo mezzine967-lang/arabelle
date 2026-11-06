@@ -16,7 +16,7 @@ SLES se limite à un environnement virtuel avec 11 wheels binaires (aucune compi
 | Quel Python ? | **3.11** (référence) ; code prévu pour 3.10 à 3.14 ; 64 bits | § 1 |
 | Quelles bibliothèques ? | numpy 2.4.6 et matplotlib 3.10.9 (directes) + 9 transitives de matplotlib, toutes figées dans `requirements.txt` | § 2 |
 | Et la bibliothèque standard ? | liste complète des modules utilisés et de leur rôle | § 3 |
-| Que faut-il tester ? | la suite de tests sur le poste Windows / Spyder et sur la VM Linux SLES 15 SP7 fournie par l'entreprise | § 4 |
+| Que faut-il tester ? | la suite de tests sur le poste Windows 11 / Spyder et sur la VM Windows Server 2025 (Bureau à distance) | § 4 |
 | Que faire avant une montée de version ? | effets connus et procédure d'analyse d'impact en 5 étapes | § 5 |
 | Installer sans Internet ? | wheels préparées sur un poste connecté | § 6 |
 | Version tableur ? | `docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx` : lisez-moi, ce que l'outil utilise (avec le risque de chaque élément), ce qui se passe si on change une version, tests à réaliser, procédure de montée et relevé des postes à remplir | — |
@@ -25,10 +25,10 @@ SLES se limite à un environnement virtuel avec 11 wheels binaires (aucune compi
 
 | Élément | Valeur |
 |---|---|
-| Version de référence (développement) | **Python 3.11** (Spyder 6 au poste Windows ; `python311` du module Python 3 de SLES 15 SP7) |
+| Version de référence (développement) | **Python 3.11** (Spyder 6 au poste Windows 11 ; Python 3.11 de python.org ou Spyder 6 sur la VM Windows Server 2025 ; `python311` du module Python 3 de SLES 15 SP7 si besoin) |
 | Versions prévues | 3.10 à 3.14 (versions de Python acceptées par les bibliothèques figées) ; à confirmer par les tests (§ 4) |
 | Version minimale acceptée par le code | 3.10 (`ptbg/version.py`, `MIN_PYTHON`) — contrôlée au lancement par `MAIN.py` |
-| Architecture | 64 bits (Windows 11 x64 et SLES x86-64, les cibles du projet). Des wheels 32 bits existent pour certains paquets, mais ce mode n'est ni ciblé ni testé |
+| Architecture | 64 bits (Windows 11 et Windows Server 2025 x64, les cibles d'essai ; SLES x86-64 pris en charge). Des wheels 32 bits existent pour certains paquets, mais ce mode n'est ni ciblé ni testé |
 | Python 3.6 (REQ 3001) | Non retenu : fin de vie en décembre 2021, dernières versions compatibles numpy 1.19 / matplotlib 3.3 ; le relecteur indique qu'un Python 3.11 est disponible sur SLES 15. Question ouverte n° 3 du récapitulatif Excel (onglet « Points ouverts »). |
 
 ## 2. Bibliothèques tierces (figées dans `requirements.txt`)
@@ -104,7 +104,7 @@ est à lancer sur chaque poste, puis la fiche d'essai de COMPATIBILITE_OS.md § 
 | Poste | Python | Tcl/Tk | numpy | matplotlib | État |
 |---|---|---|---|---|---|
 | Windows 11 / Spyder 6 (relevé du 30/10/2026) | 3.11.10 | 8.6.13 | 2.2.0 | 3.9.3 | outil lancé, CSV du projet ouvert ; tests de la version 1.0.0 lancés le 30/10/2026 depuis la console Spyder : 145 tests, 144 OK ; le seul en erreur demandait un fichier de référence absent du dossier (corrigé depuis : ce contrôle est sauté sans lui) ; tests de la version 1.1.0 à relancer |
-| VM Linux SLES 15 SP7 fournie par l'entreprise | 3.11 (`python311`) | 8.6 (`python311-tk`) | 2.4.6 | 3.10.9 | à faire après installation (`install/installer_sles.sh`) |
+| VM Windows Server 2025 (Bureau à distance) | 3.11 (python.org) | 8.6 | 2.4.6 | 3.10.9 | à faire après installation (`install\installer_windows.bat`, ou hors ligne : § 6) |
 
 Versions de l'environnement Spyder du poste (relevé Information > Sources) : contourpy 1.3.1,
 cycler 0.12.1, fonttools 4.55.2, kiwisolver 1.4.7, packaging 24.2, pillow 11.0.0,
@@ -160,9 +160,18 @@ journal (pas dans la barre d'état) toute bibliothèque différente de `requirem
 hors plage testée (`ptbg/system/environment.py`) ; le relevé complet est dans
 Information > Sources — utile sous Spyder dont l'environnement est figé.
 
-## 6. Installation hors ligne (Service Unit sans accès Internet)
+## 6. Installation hors ligne (poste sans accès Internet)
 
-Sur un poste connecté (Windows ou Linux, même architecture x86-64) :
+**VM Windows Server 2025** (lab sans Internet) : sur un poste Windows connecté, préparer les
+fichiers d'installation, les copier sur la VM avec les sources (par Bureau à distance),
+puis les installer sans Internet :
+
+```
+python -m pip download --only-binary=:all: --python-version 3.11 --platform win_amd64 -r requirements.txt -d wheels_win
+python -m pip install --no-index --find-links wheels_win -r requirements.txt
+```
+
+**SLES 15 SP7** (si besoin), sur un poste connecté (Windows ou Linux, x86-64) :
 
 ```
 python -m pip download --only-binary=:all: --python-version 3.11 --implementation cp ^

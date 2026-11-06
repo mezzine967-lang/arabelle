@@ -22,6 +22,9 @@ d'aide, touche F1).
 ## 1. Démarrer
 
 - **Windows 11 / Spyder 6** : ouvrir `MAIN.py`, appuyer sur **F5**.
+- **VM Windows Server 2025** (Bureau à distance) : comme sur le poste (Spyder 6, ou
+  `install\lancer_windows.bat` après `install\installer_windows.bat`). Les CSV et rapports
+  peuvent rester sur la VM (sauvegardée) ou être copiés sur le PC par le Bureau à distance.
 - **SLES 15 SP7** : `install/lancer_sles.sh` (après `install/installer_sles.sh`).
 - **Terminal** : `python MAIN.py fichier1.csv fichier2.csv` ouvre directement les fichiers.
 

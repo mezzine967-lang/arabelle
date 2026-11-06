@@ -14,15 +14,15 @@
 | **Implémenté et testé** | fonction présente et vérifiée par un test automatique | 45 |
 | **Implémenté — interprétation à valider** | réalisé selon une interprétation ou une valeur par défaut ; la question correspondante est dans l'onglet « Points ouverts » de l'Excel | 16 |
 | **Proposition — énoncé vide** | l'énoncé de la spécification est vide ; une fonction est proposée, le requis ne peut pas être déclaré satisfait avant d'être rédigé | 1 |
-| **Implémenté — qualification … à faire** | réalisé et couvert par les tests automatiques (données de test) ; l'essai sur les postes cibles (poste Windows, VM Linux SLES 15 SP7 fournie par l'entreprise) ou sur les volumes réels reste à faire (dernière section) | 2 |
+| **Implémenté — qualification … à faire** | réalisé et couvert par les tests automatiques (données de test) ; l'essai sur les postes cibles (poste Windows 11, VM Windows Server 2025) ou sur les volumes réels reste à faire (dernière section) | 2 |
 | **Total** | | **64** |
 
 Aucun requis n'est laissé de côté, mais tous ne sont pas encore validés. Un test cité
 prouve que la fonction existe et qu'un cas représentatif est vérifié ; il ne prouve pas à
 lui seul que toute l'exigence est satisfaite : c'est la revue des énoncés et des points
 ouverts avec le rédacteur de la spécification qui le confirmera. Le code est préparé pour
-Windows 11 et SLES 15 SP7 ; il ne pourra être dit officiellement compatible qu'après les
-essais sur ces postes.
+Windows 11 et Windows Server 2025 (cibles d'essai) et reste compatible SLES 15 SP7 ; il ne
+pourra être dit officiellement compatible qu'après les essais sur ces postes.
 
 Sections ci-dessous (numérotation de la spécification) : 2.1 Caractéristiques des sources ·
 2.2 Contenu des sources · 2.3 Caractéristiques des fichiers · 6 Architecture ·
@@ -69,7 +69,7 @@ Qualification restant à faire.
 
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
-| REQ_COMMON_KH_3000 | Compatible SLES 15 SP7 au moins (+ Windows, remarque du relecteur) | Python + Tk + numpy + matplotlib, wheels disponibles pour win_amd64 et manylinux (glibc 2.38 de SP7) ; scripts SLES et Windows ; Spyder 6 | `system/compat.py`, `install/` | `test_architecture.test_minimal_python_syntax` | Implémenté — qualification sur cible à faire (Windows 11, SLES 15 SP7) |
+| REQ_COMMON_KH_3000 | Compatible SLES 15 SP7 au moins (+ Windows, remarque du relecteur) | Python + Tk + numpy + matplotlib, wheels disponibles pour win_amd64 et manylinux (glibc 2.38 de SP7) ; scripts SLES et Windows ; Spyder 6. Cibles d'essai depuis le 06/11/2026 : poste Windows 11 et VM Windows Server 2025 (Bureau à distance) ; SLES gardé dans le code, énoncé à mettre à jour (point ouvert n° 4) ; nom de Windows Server reconnu dans le relevé d'environnement | `system/compat.py`, `system/environment.py`, `install/` | `test_architecture.test_minimal_python_syntax`, `test_architecture.test_windows_11_is_named_from_its_build_number` | Implémenté — qualification sur cible à faire (Windows 11, Windows Server 2025) |
 | REQ_COMMON_KH_3001 | Compatible Python 3.6 au moins | Lu comme « 3.6 minimum » : code prévu pour 3.10 à 3.14, référence 3.11 (décision du relecteur : Python 3.11 sur SLES 15) | `version.py` (`MIN_PYTHON`) | `test_architecture.test_minimal_python_syntax` | Implémenté — interprétation à valider (3.6 strict exclu) |
 | REQ_COMMON_KH_3002 | MAIN.py dédié à la génération de l'IHM | MAIN.py n'importe que l'IHM et ne contient que `build_interface` et `main` | `MAIN.py` | `test_architecture.test_main_only_builds_the_gui` | Implémenté et testé |
 | REQ_COMMON_KH_3003 | Actions externalisées dans des sous-scripts ou classes | Contrôleur `gui/app.py`, traitements dans `core/`, dessin `plotting/`, rapport `report/` ; `core/` sans Tk | `ptbg/` | `test_architecture.test_processing_is_externalized_and_gui_free` | Implémenté et testé |
@@ -153,5 +153,5 @@ Qualification restant à faire.
 
 | Essai | Requis | Comment | Repère actuel |
 |---|---|---|---|
-| Windows 11 / Spyder 6 au poste, et VM Linux SLES 15 SP7 fournie par l'entreprise | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | poste Windows 11 / Spyder 6 : outil lancé avec un CSV du projet et tests automatiques de la version 1.0.0 lancés le 30/10/2026 (144 sur 145 OK, le dernier demandait un fichier de référence absent du dossier ; corrigé), tests de la 1.1.0 à relancer, essai de 15 minutes à faire ; VM : tests et essai à faire |
+| Windows 11 / Spyder 6 au poste, et VM Windows Server 2025 en Bureau à distance | REQ_COMMON_KH_3000, 3005 | procédure de 15 minutes : [COMPATIBILITE_OS.md](COMPATIBILITE_OS.md) § 5, avec les versions relevées par `python tools/audit_environnement.py` | poste Windows 11 / Spyder 6 : outil lancé avec un CSV du projet et tests automatiques de la version 1.0.0 lancés le 30/10/2026 (144 sur 145 OK, le dernier demandait un fichier de référence absent du dossier ; corrigé), tests de la 1.1.0 à relancer, essai de 15 minutes à faire ; VM : tests et essai à faire |
 | Volumes réels de PTBG (taille, nombre de colonnes, de fichiers) pour confirmer la valeur de REQ 2310 | REQ_COMMON_KH_2310, 4105 | `python tools/banc_performance.py` sur de vrais fichiers, puis `--generer 500` | à mesurer sur les postes cibles (pas de valeur retenue à ce jour) |

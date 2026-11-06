@@ -129,6 +129,10 @@ def read_pinned_requirements(path: Path | None = None) -> dict[str, str]:
     return pins
 
 
+# Premier numéro de build de chaque Windows Server (du plus récent au plus ancien).
+SERVER_BUILDS = ((26100, "2025"), (20348, "2022"), (17763, "2019"), (14393, "2016"))
+
+
 def _os_description() -> str:
     """Description lisible de l'OS ; sous Linux, lit /etc/os-release (SLES)."""
     if sys.platform.startswith("linux"):
@@ -138,14 +142,20 @@ def _os_description() -> str:
         except OSError:
             pass
     release = platform.release()
-    if platform.system() == "Windows" and release == "10":
-        # Windows 11 garde le noyau 10.0 : seul le numéro de build (≥ 22000) le
-        # distingue. Python < 3.12 renvoie « 10 » dans les deux cas.
+    if platform.system() == "Windows":
         try:
-            if int(platform.version().split(".")[2]) >= 22000:
-                release = "11"
+            build = int(platform.version().split(".")[2])
         except (IndexError, ValueError):
-            pass
+            build = 0
+        if release == "10" and build >= 22000:
+            # Windows 11 garde le noyau 10.0 : seul le numéro de build (≥ 22000) le
+            # distingue. Python < 3.12 renvoie « 10 » dans les deux cas.
+            release = "11"
+        elif "Server" in release:
+            # Windows Server (VM partagée) : Python 3.11 ne connaît pas 2025 et renvoie
+            # « post2022Server » ; l'année se déduit du numéro de build.
+            year = next((name for first, name in SERVER_BUILDS if build >= first), None)
+            release = f"Server {year}" if year else release
     return f"{platform.system()} {release} ({platform.version()})"
 
 

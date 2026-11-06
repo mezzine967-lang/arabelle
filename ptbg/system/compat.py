@@ -1,6 +1,7 @@
-"""Mécanismes de compatibilité Windows 11 / SLES 15 SP7.
+"""Mécanismes de compatibilité Windows 11 / Windows Server 2025 / SLES 15 SP7.
 
-REQ_COMMON_KH_3000 (SLES 15 SP7 + double compatibilité Windows) et
+REQ_COMMON_KH_3000 (SLES 15 SP7 demandé par l'énoncé ; cibles d'essai : poste Windows 11
+et VM Windows Server 2025 en Bureau à distance, qui prennent les mêmes chemins Windows) et
 REQ_COMMON_KH_3005 (mécanisme de compatibilité documenté).
 
 Toutes les différences entre systèmes d'exploitation sont regroupées ICI,

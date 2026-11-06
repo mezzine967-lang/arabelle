@@ -140,8 +140,9 @@ class ArchitectureTests(unittest.TestCase):
                 self.assertLessEqual(slot.col + slot.colspan, item.ncols)
 
     def test_windows_11_is_named_from_its_build_number(self):
-        """REQ 3000 / 3004 : Python 3.11 annonce « Windows 10 » sous Windows 11 (noyau 10.0) ;
-        le relevé d'environnement se fie au numéro de build (≥ 22000 = Windows 11)."""
+        """REQ 3000 / 3004 : Python 3.11 annonce « Windows 10 » sous Windows 11 (noyau 10.0) et
+        « post2022Server » sous Windows Server 2025 ; le relevé d'environnement se fie au
+        numéro de build (≥ 22000 = Windows 11 ; 26100 en version serveur = Server 2025)."""
         from unittest import mock
         from ptbg.system import environment
         with mock.patch.object(sys, "platform", "win32"), mock.patch("platform.system", return_value="Windows"), \
@@ -150,6 +151,11 @@ class ArchitectureTests(unittest.TestCase):
                 self.assertTrue(environment._os_description().startswith("Windows 11 "))
             with mock.patch("platform.version", return_value="10.0.19045"):
                 self.assertTrue(environment._os_description().startswith("Windows 10 "))
+        # VM partagée Windows Server 2025 : Python 3.11 renvoie « post2022Server ».
+        with mock.patch.object(sys, "platform", "win32"), mock.patch("platform.system", return_value="Windows"), \
+                mock.patch("platform.release", return_value="post2022Server"), \
+                mock.patch("platform.version", return_value="10.0.26100"):
+            self.assertTrue(environment._os_description().startswith("Windows Server 2025 "))
 
     def test_every_requirement_is_traced(self):
         """Aucun requis de la spécification laissé de côté : matrice + code + test. La

@@ -17,8 +17,9 @@ automatique et pas à pas.
 | Poste | Démarrage |
 |---|---|
 | **Windows 11 + Spyder 6** | ouvrir `MAIN.py` puis **F5**. Rien à installer : numpy et matplotlib de Spyder suffisent |
-| **SLES 15 SP7** | `sudo zypper install python311 python311-tk python311-pip`, puis `install/installer_sles.sh` (une fois) et `install/lancer_sles.sh` |
+| **VM Windows Server 2025** (Bureau à distance) | comme un poste Windows : Spyder 6, ou Python 3.11 64 bits (python.org, avec Tcl/Tk) puis `install\installer_windows.bat` et `install\lancer_windows.bat` |
 | Windows sans Spyder | Python 3.11 64 bits (python.org, avec Tcl/Tk), puis `install\installer_windows.bat` et `install\lancer_windows.bat` |
+| SLES 15 SP7 (pris en charge, plus une cible d'essai) | `sudo zypper install python311 python311-tk python311-pip`, puis `install/installer_sles.sh` (une fois) et `install/lancer_sles.sh` |
 | Terminal | `python MAIN.py [fichiers.csv ...]` |
 
 Pour essayer : Fichier > Ouvrir un dossier de CSV > `data/demo/` (trois PLC : 10 ms avec
@@ -32,7 +33,7 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | **utiliser l'outil** (aussi dans l'outil : Information > Fichier d'aide, F1) | [docs/GUIDE_UTILISATEUR.md](docs/GUIDE_UTILISATEUR.md) |
 | savoir **où en est chaque requis** (réalisation, code, test, statut) | [docs/TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md) |
 | la même chose en **tableur**, avec les **questions ouvertes** à faire valider | [docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx](docs/recapitulatif/Recapitulatif_requis_VISU_PTBG.xlsx) (onglet « Points ouverts ») |
-| **installer ou qualifier** l'outil sur Windows 11 ou SLES 15 SP7 | [docs/COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
+| **installer ou qualifier** l'outil sur Windows 11 ou la VM Windows Server 2025 | [docs/COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
 | connaître les **bibliothèques**, leurs licences, l'impact d'une **montée de version** | [docs/DEPENDANCES.md](docs/DEPENDANCES.md) |
 | la même chose en **tableur** : versions, dépendances, sensibilités, tests, relevé des postes | [docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx](docs/recapitulatif/Dependances_versions_VISU_PTBG.xlsx) |
 | **reprendre ou modifier le code** | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |

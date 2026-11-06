@@ -17,6 +17,7 @@
   11 ms sur 10 ms).
 - Condition sur un Bool d'un autre fichier : fausse pendant un trou de ce fichier et après
   sa fin (avant, son dernier état était gardé).
+- Information > Sources : Windows Server 2025 (VM partagée) est nommé correctement.
 
 **Nouveautés**
 
