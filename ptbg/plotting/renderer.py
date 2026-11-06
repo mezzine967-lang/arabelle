@@ -613,10 +613,9 @@ class TabRenderer:
                         va="top", ha="right" if flip else "left", fontsize=FONT_SMALL, color=color, zorder=5,
                         bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.6, pad=1.5))
         if double:
-            delta_ns = float(to_ns(axle.t2) - to_ns(axle.t1))     # nanosecondes entières : Δt exact
             self._keep(ax.annotate("", xy=(axle.t2, 0.06), xytext=(axle.t1, 0.06), xycoords=to_axes,
                                    arrowprops=dict(arrowstyle="<->", color="#333333", lw=1.0)))
-            self._label(ax, index, "Δt", f"Δt = {duration_text(delta_ns)}", ((axle.t1 + axle.t2) / 2, 0.09), to_axes,
+            self._label(ax, index, "Δt", f"Δt = {duration_text(float(to_ns(axle.t2) - to_ns(axle.t1)))}", ((axle.t1 + axle.t2) / 2, 0.09), to_axes,
                         cursor=True, ha="center", va="bottom", fontsize=FONT_SMALL,
                         bbox=dict(fc="#fffde7", ec="#999999", lw=0.5, pad=1.2))
 

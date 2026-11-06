@@ -273,10 +273,15 @@ Les valeurs lues sont celles des **échantillons réels** : le plus proche pour 
 l'état en cours pour un Bool. Le panneau de lecture indique l'instant de l'échantillon et
 sa **ligne dans le CSV** ; « Copier » colle le tableau dans un tableur.
 
-Les curseurs (simple, double, global) se **posent toujours sur une mesure réelle** : celle
-de la courbe sélectionnée la plus proche de l'endroit cliqué ou lâché. Le **Δt** du double
-curseur est donc l'écart exact entre deux horodatages du fichier, calculé en nanosecondes
-entières et écrit en ms sous la seconde (ex. 4988 − 4977 → « Δt = 11 ms »), en s au-delà.
+Les curseurs (simple, double, global) se **posent sur une mesure réelle** : celle de la
+courbe sélectionnée la plus proche de l'endroit cliqué ou lâché. Le **Δt** du double curseur
+est donc l'écart exact entre deux horodatages du fichier, calculé en nanosecondes entières et
+écrit en ms sous la seconde (ex. 4988 − 4977 → « Δt = 11 ms »), en s au-delà.
+
+**Ctrl + clic** ou **Ctrl + glisser** : curseur **libre**, posé exactement sous la souris,
+même entre deux mesures. Le Δt n'est alors plus l'écart de deux mesures : le panneau de
+lecture et le rapport l'indiquent par « (libre) ». L'écart entre les mesures réellement lues
+reste donné courbe par courbe dans le panneau.
 
 ## 7. Traitement conditionnel
 
@@ -372,6 +377,7 @@ traçabilité des requis.
 | glisser la séparation entre deux axes | change leur hauteur |
 | glisser | déplace le curseur |
 | Maj + clic | niveau du curseur horizontal |
+| Ctrl + clic / Ctrl + glisser | curseur libre (pas collé à une mesure) |
 | glisser une légende, un nom de piste ou une étiquette de curseur | le déplace (place conservée, curseur inchangé) |
 | clic sur un nom ou un trait de la légende | sélectionne cette courbe |
 | clic droit sur un axe | menu de l'axe (titre, unité, hauteur, curseurs, courbe sélectionnée et son aspect, échelle, légende) |

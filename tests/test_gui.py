@@ -129,6 +129,11 @@ class InterfaceTests(unittest.TestCase):
                                      MouseEvent("button_release_event", tab.canvas, x_px, y_px, button=1))
         self.assertAlmostEqual(axle.t1, 5.0, delta=0.1)                 # C1 glissé à 5 s
         self.assertIn(axle.t1, set(self.ctl.workspace.timeline().x(source).tolist()))  # sur une mesure réelle
+        # Ctrl enfoncé : curseur libre, posé exactement sous la souris (entre deux mesures).
+        x_free = ax.transData.transform((5.011, 5.0))[0]
+        tab._move("C1", MouseEvent("motion_notify_event", tab.canvas, x_free, y_px, key="control"))
+        self.assertAlmostEqual(axle.t1, 5.011, places=6)
+        self.assertNotIn(axle.t1, set(self.ctl.workspace.timeline().x(source).tolist()))
         tab.set_cursor_mode("single")
         tab.canvas.callbacks.process("key_press_event", KeyEvent("key_press_event", tab.canvas, "right"))
         cycles = axle.t1 / 0.02

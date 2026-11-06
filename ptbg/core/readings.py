@@ -4,9 +4,10 @@
 - REQ_COMMON_KH_5402 : liste des valeurs de TOUTES les courbes de l'axe au
   curseur (panneau de lecture à droite) ;
 - REQ_COMMON_KH_5403 / 5404 : double curseur -> instants C1, C2 automatiques,
-  Δt, 1/Δt et écart de valeur par courbe ; Δt calculé en nanosecondes entières
-  (les curseurs sont posés sur des mesures réelles : temps entiers en ms -> Δt
-  entier en ms) ;
+  Δt, 1/Δt et écart de valeur par courbe ; Δt calculé en nanosecondes entières.
+  Les curseurs se posent sur des mesures réelles (temps entiers en ms -> Δt
+  entier en ms), sauf s'ils sont placés avec Ctrl : le Δt du panneau de lecture
+  et du rapport est alors marqué « (libre) » ;
 - REQ_COMMON_KH_5405 : curseur global -> lecture sur tous les axes ;
 - REQ_COMMON_KH_5406 / 5407 : curseur horizontal -> niveau, franchissements,
   éventuellement sous condition Bool ;
@@ -126,13 +127,31 @@ def compute_readings(tab: TabState, workspace: Workspace, timeline: Timeline,
     return rows
 
 
+def _cursor_delta_text(axle: AxleState, workspace: Workspace, timeline: Timeline) -> str:
+    """Δt entre C1 et C2 (« 11 ms »), calculé en nanosecondes entières. Suivi de
+    « (libre) » si l'un des deux n'est pas sur une mesure de la courbe
+    sélectionnée (placé avec Ctrl) : l'écart n'est alors pas celui de deux mesures."""
+    text = duration_text(float(to_ns(axle.t2) - to_ns(axle.t1)))
+    ref = axle.selected_curve()
+    curve = resolve(ref, workspace) if ref is not None else None
+    if curve is None:
+        return text
+    grid = timeline.grid(curve.source)
+    for instant in (axle.t1, axle.t2):
+        sample = sample_at(grid, curve.values, instant, False)
+        if sample is None or sample.x != instant:
+            return f"{text} (libre)"
+    return text
+
+
 def _delta_rows(name, axle, workspace, timeline) -> list[ReadingRow]:
     """Δt et Δvaleur du double curseur (REQ 5403 / 5404)."""
     if axle.cursor_mode != "double" or axle.t1 is None or axle.t2 is None:
         return []
     delta_ns = float(to_ns(axle.t2) - to_ns(axle.t1))       # nanosecondes entières : Δt exact
     frequency = f" ; 1/Δt = {1e9 / abs(delta_ns):.6g} Hz" if delta_ns else ""
-    rows = [ReadingRow(name, "Δ", "C2 − C1", f"Δt = {duration_text(delta_ns)}{frequency}", "", "")]
+    rows = [ReadingRow(name, "Δ", "C2 − C1", f"Δt = {_cursor_delta_text(axle, workspace, timeline)}{frequency}",
+                       "", "")]
     for ref in axle.curves:
         curve = resolve(ref, workspace)
         if curve is None or curve.signal_type is not SignalType.FLOAT:

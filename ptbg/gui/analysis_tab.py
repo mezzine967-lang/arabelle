@@ -23,8 +23,10 @@ sur une entrée de la légende = sélectionner cette courbe. Time Base Monitor :
 survol d'un marqueur = détail de l'anomalie, clic droit = diagnostic complet.
 Clavier : flèches gauche / droite = échantillon précédent / suivant de la
 courbe sélectionnée ; Ctrl+Z / Ctrl+Y = retour arrière / refaire (contrôleur) ;
-les curseurs (simple, double, global) se posent toujours sur la mesure réelle la
-plus proche de la courbe sélectionnée, d'où un Δt exact entre deux horodatages ;
+les curseurs (simple, double, global) se posent sur la mesure réelle la plus
+proche de la courbe sélectionnée, d'où un Δt exact entre deux horodatages ;
+Ctrl enfoncé pendant le clic ou le glisser : curseur libre (Δt du panneau de
+lecture marqué « (libre) ») ;
 Échap = relâcher Zoomer / Déplacer la vue (la vue reste telle quelle).
 Barre de navigation sous le graphique (la nôtre, en français, à la place de
 celle de Matplotlib dont les boutons, les fenêtres en anglais et l'historique
@@ -832,16 +834,21 @@ class AnalysisTab(ttk.Frame):
         if target == "H" and event.ydata is not None:
             axle.h_level = float(event.ydata)
         elif target == "G" and event.xdata is not None:
-            self.state.t_global = self._snap(float(event.xdata))
+            self.state.t_global = self._snap(float(event.xdata), event)
         elif target in ("C1", "C2") and event.xdata is not None:
-            setattr(axle, "t1" if target == "C1" else "t2", self._snap(float(event.xdata)))
+            setattr(axle, "t1" if target == "C1" else "t2", self._snap(float(event.xdata), event))
         self.update_cursors(record=False)
 
-    def _snap(self, instant: float) -> float:
+    def _snap(self, instant: float, event=None) -> float:
         """Instant de la mesure réelle la plus proche, sur la courbe sélectionnée de l'axe
-        actif (à défaut, la 1re courbe d'un axe temporel) : un curseur est toujours posé
-        sur un horodatage du fichier, et le Δt du double curseur est l'écart exact de deux
-        horodatages (temps entiers en ms -> Δt entier en ms). Sans courbe : inchangé."""
+        actif (à défaut, la 1re courbe d'un axe temporel) : un curseur est posé sur un
+        horodatage du fichier, et le Δt du double curseur est l'écart exact de deux
+        horodatages (temps entiers en ms -> Δt entier en ms). Ctrl enfoncé pendant le
+        clic ou le glisser (``event``) : curseur libre, instant inchangé. Sans courbe :
+        inchangé."""
+        if event is not None and (event.key in ("control", "ctrl")
+                                  or "ctrl" in (getattr(event, "modifiers", None) or ())):
+            return instant
         refs = [self.axle().selected_curve()] + [ref for axle in self.state.axles if axle.kind == "time"
                                                   for ref in axle.curves]
         for ref in refs:
@@ -952,7 +959,9 @@ class AnalysisTab(ttk.Frame):
         if axle.kind == "xy":
             self._pick_xy(axle, event)
             return
-        hit = self.renderer.curve_at(event) if event.key != "shift" and not self._near_cursor(axle, event) else None
+        # Maj (curseur H) et Ctrl (curseur libre) : le clic place un curseur, même sur une courbe.
+        hit = (self.renderer.curve_at(event) if event.key not in ("shift", "control", "ctrl")
+               and not self._near_cursor(axle, event) else None)
         if hit is not None and hit[1] != min(axle.selected, len(axle.curves) - 1):
             self._select_curve(hit[1])          # clic sur une autre courbe : elle devient sélectionnée
             return

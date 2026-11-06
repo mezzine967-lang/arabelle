@@ -204,7 +204,10 @@ class ConditionalAndXYTests(unittest.TestCase):
         # Δt en nanosecondes entières : 4,988 s − 4,977 s = 11 ms tout rond (pas 11,0000000001).
         axle.t1, axle.t2 = 4.977, 4.988
         overall = next(r for r in compute_readings(tab, self.ws, self.ws.timeline()) if r.curve == "C2 − C1")
-        self.assertTrue(overall.time.startswith("Δt = 11 ms ;"))
+        self.assertTrue(overall.time.startswith("Δt = 11 ms (libre) ;"))   # pas des mesures de P
+        axle.t1, axle.t2 = 0.02, 0.18                                 # deux mesures réelles de P
+        overall = next(r for r in compute_readings(tab, self.ws, self.ws.timeline()) if r.curve == "C2 − C1")
+        self.assertTrue(overall.time.startswith("Δt = 160 ms ;"))
 
     def test_durations_are_written_exactly(self):
         """REQ 5403 : Δt écrit à partir de nanosecondes entières, sans arrondi de flottant."""
