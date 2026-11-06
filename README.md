@@ -19,7 +19,6 @@ automatique et pas à pas.
 | **Windows 11 + Spyder 6** | ouvrir `MAIN.py` puis **F5**. Rien à installer : numpy et matplotlib de Spyder suffisent |
 | **VM Windows Server 2025** (Bureau à distance) | comme un poste Windows : Spyder 6, ou Python 3.11 64 bits (python.org, avec Tcl/Tk) puis `install\installer_windows.bat` et `install\lancer_windows.bat` |
 | Windows sans Spyder | Python 3.11 64 bits (python.org, avec Tcl/Tk), puis `install\installer_windows.bat` et `install\lancer_windows.bat` |
-| SLES 15 SP7 (pris en charge, plus une cible d'essai) | `sudo zypper install python311 python311-tk python311-pip`, puis `install/installer_sles.sh` (une fois) et `install/lancer_sles.sh` |
 | Terminal | `python MAIN.py [fichiers.csv ...]` |
 
 Pour essayer : Fichier > Ouvrir un dossier de CSV > `data/demo/` (trois PLC : 10 ms avec
@@ -51,10 +50,10 @@ Les CSV reçus du projet sont dans `data/exemples/`.
 | `ptbg/plotting/` | dessin commun écran et PDF, Time Base Monitor |
 | `ptbg/report/` | rapport PDF |
 | `ptbg/gui/` | interface Tkinter : contrôleur, arbre, onglets, dialogues |
-| `ptbg/system/` | compatibilité Windows / SLES, environnement, journal |
+| `ptbg/system/` | ce qui dépend du système (Windows), environnement, journal |
 | `tests/` | 165 tests automatisés (dont l'interface réelle et la robustesse) |
 | `tools/` | audit d'environnement, banc de performance, traçabilité, données de démo |
-| `install/` | installation et lancement Windows / SLES |
+| `install/` | installation et lancement hors Spyder (Windows) |
 | `data/demo/` | CSV de démonstration (3 PLC + 1 fichier non conforme) |
 | `data/exemples/` | CSV reçus du projet (inchangés) |
 | `data/references_simulation/` | scripts de simulation de référence reçus (inchangés, hors outil) |
@@ -77,14 +76,14 @@ Les 64 lignes de la spécification sont tracées dans
 
 | Sujet | En bref | Détail |
 |---|---|---|
-| Dépendances | Python **3.11** (référence ; code prévu pour 3.10 à 3.14), Tkinter, **numpy** et **matplotlib**, rien d'autre ; versions figées dans `requirements.txt`, identiques Windows et SLES | [DEPENDANCES.md](docs/DEPENDANCES.md), [COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
+| Dépendances | Python **3.11** (référence ; code prévu pour 3.10 à 3.14), Tkinter, **numpy** et **matplotlib**, rien d'autre ; versions figées dans `requirements.txt`, identiques sur le poste Windows 11 et la VM Windows Server 2025 | [DEPENDANCES.md](docs/DEPENDANCES.md), [COMPATIBILITE_OS.md](docs/COMPATIBILITE_OS.md) |
 | Robustesse | un fichier abîmé (ligne tronquée ou en trop, guillemet non fermé, octets nuls, en-tête absent ou répété, encodage non UTF-8, horodatage aberrant…) est lu sans exception, sans perte silencieuse ni valeur inventée ; chaque anomalie est citée avec sa ligne | guide § 2 ; `tests/test_robustesse.py` |
 | Performances | à mesurer sur les postes cibles avec `tools/banc_performance.py` (vrais fichiers PTBG, ou fichier de synthèse de 500 Mo) | [TRACABILITE_REQUIS.md](docs/TRACABILITE_REQUIS.md), dernière section |
 
 ## 6. Vérifier
 
 ```
-python -m unittest discover -s tests -v     # 165 tests (sous Linux sans bureau : xvfb-run devant)
+python -m unittest discover -s tests -v     # 165 tests, interface comprise
 python tools/verifier_tracabilite.py        # chaque requis : matrice + code + test
 python tools/audit_environnement.py         # versions présentes / versions figées
 python tools/banc_performance.py f.csv      # durées et mémoire (ou --generer 500 : fichier de 500 Mo)

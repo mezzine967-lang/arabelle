@@ -15,7 +15,7 @@ et aux modules de ``ptbg/`` (REQ_COMMON_KH_3003).
 
 Lancement :
 - Windows 11 / Spyder 6 : ouvrir ce fichier puis Exécuter (F5) ;
-- Windows ou SLES 15 SP7 en terminal : ``python MAIN.py [fichiers.csv ...]``.
+- Windows 11 ou VM Windows Server 2025 en terminal : ``python MAIN.py [fichiers.csv ...]``.
 """
 import sys
 from pathlib import Path
@@ -39,7 +39,7 @@ def _environment_problem():
     missing = missing_runtime_modules()
     if missing:
         return (f"Module(s) manquant(s) : {', '.join(missing)}. Voir README.md (installation) : "
-                "tkinter est fourni avec Python (paquet python311-tk sous SLES), numpy et matplotlib "
+                "tkinter est fourni avec Python (option « tcl/tk and IDLE » de l'installeur), numpy et matplotlib "
                 "s'installent avec « python -m pip install -r requirements.txt ».")
     from ptbg.system.compat import display_problem
     return display_problem()

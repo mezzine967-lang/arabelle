@@ -25,7 +25,6 @@ d'aide, touche F1).
 - **VM Windows Server 2025** (Bureau à distance) : comme sur le poste (Spyder 6, ou
   `install\lancer_windows.bat` après `install\installer_windows.bat`). Les CSV et rapports
   peuvent rester sur la VM (sauvegardée) ou être copiés sur le PC par le Bureau à distance.
-- **SLES 15 SP7** : `install/lancer_sles.sh` (après `install/installer_sles.sh`).
 - **Terminal** : `python MAIN.py fichier1.csv fichier2.csv` ouvre directement les fichiers.
 
 La fenêtre comprend :
@@ -349,7 +348,6 @@ module, versions de Python, Tk et des bibliothèques), cette aide, journal d'act
 | Curseur qui ne bouge pas au clic | le bouton Zoomer ou Déplacer la vue (sous le graphique) est enfoncé : recliquer dessus (activer un curseur le fait automatiquement) |
 | Fausse manipulation | Ctrl+Z (Édition > Annuler) |
 | Axe absolu refusé | un fichier n'a pas d'origine absolue : la saisir dans Base de temps > Configurer |
-| Rien ne s'affiche sous SLES à distance | se connecter avec `ssh -X` (session graphique requise) |
 | Lecture lente ou mémoire insuffisante sur de très gros fichiers | mesurer le poste avec `python tools/banc_performance.py fichier.csv` et ajuster la taille maximale (Outils > Préférences) |
 
 ## 12. Raccourcis

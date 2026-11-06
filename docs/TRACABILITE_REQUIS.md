@@ -21,8 +21,8 @@ Aucun requis n'est laissé de côté, mais tous ne sont pas encore validés. Un 
 prouve que la fonction existe et qu'un cas représentatif est vérifié ; il ne prouve pas à
 lui seul que toute l'exigence est satisfaite : c'est la revue des énoncés et des points
 ouverts avec le rédacteur de la spécification qui le confirmera. Le code est préparé pour
-Windows 11 et Windows Server 2025 (cibles d'essai) et reste compatible SLES 15 SP7 ; il ne
-pourra être dit officiellement compatible qu'après les essais sur ces postes.
+Windows 11 et Windows Server 2025 ; il ne pourra être dit officiellement compatible qu'après
+les essais sur ces postes.
 
 Sections ci-dessous (numérotation de la spécification) : 2.1 Caractéristiques des sources ·
 2.2 Contenu des sources · 2.3 Caractéristiques des fichiers · 6 Architecture ·
@@ -69,7 +69,7 @@ Qualification restant à faire.
 
 | Requis | Énoncé | Réalisation | Code | Test | Statut |
 |---|---|---|---|---|---|
-| REQ_COMMON_KH_3000 | Compatible SLES 15 SP7 au moins (+ Windows, remarque du relecteur) | Python + Tk + numpy + matplotlib, wheels disponibles pour win_amd64 et manylinux (glibc 2.38 de SP7) ; scripts SLES et Windows ; Spyder 6. Cibles d'essai depuis le 06/11/2026 : poste Windows 11 et VM Windows Server 2025 (Bureau à distance) ; SLES gardé dans le code, énoncé à mettre à jour (point ouvert n° 4) ; nom de Windows Server reconnu dans le relevé d'environnement | `system/compat.py`, `system/environment.py`, `install/` | `test_architecture.test_minimal_python_syntax`, `test_architecture.test_windows_11_is_named_from_its_build_number` | Implémenté — qualification sur cible à faire (Windows 11, Windows Server 2025) |
+| REQ_COMMON_KH_3000 | Compatible SLES 15 SP7 au moins (+ Windows, remarque du relecteur) | Python + Tk + numpy + matplotlib, wheels disponibles pour win_amd64 ; script d'installation Windows ; Spyder 6. Décision du relecteur (06/11/2026) : Linux abandonné, cibles = poste Windows 11 et VM Windows Server 2025 (Bureau à distance) ; énoncé à mettre à jour (point ouvert n° 4) ; nom de Windows Server reconnu dans le relevé d'environnement | `system/compat.py`, `system/environment.py`, `install/` | `test_architecture.test_minimal_python_syntax`, `test_architecture.test_windows_11_is_named_from_its_build_number` | Implémenté — qualification sur cible à faire (Windows 11, Windows Server 2025) |
 | REQ_COMMON_KH_3001 | Compatible Python 3.6 au moins | Lu comme « 3.6 minimum » : code prévu pour 3.10 à 3.14, référence 3.11 (décision du relecteur : Python 3.11 sur SLES 15) | `version.py` (`MIN_PYTHON`) | `test_architecture.test_minimal_python_syntax` | Implémenté — interprétation à valider (3.6 strict exclu) |
 | REQ_COMMON_KH_3002 | MAIN.py dédié à la génération de l'IHM | MAIN.py n'importe que l'IHM et ne contient que `build_interface` et `main` | `MAIN.py` | `test_architecture.test_main_only_builds_the_gui` | Implémenté et testé |
 | REQ_COMMON_KH_3003 | Actions externalisées dans des sous-scripts ou classes | Contrôleur `gui/app.py`, traitements dans `core/`, dessin `plotting/`, rapport `report/` ; `core/` sans Tk | `ptbg/` | `test_architecture.test_processing_is_externalized_and_gui_free` | Implémenté et testé |

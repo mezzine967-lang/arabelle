@@ -1,13 +1,12 @@
 # VISU PTBG 1.1.0 — dépendances figées de RÉFÉRENCE (REQ_COMMON_KH_3004)
 #
 # Valables SANS MODIFICATION pour Python 3.11, 3.12, 3.13 et 3.14,
-# sous Windows 11 64 bits (win_amd64) et SLES 15 SP7 x86-64 (manylinux,
-# glibc >= 2.28 ; SLES 15 SP7 fournit glibc 2.38). Toutes existent en wheel
-# binaire sur PyPI : aucune compilation sur le poste.
+# sous Windows 11 et Windows Server 2025 64 bits (win_amd64). Toutes existent
+# en wheel binaire sur PyPI : aucune compilation sur le poste.
 #
 # Installation (venv recommandé, voir README.md et install/) :
 #     python -m pip install -r requirements.txt
-# Hors ligne (Service Unit sans Internet) : voir docs/DEPENDANCES.md § 6.
+# Hors ligne (VM du lab sans Internet) : voir docs/DEPENDANCES.md § 6.
 #
 # Sous Spyder 6 (environnement figé), RIEN n'est à installer si numpy et
 # matplotlib sont présents : l'outil relève les versions au démarrage et les

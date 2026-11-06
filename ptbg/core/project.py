@@ -5,10 +5,10 @@ types forcés, groupes binaires, onglets et pages du rapport pas à pas. Son
 nom et son SHA-256 alimentent l'en-tête des rapports (REQ_COMMON_KH_6005
 « Project file reference or Hash »).
 
-Compatibilité Windows / SLES (REQ_COMMON_KH_3005) : les chemins sont stockés
-RELATIFS au fichier projet, avec « / » comme séparateur, en plus du chemin
-absolu d'origine. Un projet créé sous Windows se rouvre ainsi sous SLES si
-le dossier (projet + CSV) a été copié tel quel.
+Portabilité (REQ_COMMON_KH_3005) : les chemins sont stockés RELATIFS au
+fichier projet, avec « / » comme séparateur, en plus du chemin absolu
+d'origine. Un projet se rouvre ainsi sur un autre poste (PC, VM, autre
+lecteur) si le dossier (projet + CSV) a été copié tel quel.
 
 Les CSV ne sont jamais modifiés ni copiés dans le projet ; à la réouverture,
 une empreinte différente est signalée (fichier source modifié entre-temps).

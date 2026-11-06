@@ -8,7 +8,7 @@ ptbg/
 ├── version.py               nom, version, date, Python minimal
 ├── config.py                préférences persistantes (taille max, tolérance, en-tête…)
 ├── system/                  dépendances au système (REQ 3000, 3004, 3005)
-│   ├── compat.py            TOUTES les différences Windows / SLES
+│   ├── compat.py            TOUT ce qui dépend du système (Windows)
 │   ├── environment.py       relevé Python / Tk / bibliothèques, plages de versions prévues
 │   └── activity_log.py      journal d'activité (mémoire + fichier)
 ├── core/                    traitements purs : ni Tk ni Matplotlib (REQ 3003)
@@ -54,7 +54,7 @@ ptbg/
                              (base.py : boutons « OK » / « Annuler », saisie de texte)
 tests/                       unittest : core, rendu, PDF, IHM réelle, architecture
 tools/                       audit d'environnement, traçabilité, données de démonstration
-install/                     installation et lancement Windows / SLES
+install/                     installation et lancement hors Spyder (Windows)
 data/exemples/               CSV reçus (inchangés) ; data/demo/ : CSV de démonstration
 docs/                        spécification, guide, dépendances, compatibilité, traçabilité, récapitulatif Excel
 ```
@@ -92,7 +92,7 @@ Deux règles transversales :
 
 | Choix | Raison |
 |---|---|
-| Tkinter (bibliothèque standard) | présent avec Python sous Windows et SLES (`python311-tk`) ; aucune licence ni paquet lourd ; fonctionne dans Spyder |
+| Tkinter (bibliothèque standard) | fourni avec Python sous Windows ; aucune licence ni paquet lourd ; fonctionne dans Spyder |
 | Matplotlib sans `pyplot` | pas de conflit avec le backend graphique de la console Spyder ; même rendu écran / PDF |
 | numpy seul (pas pandas) | moins de dépendances à qualifier (REQ 3004) ; lecture en flux maîtrisée |
 | Fils (`threading`) plutôt que processus | `multiprocessing` est peu fiable dans Spyder sous Windows |
@@ -139,8 +139,7 @@ classement dans `core/time_base.py::_classify`, le style dans `plotting/styles.p
 ## 6. Tests
 
 ```
-python -m unittest discover -s tests -v          # tout (IHM ignorée sans écran)
-xvfb-run python -m unittest discover -s tests    # Linux sans écran : IHM incluse
+python -m unittest discover -s tests -v          # tout, interface comprise
 python tools/verifier_tracabilite.py             # chaque requis est tracé
 python tools/audit_environnement.py              # versions présentes vs figées
 python tools/banc_performance.py f.csv           # durées et mémoire sur de vrais fichiers

@@ -134,7 +134,8 @@ SERVER_BUILDS = ((26100, "2025"), (20348, "2022"), (17763, "2019"), (14393, "201
 
 
 def _os_description() -> str:
-    """Description lisible de l'OS ; sous Linux, lit /etc/os-release (SLES)."""
+    """Description lisible de l'OS (Windows 11, Windows Server 2025… ; repli portable :
+    nom de la distribution lu dans /etc/os-release)."""
     if sys.platform.startswith("linux"):
         try:
             info = platform.freedesktop_os_release()  # Python >= 3.10
@@ -197,7 +198,7 @@ def tkagg_problem(root) -> str | None:
 
     L'extension TkAgg de Matplotlib dépend de la version de Tcl/Tk : par exemple
     matplotlib 3.6 à 3.8 échoue avec Tk 9.0 (« Failed to load Tcl_SetVar »),
-    alors qu'il fonctionne avec Tk 8.6 (Windows python.org, Spyder, SLES).
+    alors qu'il fonctionne avec Tk 8.6 (Windows python.org, Spyder).
     """
     try:
         import tkinter

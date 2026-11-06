@@ -2,7 +2,7 @@
 
 Organisation (voir docs/ARCHITECTURE.md) :
 
-- ``ptbg.system``   : compatibilité Windows / SLES, environnement, journal d'activité ;
+- ``ptbg.system``   : ce qui dépend du système, environnement, journal d'activité ;
 - ``ptbg.core``     : traitements purs (lecture CSV, base de temps, curseurs...),
                       sans Tkinter, donc testables sans écran ;
 - ``ptbg.plotting`` : dessin Matplotlib commun à l'écran et au rapport PDF ;

@@ -4,7 +4,7 @@ Chaque action notable (ouverture, analyse, rapport, erreur) est :
 - conservée en mémoire pour la fenêtre « Journal d'activité » ;
 - transmise aux écouteurs (la barre d'état affiche le dernier message) ;
 - écrite dans un fichier journal du dossier utilisateur (traçabilité), par
-  exemple ~/.local/state/visu_ptbg/journal_20261027.log sous SLES.
+  exemple %LOCALAPPDATA%\\VISU_PTBG\\journal_20261027.log.
 
 L'écriture disque est facultative : si le dossier est en lecture seule, le
 journal continue en mémoire, sans interrompre l'outil.

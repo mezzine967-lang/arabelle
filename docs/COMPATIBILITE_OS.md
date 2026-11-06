@@ -1,7 +1,6 @@
-# Compatibilité Windows 11 / Windows Server 2025 (et SLES 15 SP7) — REQ_COMMON_KH_3000 et 3005
+# Compatibilité Windows 11 / Windows Server 2025 — REQ_COMMON_KH_3000 et 3005
 
-Cibles d'essai (information du 06/11/2026 : plus de double compatibilité Windows / Linux
-demandée) :
+Cibles (décision du relecteur, 06/11/2026 : plus de double compatibilité, Linux abandonné) :
 
 - **Windows 11 64 bits** : poste bureautique individuel (développement sous **Spyder 6**) ;
 - **Windows Server 2025** : VM partagée du lab, utilisée en **Bureau à distance (RDP)** via
@@ -9,49 +8,47 @@ demandée) :
   peut rapatrier ses données sur son PC par RDP ; les données peuvent rester sur la VM,
   qui est sauvegardée.
 
-**SLES 15 SP7**, demandé par l'énoncé du REQ 3000, reste pris en charge par le code (rien
-n'est retiré : les différences sont isolées dans un seul module), mais n'est plus une
-cible d'essai ; l'énoncé du requis est à mettre à jour (point ouvert n° 4).
-
-Aucun exécutable n'est produit pour l'instant : l'outil s'exécute depuis ses sources
+L'énoncé du REQ 3000 demande encore SLES 15 SP7 : il est à mettre à jour (point ouvert
+n° 4). Aucun exécutable n'est produit pour l'instant : l'outil s'exécute depuis ses sources
 Python (l'environnement Spyder étant figé, ce mode est le seul possible au poste).
 
 | Section | Contenu |
 |---|---|
 | § 1 | où sont isolées les différences entre systèmes, sujet par sujet |
 | § 1 bis | ce qui change sur la VM Windows Server 2025 en Bureau à distance |
-| § 2 | comment lancer l'outil sur chaque cible |
-| § 3 | installation sur SLES 15 SP7 (en ligne ou hors ligne), si un jour nécessaire |
+| § 2 | comment lancer l'outil |
+| § 3 | installation hors Spyder (en ligne ou hors ligne) |
 | § 4 | ce qui reste à vérifier, et où (poste Windows 11, VM Windows Server 2025) |
 | § 5 | **fiche d'essai de réception** à remplir sur chaque poste cible |
 
 ## 1. Principe : un seul code, les différences isolées
 
-Toutes les différences entre systèmes sont regroupées dans **`ptbg/system/compat.py`**.
-Aucun autre module ne teste le système d'exploitation (contrôle automatique :
-`tests/test_architecture.py::test_os_specific_code_is_centralized`).
+Tout ce qui dépend du système est regroupé dans **`ptbg/system/compat.py`**. Aucun autre
+module ne teste le système d'exploitation (contrôle automatique :
+`tests/test_architecture.py::test_os_specific_code_is_centralized`). Le code reste écrit
+de façon portable (chemins `pathlib`, aucun chemin codé en dur), sans viser d'autre
+système que Windows.
 
-| Sujet | Windows 11 | SLES 15 SP7 | Mécanisme |
-|---|---|---|---|
-| Interpréteur | Spyder 6 (Python intégré) ou python.org 3.11 x64 | `python311` (module Python 3) | même code ; version vérifiée par `MAIN.py` |
-| Interface graphique | Tk 8.6 fourni avec Python | `python311-tk` (Tk 8.6) | Tkinter (bibliothèque standard) ; Tk 9 également pris en charge (exige matplotlib ≥ 3.10) ; compatibilité matplotlib / Tk vérifiée au démarrage (`tkagg_problem`) |
-| Bibliothèques | celles de Spyder (rien à installer) ou `requirements.txt` | `requirements.txt` dans un venv (en ligne ou hors ligne) | mêmes wheels (win_amd64 / manylinux) ; versions relevées au démarrage |
-| Chemins | `C:\...`, lecteurs, UNC | `/home/...` | `pathlib` partout ; aucun séparateur codé en dur |
-| Chemins du projet | — | — | stockés relatifs au fichier projet avec « / » : un projet Windows se rouvre sous SLES (`core/project.py`) |
-| Préférences | `%APPDATA%\VISU_PTBG\settings.json` | `~/.config/visu_ptbg/settings.json` | `user_config_dir()` |
-| Journaux | `%LOCALAPPDATA%\VISU_PTBG\journal_AAAAMMJJ.log` | `~/.local/state/visu_ptbg/journal_AAAAMMJJ.log` | `user_state_dir()` ; dossier des sources jamais écrit (peut être en lecture seule) |
-| Utilisateur | `USERNAME` | `LOGNAME` / `USER` | `getpass.getuser()` avec repli « inconnu » |
-| Écran haute résolution | mise à l'échelle 125 / 150 % | résolution du serveur X | `enable_high_dpi()` (Windows) avant la création de la fenêtre |
-| Absence d'écran | — | lancement sans session graphique | `display_problem()` : message clair (DISPLAY vide, utiliser le bureau ou `ssh -X`) |
-| Ouverture du PDF | `os.startfile` | `xdg-open` | `open_with_default_application()` ; un échec est journalisé, jamais bloquant |
-| Encodage des CSV | UTF-8 attendu (REQ 2302) | idem | décodage explicite UTF-8 (BOM toléré), jamais l'encodage local du système ; un fichier Windows-1252 ou UTF-16 est lu mais marqué en ERREUR (non-conformité citée avec sa ligne) |
-| Fins de ligne CSV | CRLF | LF | flux texte avec `newline=None` : CRLF, LF et CR acceptés, même mélangés dans un fichier |
-| Mémoire du processus (banc de performance) | `GetProcessMemoryInfo` (psapi, via `ctypes`) | `/proc/self/statm` et `resource.getrusage` | `process_memory_mb()` ; renvoie « inconnue » plutôt qu'une erreur |
-| Polices des graphiques | — | — | DejaVu Sans, fournie avec matplotlib : rendu et PDF identiques |
-| Caractères spéciaux de l'IHM | — | Tk 8.6 sous X11 ne gère pas les émojis | icônes dessinées pixel par pixel ; aucun émoji |
-| Travail en arrière-plan | `multiprocessing` peu fiable sous Spyder | — | fils `threading` + file `queue` (`gui/tasks.py`) |
-| Backend Matplotlib | Spyder impose souvent « inline » ou Qt | — | aucun `pyplot` ni `matplotlib.use()` : figures intégrées directement par `FigureCanvasTkAgg` |
-| Fermeture | — | — | arrêt propre des minuteries Tk et du dessin différé (aucune erreur « invalid command name ») |
+| Sujet | Windows 11 et Windows Server 2025 | Mécanisme |
+|---|---|---|
+| Interpréteur | Spyder 6 (Python intégré) ou python.org 3.11 x64 | même code ; version vérifiée par `MAIN.py` |
+| Interface graphique | Tk 8.6 fourni avec Python | Tkinter (bibliothèque standard) ; Tk 9 également pris en charge (exige matplotlib ≥ 3.10) ; compatibilité matplotlib / Tk vérifiée au démarrage (`tkagg_problem`) |
+| Bibliothèques | celles de Spyder (rien à installer) ou `requirements.txt` | mêmes fichiers d'installation (win_amd64) pour les deux ; versions relevées au démarrage |
+| Chemins | `C:\...`, lecteurs, chemins réseau | `pathlib` partout ; aucun séparateur codé en dur |
+| Chemins du projet | — | stockés relatifs au fichier projet avec « / » : un projet se rouvre d'un poste à l'autre (`core/project.py`) |
+| Préférences | `%APPDATA%\VISU_PTBG\settings.json` | `user_config_dir()` |
+| Journaux | `%LOCALAPPDATA%\VISU_PTBG\journal_AAAAMMJJ.log` | `user_state_dir()` ; dossier des sources jamais écrit (peut être en lecture seule) |
+| Utilisateur | `USERNAME` | `getpass.getuser()` avec repli « inconnu » |
+| Écran haute résolution | mise à l'échelle 125 / 150 % | `enable_high_dpi()` avant la création de la fenêtre |
+| Ouverture du PDF | `os.startfile` (lecteur PDF par défaut) | `open_with_default_application()` ; un échec est journalisé, jamais bloquant |
+| Encodage des CSV | UTF-8 attendu (REQ 2302) | décodage explicite UTF-8 (BOM toléré), jamais l'encodage local du système ; un fichier Windows-1252 ou UTF-16 est lu mais marqué en ERREUR (non-conformité citée avec sa ligne) |
+| Fins de ligne CSV | CRLF (ou LF selon l'origine du fichier) | flux texte avec `newline=None` : CRLF, LF et CR acceptés, même mélangés dans un fichier |
+| Mémoire du processus (banc de performance) | `GetProcessMemoryInfo` (psapi, via `ctypes`) | `process_memory_mb()` ; renvoie « inconnue » plutôt qu'une erreur |
+| Polices des graphiques | — | DejaVu Sans, fournie avec matplotlib : rendu et PDF identiques sur tous les postes |
+| Caractères spéciaux de l'IHM | — | icônes dessinées pixel par pixel ; aucun émoji |
+| Travail en arrière-plan | `multiprocessing` peu fiable sous Spyder | fils `threading` + file `queue` (`gui/tasks.py`) |
+| Backend Matplotlib | Spyder impose souvent « inline » ou Qt | aucun `pyplot` ni `matplotlib.use()` : figures intégrées directement par `FigureCanvasTkAgg` |
+| Fermeture | — | arrêt propre des minuteries Tk et du dessin différé (aucune erreur « invalid command name ») |
 
 ## 1 bis. VM Windows Server 2025 en Bureau à distance
 
@@ -77,7 +74,6 @@ bibliothèques (win_amd64). Points propres à une VM partagée :
 |---|---|
 | Windows 11, Spyder 6 | ouvrir `MAIN.py`, **Exécuter (F5)** ; conseillé : *Exécuter > Configuration par fichier > Exécuter dans une console dédiée* |
 | Windows 11 ou VM Windows Server 2025, sans Spyder | `install\installer_windows.bat` une fois, puis `install\lancer_windows.bat` |
-| SLES 15 SP7 | `install/installer_sles.sh` une fois, puis `install/lancer_sles.sh [fichiers.csv]` |
 | Toute cible, terminal | `python MAIN.py [fichiers.csv ...]` |
 
 Remarques Spyder 6 :
@@ -87,31 +83,28 @@ Remarques Spyder 6 :
 - si numpy ou matplotlib étaient absents de l'environnement Spyder, `MAIN.py` l'indique
   clairement au lieu d'échouer (rien n'est installé automatiquement).
 
-## 3. Installation sur SLES 15 SP7 (plus une cible d'essai, gardée pour le REQ 3000)
+## 3. Installation hors Spyder
 
 ```
-sudo zypper install python311 python311-tk python311-pip   # module « Python 3 » de SLES
-install/installer_sles.sh                                   # crée .venv et installe requirements.txt
-install/lancer_sles.sh
+Python 3.11 64 bits de python.org, option « tcl/tk and IDLE » cochée
+install\installer_windows.bat      (crée .venv et installe requirements.txt)
+install\lancer_windows.bat
 ```
 
-Hors ligne : préparer les wheels sur un poste connecté (`install/preparer_paquets_hors_ligne.sh`,
-voir DEPENDANCES.md § 6) puis `install/installer_sles.sh --hors-ligne wheels_sles`.
-
-Prérequis pour SP7 : glibc ≥ 2.28 exigée par les wheels (SP7 fournit 2.38), Python 3.11 et
-Tk disponibles dans le module Python 3 de SLES. Une version antérieure de SLES 15
-(SP3 et avant, glibc 2.26) ne permettrait pas d'installer numpy 2.x en wheel.
+Sans Internet (cas possible du lab) : préparer les fichiers d'installation sur un poste
+connecté, les copier sur la VM avec les sources (Bureau à distance), puis les installer :
+voir DEPENDANCES.md § 6.
 
 ## 4. Qualification à faire
 
 | Poste | Ce qui est déjà constaté | Ce qui reste à faire |
 |---|---|---|
 | Windows 11 / Spyder 6 (poste de l'alternance) | l'outil se lance et ouvre un CSV du projet (relevé Information > Sources du 30/10/2026 : Python 3.11.10, Tk 8.6.13, numpy 2.2.0, matplotlib 3.9.3) ; tests de la version 1.0.0 lancés le 30/10/2026 depuis la console Spyder : 145 tests, 144 OK ; le seul en erreur demandait un fichier de référence absent du dossier (corrigé depuis : ce contrôle est sauté sans lui) | relancer les tests avec cette version (`import sys`, `%cd <dossier de l'outil>`, puis `!"{sys.executable}" -m unittest discover -s tests -v` ; attendu : « OK », avec « skipped=1 » : un contrôle de traçabilité est sauté), puis la fiche d'essai du § 5 |
-| VM Windows Server 2025 (Bureau à distance) | — | installer (§ 1 bis), lancer les tests (`python -m unittest discover -s tests -v`), puis la fiche d'essai du § 5 en Bureau à distance |
+| VM Windows Server 2025 (Bureau à distance) | — | installer (§ 3), lancer les tests (`python -m unittest discover -s tests -v`), puis la fiche d'essai du § 5 en Bureau à distance |
 
-Des wheels de chaque bibliothèque figée existent pour Windows 11 et Windows Server 2025
-(win_amd64, les mêmes) et pour SLES (manylinux x86-64) ; leur disponibilité se contrôle avec la commande de
-DEPENDANCES.md § 5.3, étape 2.
+Des fichiers d'installation (wheels win_amd64) de chaque bibliothèque figée existent pour
+Windows 11 et Windows Server 2025 (les mêmes) ; leur disponibilité se contrôle avec la
+commande de DEPENDANCES.md § 5.3, étape 2.
 
 ## 5. Essai de réception à consigner sur chaque cible (≈ 15 minutes)
 

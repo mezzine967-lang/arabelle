@@ -9,7 +9,7 @@
 Les documents Markdown sont affichés par un rendu simple dans un widget Text
 (titres, listes en retrait, gras, blocs de code, tableaux dessinés en colonnes
 alignées, gravités [ERREUR] / [AVERTISSEMENT] / [INFO] / [OK] en couleur) :
-aucune bibliothèque ni navigateur requis, identique sous Windows et SLES.
+aucune bibliothèque ni navigateur requis, identique sur tous les postes.
 """
 from __future__ import annotations
 

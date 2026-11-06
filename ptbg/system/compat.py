@@ -1,16 +1,16 @@
-"""Mécanismes de compatibilité Windows 11 / Windows Server 2025 / SLES 15 SP7.
+"""Mécanismes de compatibilité : poste Windows 11 et VM Windows Server 2025.
 
-REQ_COMMON_KH_3000 (SLES 15 SP7 demandé par l'énoncé ; cibles d'essai : poste Windows 11
-et VM Windows Server 2025 en Bureau à distance, qui prennent les mêmes chemins Windows) et
-REQ_COMMON_KH_3005 (mécanisme de compatibilité documenté).
+REQ_COMMON_KH_3000 (cibles : poste Windows 11 et VM Windows Server 2025 en Bureau à
+distance, qui prennent les mêmes chemins Windows ; Linux abandonné à la demande du
+relecteur, énoncé à mettre à jour) et REQ_COMMON_KH_3005 (mécanisme documenté).
 
-Toutes les différences entre systèmes d'exploitation sont regroupées ICI,
-pour qu'aucun autre module n'ait à tester ``sys.platform``. Le détail et les
-justifications sont dans docs/COMPATIBILITE_OS.md.
+Tout ce qui dépend du système est regroupé ICI, pour qu'aucun autre module
+n'ait à tester ``sys.platform``. Les branches non Windows ne sont qu'un repli
+portable (aucune cible). Le détail est dans docs/COMPATIBILITE_OS.md.
 
 Principes :
 - chemins manipulés uniquement avec ``pathlib`` (pas de séparateur codé en dur) ;
-- dossiers utilisateur conformes à chaque OS (APPDATA / XDG) ;
+- dossiers utilisateur de Windows (APPDATA / LOCALAPPDATA ; repli XDG) ;
 - aucune commande shell propre à un OS dans les traitements ;
 - les fonctions ne lèvent pas d'exception pour un simple confort (DPI,
   ouverture d'un PDF) : un échec est renvoyé à l'appelant qui le journalise.
@@ -60,7 +60,7 @@ def user_state_dir() -> Path:
 
     Windows : %LOCALAPPDATA%\\VISU_PTBG ; Linux : $XDG_STATE_HOME/visu_ptbg
     (par défaut ~/.local/state/visu_ptbg). Ce dossier est distinct du dossier
-    du programme, qui peut être en lecture seule sur le Service Unit.
+    du programme, qui peut être en lecture seule (dossier partagé sur la VM).
     """
     if IS_WINDOWS:
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
@@ -81,13 +81,13 @@ def ensure_dir(path: Path) -> Path | None:
 def display_problem() -> str | None:
     """Indique pourquoi aucune fenêtre ne pourra s'ouvrir, sinon None.
 
-    Sous Linux (SLES), une session graphique est nécessaire : variable DISPLAY
-    (X11, y compris « ssh -X ») ou WAYLAND_DISPLAY. Sous Windows, il y a
-    toujours un bureau.
+    Sous Windows (poste ou Bureau à distance), il y a toujours un bureau. Repli
+    portable : hors Windows, une session graphique (DISPLAY ou WAYLAND_DISPLAY)
+    est nécessaire.
     """
     if IS_LINUX and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
-        return ("Aucune session graphique détectée (variable DISPLAY vide). "
-                "Sur le Service Unit, lancer l'outil depuis le bureau ou via « ssh -X ».")
+        return ("Aucune session graphique détectée (variable DISPLAY vide) : "
+                "lancer l'outil depuis une session de bureau.")
     return None
 
 
@@ -112,7 +112,7 @@ def enable_high_dpi() -> None:
 def open_with_default_application(path: Path) -> str | None:
     """Ouvre un fichier (PDF du rapport, aide) avec l'application par défaut.
 
-    Windows : ``os.startfile`` ; Linux : ``xdg-open`` (paquet xdg-utils sur SLES).
+    Windows : ``os.startfile`` (lecteur PDF par défaut) ; repli portable : ``xdg-open``.
     Renvoie un message d'erreur, ou None si la demande a été transmise.
     """
     try:
