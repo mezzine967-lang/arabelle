@@ -52,6 +52,7 @@ MAX_MARKERS = 3000      # croix / marqueurs dessinés au plus par courbe
 MAX_SHADED = 400        # périodes de condition ombrées au plus
 MAX_XY_POINTS = 20000
 HSPACE = 0.45           # espace vertical entre axes (fraction de hauteur moyenne)
+PRINT_HSPACE = 0.8      # idem dans le rapport, où chaque axe porte ses graduations de temps
 CHAR_WIDTH_EM = 0.62    # largeur moyenne d'un caractère (fraction de la taille de police)
 LINE_PT = 1.35          # hauteur d'une ligne de texte (fraction de la taille de police)
 MIN_TBM_PLOT_IN = 0.45  # hauteur minimale de la courbe des Δt du TBM (pouces)
@@ -176,6 +177,7 @@ class TabRenderer:
         sources = self.sources_in_tab()
         with_tbm = self.tab.tbm_visible
         with_note = self.for_print and not with_tbm      # REQ 4104
+        hspace = PRINT_HSPACE if self.for_print else HSPACE
         ratios = _row_ratios(tpl, self.tab.axles)
         total = float(sum(ratios))
         if with_tbm:
@@ -190,14 +192,14 @@ class TabRenderer:
             # Petite fenêtre : la bande du TBM grandit assez pour son texte et une courbe
             # lisible (sans dépasser 60 % de la hauteur), au lieu que le texte morde la courbe.
             rows, others = len(ratios), sum(ratios[:-1])
-            scale = self.height_in * 0.89 * rows / (rows + HSPACE * (rows - 1))
+            scale = self.height_in * 0.89 * rows / (rows + hspace * (rows - 1))
             needed = monitor.text_height_in(sources, width_pt / 72.0) + MIN_TBM_PLOT_IN
             if scale > needed:
                 ratios[-1] = max(ratios[-1], min(needed * others / (scale - needed), 1.5 * others))
         grid = self.container.add_gridspec(
             len(ratios), tpl.ncols, height_ratios=ratios, width_ratios=list(tpl.col_ratios),
             left=0.075, right=right, top=0.965, bottom=0.075,
-            hspace=HSPACE, wspace=0.22)
+            hspace=hspace, wspace=0.22)
         master = None
         for index, (slot, axle) in enumerate(zip(tpl.slots, self.tab.axles)):
             spec = grid[slot.row:slot.row + slot.rowspan, slot.col:slot.col + slot.colspan]
@@ -209,9 +211,10 @@ class TabRenderer:
             else:
                 ax = self.container.add_subplot(spec)
             self.axes.append(ax)
-            # Temps commun : graduations lues sur l'axe du bas de la colonne ; le titre
-            # de l'axe suivant ne bute plus sur les nombres de celui-ci.
-            self._time_labels = not _time_slot_below(tpl, slot)
+            # Temps commun : à l'écran, graduations lues sur l'axe du bas de la colonne (le
+            # titre de l'axe suivant ne bute pas sur les nombres de celui-ci) ; dans le
+            # rapport, chaque axe porte les siennes (page lue sans revenir à l'axe du bas).
+            self._time_labels = self.for_print or not _time_slot_below(tpl, slot)
             try:
                 if axle.kind == "xy":
                     self._draw_xy_axle(index, ax, axle)

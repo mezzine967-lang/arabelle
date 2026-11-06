@@ -314,7 +314,8 @@ Chaque page porte l'en-tête complet (outil, émetteur, date, projet, unité, r�
 elles se réduisent à l'instant (la valeur figure dans les pages de lectures).
 
 Le style suit celui des rapports de test du projet : police à chasse fixe, axes quadrillés,
-légendes des courbes à droite. Si le Time Base Monitor a été masqué, la page graphique porte
+légendes des courbes à droite. Dans le rapport, chaque axe porte ses graduations de temps
+(à l'écran, seuls les axes du bas les portent, pour laisser plus de place aux courbes). Si le Time Base Monitor a été masqué, la page graphique porte
 à sa place l'indication de conformité de la base de temps.
 
 ## 9. Projet

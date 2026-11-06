@@ -36,7 +36,7 @@
   épaisseur et trait de chaque courbe ; clic sur une courbe ou sa légende pour la
   sélectionner ; légende = nom de la variable.
 - Rapport : paysage ou portrait au choix ; page graphique seule, puis les lectures, puis
-  la page d'identification des fichiers.
+  la page d'identification des fichiers ; les temps sont gradués sous chaque axe.
 - Time Base Monitor : légende hors de la courbe, échelle adaptée aux Δt, détail d'une
   anomalie au survol.
 - Nuage X/Y : droite de régression retirée.

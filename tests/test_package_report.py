@@ -223,7 +223,8 @@ class RenderAndReportTests(unittest.TestCase):
     def test_crowded_report_page_stays_readable(self):
         """REQ 6001 / 5401 / 4102 : page à 4 axes de pistes logiques, deux doubles curseurs
         et un curseur global, sur une hauteur de rapport : aucune étiquette de curseur ni
-        nom de piste ne se chevauche, le temps n'est gradué que sur l'axe du bas, et la
+        nom de piste ne se chevauche, le temps est gradué sous chaque axe (sans toucher le titre
+        de l'axe suivant), et la
         légende du TBM n'a qu'une entrée par anomalie (placée au-dessus de la courbe, qu'elle ne masque pas)."""
         from matplotlib.text import Annotation
         for name in ("simulation10_execution1.csv", "simulation10_execution2.csv"):
@@ -256,7 +257,12 @@ class RenderAndReportTests(unittest.TestCase):
             self.assertFalse(overlapping([text for text in ax.texts if text.get_text().strip()]),
                              f"noms de pistes superposés, axe {index + 1}")
             labelled = any(tick.label1.get_visible() for tick in ax.xaxis.get_major_ticks())
-            self.assertEqual(labelled, index == 3, f"graduations de temps, axe {index + 1}")
+            self.assertTrue(labelled, f"graduations de temps, axe {index + 1}")   # rapport : sur chaque axe
+        for upper, lower in zip(renderer.axes, renderer.axes[1:]):
+            numbers = [t.label1.get_window_extent() for t in upper.xaxis.get_major_ticks() if t.label1.get_text()]
+            title = lower.title.get_window_extent() if lower.get_title() else None
+            if title is not None:
+                self.assertFalse(any(box.overlaps(title) for box in numbers), "graduations sur le titre suivant")
         legend = renderer.tbm_plot.get_legend()
         names = [text.get_text().split(" (")[0] for text in legend.get_texts()]
         self.assertEqual(len(names), len(set(names)))
