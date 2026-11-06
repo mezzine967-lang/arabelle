@@ -2,7 +2,7 @@
 
 | Version | Date | En une ligne | Tests |
 |---|---|---|---|
-| 1.1.0 | 2026-11-06 | remarques des premiers essais ; deux anomalies corrigées | 164 |
+| 1.1.0 | 2026-11-06 | remarques des premiers essais ; deux anomalies corrigées | 165 |
 | 1.0.0 | 2026-10-29 | première version | 145 |
 
 ## 1.1.0 — 2026-11-06

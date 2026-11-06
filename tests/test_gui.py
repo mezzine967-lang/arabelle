@@ -818,6 +818,26 @@ class InterfaceTests(unittest.TestCase):
         self.assertIn("a été fermé", notify.call_args[0][0])
         window.destroy()
 
+    def test_csv_link_opens_the_file_of_the_marker(self):
+        """Anomalie relevée en essai : avec deux fichiers dans le TBM, « Voir dans le CSV » sur
+        un marqueur du 1er fichier ouvrait le 2e fichier. Chaque marqueur doit ouvrir SON
+        fichier, à la ligne de SON anomalie (remarque non vide)."""
+        a, b = self.load(DEMO / "PLC_A_10ms_pretrig.csv", DEMO / "PLC_B_20ms_dephase.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(a.id, "P_circuit_bar", False), (b.id, "P_mesure_B", False)], 0)
+        self.root.update()
+        owners = {marker[3] for marker in tab.renderer._tbm_markers}
+        self.assertEqual(owners, {a.id, b.id})                         # des marqueurs dans chaque fichier
+        for marker in tab.renderer._tbm_markers:
+            source = self.ctl.workspace.find(marker[3])
+            self.ctl.monitor_menu(tab, marker).invoke(0)
+            window = [w for w in self.root.winfo_children() if isinstance(w, tk.Toplevel)][-1]
+            selected = window.view.item(window.view.selection()[0], "values")
+            self.assertEqual(window.title(), f"Valeurs du CSV — {source.name}")
+            self.assertEqual(str(selected[0]), str(source.line_of(marker[4])))
+            self.assertTrue(selected[3], marker[2])                      # la remarque dit l'anomalie
+            window.destroy()
+
     def test_absolute_time_mode(self):
         """REQ 4107 : axe absolu refusé sans origine, accepté pour l'horodatage hh:mm:ss."""
         self.load(EXAMPLES / "Test_PID_P_AS_scenari0045.csv")

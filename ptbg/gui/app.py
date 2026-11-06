@@ -705,12 +705,13 @@ class Application:
         """Clic droit sur le Time Base Monitor : sur un marqueur, « Voir dans le CSV » (fenêtre
         des valeurs ouverte à la ligne de l'anomalie) ; puis le diagnostic de chaque fichier."""
         menu = tk.Menu(self.root, tearoff=False)
-        source = self.workspace.find(marker[3]) if marker else None
-        if source is not None and source.is_loaded:
+        marked = self.workspace.find(marker[3]) if marker else None
+        if marked is not None and marked.is_loaded:
             names = list(dict.fromkeys(ref.name for axle in tab.state.axles for ref in axle.curves
-                                       if ref.file_id == source.id and not ref.is_group))
-            menu.add_command(label=f"Voir dans le CSV — ligne {source.line_of(marker[4])} de {source.name}…",
-                             command=lambda: self.show_raw_values(source, names, marker[4]))
+                                       if ref.file_id == marked.id and not ref.is_group))
+            # Fichier, variables et mesure figés dans la commande (la boucle ci-dessous ne les change pas).
+            menu.add_command(label=f"Voir dans le CSV — ligne {marked.line_of(marker[4])} de {marked.name}…",
+                             command=lambda s=marked, n=names, k=marker[4]: self.show_raw_values(s, n, k))
             menu.add_separator()
         for source in tab.sources():
             menu.add_command(label=f"Diagnostic complet — {source.name}…",
