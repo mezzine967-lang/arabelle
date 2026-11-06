@@ -155,9 +155,10 @@ Python 3.11 à 3.14, en `win_amd64` (Windows 11) et en `manylinux` x86-64 (SLES 
 5. Mettre à jour `requirements.txt`, ce document (§ 2, § 4, § 5), les plages
    `TESTED_RANGES` de `ptbg/system/environment.py` et `CHANGELOG.md`.
 
-Au démarrage, l'outil relève les versions réellement présentes et signale dans le
-journal toute bibliothèque différente de `requirements.txt` ou hors plage testée
-(`ptbg/system/environment.py`) — utile sous Spyder dont l'environnement est figé.
+Au démarrage, l'outil relève les versions réellement présentes et note dans le fichier
+journal (pas dans la barre d'état) toute bibliothèque différente de `requirements.txt` ou
+hors plage testée (`ptbg/system/environment.py`) ; le relevé complet est dans
+Information > Sources — utile sous Spyder dont l'environnement est figé.
 
 ## 6. Installation hors ligne (Service Unit sans accès Internet)
 

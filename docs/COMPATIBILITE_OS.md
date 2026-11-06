@@ -89,7 +89,7 @@ DEPENDANCES.md § 5.3, étape 2.
 
 | # | Action | Résultat attendu | OK ? / remarque |
 |---|---|---|---|
-| 1 | Lancer l'outil (§ 2) | barre d'état : utilisateur, date, version ; message de démarrage avec les versions de Python, Tk, numpy, matplotlib | |
+| 1 | Lancer l'outil (§ 2) | barre d'état : utilisateur, date, version ; versions de Python, Tk, numpy, matplotlib dans Information > Sources | |
 | 2 | Information > Sources | tableau des bibliothèques, statut OK ; le relever | |
 | 3 | Fichier > Ouvrir un dossier de CSV > `data/demo/` | 4 fichiers ; `non_conforme_point_virgule.csv` en ERREUR (séparateur) sans bloquer les autres | |
 | 4 | Afficher P_circuit_bar (PLC A) et P_mesure_B (PLC B) ; double curseur (glissé), curseur global | curseurs posés, panneau de lecture rempli (instant, valeur, ligne CSV) | |

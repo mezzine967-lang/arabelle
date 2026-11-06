@@ -326,8 +326,7 @@ apparaît dans l'en-tête des rapports.
 ## 10. Information et préférences
 
 Menu **Information** : version, historique des modifications, sources (empreinte de chaque
-module, versions de Python, Tk et des bibliothèques), cette aide, journal d'activité,
-traçabilité des requis.
+module, versions de Python, Tk et des bibliothèques), cette aide, journal d'activité.
 
 | Outils > Préférences | Valeur par défaut |
 |---|---|
@@ -348,7 +347,6 @@ traçabilité des requis.
 | Fausse manipulation | Ctrl+Z (Édition > Annuler) |
 | Axe absolu refusé | un fichier n'a pas d'origine absolue : la saisir dans Base de temps > Configurer |
 | Rien ne s'affiche sous SLES à distance | se connecter avec `ssh -X` (session graphique requise) |
-| Message sur une bibliothèque au démarrage | versions différentes de celles testées : voir Information > Sources et docs/DEPENDANCES.md |
 | Lecture lente ou mémoire insuffisante sur de très gros fichiers | mesurer le poste avec `python tools/banc_performance.py fichier.csv` et ajuster la taille maximale (Outils > Préférences) |
 
 ## 12. Raccourcis

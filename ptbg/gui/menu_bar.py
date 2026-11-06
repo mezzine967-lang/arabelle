@@ -100,7 +100,6 @@ class MenuBar:
         info.add_command(label="Fichier d'aide", accelerator="F1", command=c.show_help)
         info.add_separator()
         info.add_command(label="Journal d'activité", command=c.show_log)
-        info.add_command(label="Traçabilité des requis", command=c.show_traceability)
         bar.add_cascade(label="Information", menu=info)
         root.config(menu=bar)
 

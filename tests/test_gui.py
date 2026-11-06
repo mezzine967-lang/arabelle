@@ -130,8 +130,10 @@ class InterfaceTests(unittest.TestCase):
         self.assertAlmostEqual(axle.t1, 5.0, delta=0.1)                 # C1 glissé à 5 s
         self.assertIn(axle.t1, set(self.ctl.workspace.timeline().x(source).tolist()))  # sur une mesure réelle
         # Ctrl enfoncé : curseur libre, posé exactement sous la souris (entre deux mesures).
-        x_free = ax.transData.transform((5.011, 5.0))[0]
-        tab._move("C1", MouseEvent("motion_notify_event", tab.canvas, x_free, y_px, key="control"))
+        self.root.update()                                              # mise en page à jour
+        ax = tab.renderer.axes[0]
+        x_free, y_free = ax.transData.transform((5.011, sum(ax.get_ylim()) / 2))
+        tab._move("C1", MouseEvent("motion_notify_event", tab.canvas, x_free, y_free, key="control"))
         self.assertAlmostEqual(axle.t1, 5.011, places=6)
         self.assertNotIn(axle.t1, set(self.ctl.workspace.timeline().x(source).tolist()))
         tab.set_cursor_mode("single")
@@ -503,10 +505,14 @@ class InterfaceTests(unittest.TestCase):
     def test_information_windows_and_tree_toggle(self):
         """REQ 5105 (arbre masquable) ; REQ 5101 (version, historique, sources, aide)."""
         for action in (self.ctl.show_version, self.ctl.show_history, self.ctl.show_sources,
-                       self.ctl.show_help, self.ctl.show_log, self.ctl.show_traceability):
+                       self.ctl.show_help, self.ctl.show_log):
             action()
         windows = [w for w in self.root.winfo_children() if isinstance(w, tk.Toplevel)]
-        self.assertEqual(len(windows), 6)
+        self.assertEqual(len(windows), 5)
+        menu = self.root.nametowidget(self.root["menu"])
+        info = menu.nametowidget(menu.entrycget(menu.index("Information"), "menu"))
+        labels = [info.entrycget(i, "label") for i in range(info.index("end") + 1) if info.type(i) == "command"]
+        self.assertNotIn("Traçabilité des requis", labels)          # rien de « requis » dans l'interface
         self.ctl.toggle_tree()
         self.assertEqual([str(p) for p in self.ctl.paned.panes()], [str(self.ctl.graph)])
         self.ctl.toggle_tree()

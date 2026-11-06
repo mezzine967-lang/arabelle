@@ -68,18 +68,19 @@ class Application:
         """Reçoit les widgets construits par MAIN.py."""
         self.menu, self.path_bar, self.tree, self.graph, self.status, self.paned = (
             menu, path_bar, tree, graph, status, paned)
-        self.log.add_listener(status.show_entry)
-        self.graph.new_tab(DEFAULT_TEMPLATE)
-        self.tree.refresh()
+        # Versions relevées au démarrage : dans le fichier journal seulement (dépannage, aussi
+        # dans Information > Sources), pas dans la barre d'état, qui ne concerne pas l'utilisateur.
         environment = collect_environment()
         self.notify(f"Démarrage de {full_name()} — Python {environment.python_version} "
                     f"({environment.python_bits} bits), {environment.tk_version}, {environment.os_description}.")
         for package in environment.packages[:2]:          # numpy et matplotlib (directes)
             if package.status != "OK":
-                self.notify(f"{package.name} {package.installed} : {package.status} (voir docs/DEPENDANCES.md).",
-                            "AVERTISSEMENT")
+                self.notify(f"{package.name} {package.installed} : {package.status}.")
         if not environment.python_tested():
-            self.notify(f"Python {environment.python_version} hors de la plage testée.", "AVERTISSEMENT")
+            self.notify(f"Python {environment.python_version} hors de la plage testée.")
+        self.log.add_listener(status.show_entry)
+        self.graph.new_tab(DEFAULT_TEMPLATE)
+        self.tree.refresh()
 
     # ------------------------------------------------------------ journal
     def notify(self, message: str, level: str = "INFO") -> None:
@@ -903,10 +904,6 @@ class Application:
     def show_help(self) -> None:
         """Information > Fichier d'aide : docs/GUIDE_UTILISATEUR.md (REQ 5101)."""
         TextWindow(self.root, "Aide — " + full_name(), read_document("docs/GUIDE_UTILISATEUR.md"), markdown=True)
-
-    def show_traceability(self) -> None:
-        """Information > Traçabilité des requis : docs/TRACABILITE_REQUIS.md."""
-        TextWindow(self.root, "Traçabilité des requis", read_document("docs/TRACABILITE_REQUIS.md"), markdown=True)
 
     def show_log(self) -> None:
         """Journal d'activité complet de la session (REQ 5102)."""
