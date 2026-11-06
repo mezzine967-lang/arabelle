@@ -4,7 +4,9 @@
 - REQ_COMMON_KH_5402 : liste des valeurs de TOUTES les courbes de l'axe au
   curseur (panneau de lecture à droite) ;
 - REQ_COMMON_KH_5403 / 5404 : double curseur -> instants C1, C2 automatiques,
-  Δt, 1/Δt et écart de valeur par courbe ;
+  Δt, 1/Δt et écart de valeur par courbe ; Δt calculé en nanosecondes entières
+  (les curseurs sont posés sur des mesures réelles : temps entiers en ms -> Δt
+  entier en ms) ;
 - REQ_COMMON_KH_5405 : curseur global -> lecture sur tous les axes ;
 - REQ_COMMON_KH_5406 / 5407 : curseur horizontal -> niveau, franchissements,
   éventuellement sous condition Bool ;
@@ -22,6 +24,7 @@ from ptbg.core.curves import resolve
 from ptbg.core.data_package import Timeline, Workspace
 from ptbg.core.sampling import crossings, sample_at
 from ptbg.core.signals import SignalType
+from ptbg.core.time_base import duration_text, to_ns
 from ptbg.core.xy import build_xy, point_at_time
 
 HEADER = ("Axe", "Curseur", "Courbe", "Instant lu", "Valeur", "Ligne CSV")
@@ -127,9 +130,9 @@ def _delta_rows(name, axle, workspace, timeline) -> list[ReadingRow]:
     """Δt et Δvaleur du double curseur (REQ 5403 / 5404)."""
     if axle.cursor_mode != "double" or axle.t1 is None or axle.t2 is None:
         return []
-    delta = axle.t2 - axle.t1
-    frequency = f" ; 1/Δt = {1 / abs(delta):.6g} Hz" if delta else ""
-    rows = [ReadingRow(name, "Δ", "C2 − C1", f"Δt = {delta:.9g} s{frequency}", "", "")]
+    delta_ns = float(to_ns(axle.t2) - to_ns(axle.t1))       # nanosecondes entières : Δt exact
+    frequency = f" ; 1/Δt = {1e9 / abs(delta_ns):.6g} Hz" if delta_ns else ""
+    rows = [ReadingRow(name, "Δ", "C2 − C1", f"Δt = {duration_text(delta_ns)}{frequency}", "", "")]
     for ref in axle.curves:
         curve = resolve(ref, workspace)
         if curve is None or curve.signal_type is not SignalType.FLOAT:
@@ -138,7 +141,7 @@ def _delta_rows(name, axle, workspace, timeline) -> list[ReadingRow]:
         s1 = sample_at(grid, curve.values, axle.t1, False)
         s2 = sample_at(grid, curve.values, axle.t2, False)
         if s1 and s2 and np.isfinite(s1.value) and np.isfinite(s2.value):
-            rows.append(ReadingRow(name, "Δ", curve.label, f"{s2.x - s1.x:.9g} s",
+            rows.append(ReadingRow(name, "Δ", curve.label, duration_text(float(to_ns(s2.x) - to_ns(s1.x))),
                                    f"ΔV = {s2.value - s1.value:.6g}", ""))
     return rows
 

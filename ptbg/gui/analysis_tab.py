@@ -23,6 +23,8 @@ sur une entrée de la légende = sélectionner cette courbe. Time Base Monitor :
 survol d'un marqueur = détail de l'anomalie, clic droit = diagnostic complet.
 Clavier : flèches gauche / droite = échantillon précédent / suivant de la
 courbe sélectionnée ; Ctrl+Z / Ctrl+Y = retour arrière / refaire (contrôleur) ;
+les curseurs (simple, double, global) se posent toujours sur la mesure réelle la
+plus proche de la courbe sélectionnée, d'où un Δt exact entre deux horodatages ;
 Échap = relâcher Zoomer / Déplacer la vue (la vue reste telle quelle).
 Barre de navigation sous le graphique (la nôtre, en français, à la place de
 celle de Matplotlib dont les boutons, les fenêtres en anglais et l'historique
@@ -56,7 +58,7 @@ from matplotlib.lines import Line2D
 from ptbg.core.arrangement import CurveRef, TabState
 from ptbg.core.curves import resolve
 from ptbg.core.readings import compute_readings, xy_data
-from ptbg.core.sampling import step_index
+from ptbg.core.sampling import sample_at, step_index
 from ptbg.core.signals import SignalType
 from ptbg.core.xy import nearest_point
 from ptbg.gui.reading_panel import ReadingPanel
@@ -614,9 +616,9 @@ class AnalysisTab(ttk.Frame):
         if mode in ("single", "double"):
             self.leave_navigation()
             if not self._in_view(axle.t1):
-                axle.t1 = self._view_fraction(0.35)
+                axle.t1 = self._snap(self._view_fraction(0.35))
         if mode == "double" and not self._in_view(axle.t2):
-            axle.t2 = self._view_fraction(0.65)
+            axle.t2 = self._snap(self._view_fraction(0.65))
         self.update_cursors()
 
     def _toggle_global(self) -> None:
@@ -625,7 +627,7 @@ class AnalysisTab(ttk.Frame):
         self.state.global_cursor = self.global_cursor.get()
         if self.state.global_cursor:
             self.leave_navigation()
-            self.state.t_global = self._view_fraction(0.5)
+            self.state.t_global = self._snap(self._view_fraction(0.5))
         self.update_cursors()
 
     def place_global_cursor(self, instant: float) -> None:
@@ -830,10 +832,25 @@ class AnalysisTab(ttk.Frame):
         if target == "H" and event.ydata is not None:
             axle.h_level = float(event.ydata)
         elif target == "G" and event.xdata is not None:
-            self.state.t_global = float(event.xdata)
+            self.state.t_global = self._snap(float(event.xdata))
         elif target in ("C1", "C2") and event.xdata is not None:
-            setattr(axle, "t1" if target == "C1" else "t2", float(event.xdata))
+            setattr(axle, "t1" if target == "C1" else "t2", self._snap(float(event.xdata)))
         self.update_cursors(record=False)
+
+    def _snap(self, instant: float) -> float:
+        """Instant de la mesure réelle la plus proche, sur la courbe sélectionnée de l'axe
+        actif (à défaut, la 1re courbe d'un axe temporel) : un curseur est toujours posé
+        sur un horodatage du fichier, et le Δt du double curseur est l'écart exact de deux
+        horodatages (temps entiers en ms -> Δt entier en ms). Sans courbe : inchangé."""
+        refs = [self.axle().selected_curve()] + [ref for axle in self.state.axles if axle.kind == "time"
+                                                  for ref in axle.curves]
+        for ref in refs:
+            curve = resolve(ref, self.controller.workspace) if ref is not None else None
+            if curve is not None:
+                sample = sample_at(self.controller.workspace.timeline().grid(curve.source), curve.values,
+                                   instant, False)
+                return float(sample.x) if sample is not None else instant
+        return instant
 
     # ------------------------------------------------- hauteur des axes à la souris
     def _boundary_at(self, event) -> tuple[int, int] | None:

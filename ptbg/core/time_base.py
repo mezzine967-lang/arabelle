@@ -183,6 +183,27 @@ def to_ns(seconds):
     return np.rint(np.asarray(seconds, dtype=np.float64) * NS_PER_S)
 
 
+def exact_text(value_ns: float, unit_ns: int) -> str:
+    """Durée en nanosecondes entières écrite dans l'unité ``unit_ns`` (1 000 000 = ms),
+    calcul en entiers : 11 000 000 ns -> « 11 » ms, jamais « 11,000000001 »."""
+    if not np.isfinite(value_ns):
+        return ""
+    sign, value = ("-" if value_ns < 0 else ""), abs(int(value_ns))
+    whole, rest = divmod(value, unit_ns)
+    digits = len(str(unit_ns)) - 1
+    return f"{sign}{whole}" + (f".{rest:0{digits}d}".rstrip("0") if rest else "")
+
+
+def duration_text(delta_ns: float) -> str:
+    """Écart de deux instants (ns entières) lisible : en ms sous la seconde (« 11 ms »),
+    en s au-delà (« 1.5 s ») ; chiffres exacts, sans arrondi de flottant."""
+    if not np.isfinite(delta_ns):
+        return "—"
+    if abs(delta_ns) < NS_PER_S:
+        return f"{exact_text(delta_ns, 1_000_000)} ms"
+    return f"{exact_text(delta_ns, 1_000_000_000)} s"
+
+
 def _tolerance_ns(tol_frac: float, period_ns):
     """Tolérance absolue arrondie à la nanoseconde entière."""
     return np.rint(tol_frac * np.asarray(period_ns, dtype=np.float64))

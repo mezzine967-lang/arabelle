@@ -39,6 +39,7 @@ from ptbg.core.readings import cursor_positions, horizontal_crossings, xy_data
 from ptbg.core.conditional import evaluate, true_intervals
 from ptbg.core.sampling import DisplayCurve, break_at, missing_markers, sample_at
 from ptbg.core.signals import SignalType, short_label
+from ptbg.core.time_base import duration_text, to_ns
 from ptbg.core.xy import point_at_time
 from ptbg.plotting import monitor
 from ptbg.plotting.styles import (ACTIVE_AXLE_COLOR, CURSOR_COLORS, FONT_NORMAL, FONT_SMALL, REPORT_FONT,
@@ -612,10 +613,10 @@ class TabRenderer:
                         va="top", ha="right" if flip else "left", fontsize=FONT_SMALL, color=color, zorder=5,
                         bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.6, pad=1.5))
         if double:
-            delta = axle.t2 - axle.t1
+            delta_ns = float(to_ns(axle.t2) - to_ns(axle.t1))     # nanosecondes entières : Δt exact
             self._keep(ax.annotate("", xy=(axle.t2, 0.06), xytext=(axle.t1, 0.06), xycoords=to_axes,
                                    arrowprops=dict(arrowstyle="<->", color="#333333", lw=1.0)))
-            self._label(ax, index, "Δt", f"Δt = {delta:.9g} s", ((axle.t1 + axle.t2) / 2, 0.09), to_axes,
+            self._label(ax, index, "Δt", f"Δt = {duration_text(delta_ns)}", ((axle.t1 + axle.t2) / 2, 0.09), to_axes,
                         cursor=True, ha="center", va="bottom", fontsize=FONT_SMALL,
                         bbox=dict(fc="#fffde7", ec="#999999", lw=0.5, pad=1.2))
 

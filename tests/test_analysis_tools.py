@@ -12,6 +12,7 @@ from ptbg.core.conditional import Condition, ConditionTerm, conditional_statisti
 from ptbg.core.data_package import Workspace, load_source
 from ptbg.core.readings import compute_readings, xy_data
 from ptbg.core.sampling import DisplayCurve, TimeGrid, break_at, crossings, missing_markers, sample_at, step_index
+from ptbg.core.time_base import duration_text, exact_text
 from ptbg.core.xy import build_xy, nearest_point, point_at_time
 
 
@@ -199,6 +200,20 @@ class ConditionalAndXYTests(unittest.TestCase):
         self.assertEqual(c1_p.line, "3")
         delta = next(r for r in rows if r.cursor == "Δ" and r.curve.startswith("P"))
         self.assertIn("ΔV = 3", delta.value)
+        self.assertEqual(delta.time, "60 ms")                     # écart de deux horodatages réels
+        # Δt en nanosecondes entières : 4,988 s − 4,977 s = 11 ms tout rond (pas 11,0000000001).
+        axle.t1, axle.t2 = 4.977, 4.988
+        overall = next(r for r in compute_readings(tab, self.ws, self.ws.timeline()) if r.curve == "C2 − C1")
+        self.assertTrue(overall.time.startswith("Δt = 11 ms ;"))
+
+    def test_durations_are_written_exactly(self):
+        """REQ 5403 : Δt écrit à partir de nanosecondes entières, sans arrondi de flottant."""
+        self.assertEqual(duration_text(11_000_000), "11 ms")
+        self.assertEqual(duration_text(-500_000), "-0.5 ms")
+        self.assertEqual(duration_text(2_000_000_000), "2 s")
+        self.assertEqual(duration_text(1_500_000_001), "1.500000001 s")
+        self.assertEqual(duration_text(float("nan")), "—")
+        self.assertEqual(exact_text(123_456, 1_000_000), "0.123456")
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ import numpy as np
 from ptbg.core.csv_reader import (KIND_BOOL, KIND_EMPTY, KIND_NONFINITE, KIND_NUMBER, CsvTable, RawColumn,
                                   _line_blocks, _ReadStats, _split_line)
 from ptbg.core.data_package import SourceFile
-from ptbg.core.time_base import _KIND_OF_CODE, EventKind, to_ns
+from ptbg.core.time_base import _KIND_OF_CODE, EventKind, exact_text, to_ns
 
 PAGE_ROWS = 500          # lignes affichées par page
 
@@ -60,15 +60,6 @@ def number_text(value: float) -> str:
     return text[:-2] if text.endswith(".0") else text
 
 
-def ns_as_ms(value_ns: float) -> str:
-    """Durée en nanosecondes entières écrite en ms, calcul en entiers (11 000 000 -> « 11 »)."""
-    if not np.isfinite(value_ns):
-        return ""
-    sign, value = ("-" if value_ns < 0 else ""), abs(int(value_ns))
-    whole, rest = divmod(value, 1_000_000)
-    return f"{sign}{whole}" + (f".{rest:06d}".rstrip("0") if rest else "")
-
-
 def value_text(column: RawColumn, sample: int) -> str:
     """Valeur lue par l'outil pour une cellule, telle qu'elle est utilisée."""
     kind = int(column.kinds[sample])
@@ -91,7 +82,7 @@ def time_steps_ms(seconds: np.ndarray, samples: np.ndarray) -> list[str]:
     steps = np.full(samples.size, np.nan)
     later = samples > 0
     steps[later] = to_ns(seconds[samples[later]]) - to_ns(seconds[samples[later] - 1])
-    return [ns_as_ms(step) for step in steps]
+    return [exact_text(step, 1_000_000) for step in steps]
 
 
 def _time_codes(source: SourceFile) -> np.ndarray:

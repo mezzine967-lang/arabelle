@@ -128,6 +128,7 @@ class InterfaceTests(unittest.TestCase):
         tab.canvas.callbacks.process("button_release_event",
                                      MouseEvent("button_release_event", tab.canvas, x_px, y_px, button=1))
         self.assertAlmostEqual(axle.t1, 5.0, delta=0.1)                 # C1 glissé à 5 s
+        self.assertIn(axle.t1, set(self.ctl.workspace.timeline().x(source).tolist()))  # sur une mesure réelle
         tab.set_cursor_mode("single")
         tab.canvas.callbacks.process("key_press_event", KeyEvent("key_press_event", tab.canvas, "right"))
         cycles = axle.t1 / 0.02

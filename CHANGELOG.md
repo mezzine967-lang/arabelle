@@ -7,7 +7,7 @@ et le nombre de tests.
 
 | Version | Date | En une ligne | Tests |
 |---|---|---|---|
-| 1.1.0 | 2026-11-06 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 163 |
+| 1.1.0 | 2026-11-06 | remarques du relecteur sur les premiers essais ; deux anomalies corrigées | 164 |
 | 1.0.0 | 2026-10-29 | première version livrée pour revue des requis | 145 |
 
 ## 1.1.0 — 2026-11-06 — remarques du relecteur sur les premiers essais
@@ -27,6 +27,7 @@ Remarques issues des premiers essais (package simulation10 : 3 producteurs,
 | Rapport | orientation demandée à chaque génération (paysage ou portrait) ; rapport épuré : en-tête complet sur chaque page ; page graphique avec uniquement les graphiques, pages de lectures, puis une page « Identification et traçabilité » (tableau des fichiers sources sans empreintes SHA-256, seuls avertissements et erreurs, environnement) | remarques « paysage ou portrait », « page unique », « trop compact » |
 | Arbre des données | clic droit sur une ou plusieurs variables > « Voir les valeurs du CSV… » : pour chaque mesure, ligne du fichier, temps et cellules relus tels qu'ils sont écrits dans le CSV, à côté de la valeur lue par l'outil, et Δt avec la mesure précédente ; par pages de 500 lignes, « aller à la ligne » (ligne surlignée au milieu de sa page, lignes d'avant visibles), copie ; colonne « Remarque » (anomalie de temps, cellule à problème) et case « Seulement les anomalies » ; ouverte aussi par clic droit sur un marqueur du TBM (« Voir dans le CSV », ligne de l'anomalie surlignée) ; double-clic sur une ligne = curseur global à cet instant ; fichier modifié depuis le chargement signalé | vérifier que l'outil n'ajoute ni ne modifie aucune valeur |
 | Barre de navigation | la barre de Matplotlib (icônes, bulles et fenêtres en anglais, historique de vues séparé, réglage des marges) est remplacée par notre barre en français : Réinitialiser la vue, Zoomer et Déplacer la vue (boutons qui restent enfoncés, Échap pour les relâcher), ← Retour arrière / Refaire → (même historique que Ctrl+Z / Ctrl+Y, grisés s'il n'y a rien à défaire ou refaire ; même nom dans le menu Édition), Enregistrer en image… (PNG, SVG, PDF, curseurs compris) ; bulle d'aide sur chaque bouton | remarque « barre Matplotlib sur laquelle on n'a pas la main » |
+| Curseurs | les curseurs se posent sur la mesure réelle la plus proche de la courbe sélectionnée ; Δt du double curseur (et Δt par courbe) calculé en nanosecondes entières et écrit en ms sous la seconde (« Δt = 11 ms » au lieu de « 0.0111688126 s ») | remarque « le Δt devrait être entier si on n'injecte pas de valeur » : avant, le curseur restait là où on lâchait la souris, entre deux mesures |
 | Curseurs | mode « suivi souris » retiré ; le panneau de lecture se met à jour en glissant le curseur | demande du relecteur |
 | Nuage X/Y | droite de régression retirée (corrélation r conservée) | remarque « virer la courbe de régression » |
 | Interface | plus aucun numéro de requis ni référence du document de spécification affichés dans les fenêtres, messages, diagnostics et rapports (ils restent dans le code et la traçabilité) | lisibilité |

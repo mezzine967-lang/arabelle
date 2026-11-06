@@ -273,6 +273,11 @@ Les valeurs lues sont celles des **échantillons réels** : le plus proche pour 
 l'état en cours pour un Bool. Le panneau de lecture indique l'instant de l'échantillon et
 sa **ligne dans le CSV** ; « Copier » colle le tableau dans un tableur.
 
+Les curseurs (simple, double, global) se **posent toujours sur une mesure réelle** : celle
+de la courbe sélectionnée la plus proche de l'endroit cliqué ou lâché. Le **Δt** du double
+curseur est donc l'écart exact entre deux horodatages du fichier, calculé en nanosecondes
+entières et écrit en ms sous la seconde (ex. 4988 − 4977 → « Δt = 11 ms »), en s au-delà.
+
 ## 7. Traitement conditionnel
 
 **Outils > Traitement conditionnel…** : choisir une condition Bool et des signaux
