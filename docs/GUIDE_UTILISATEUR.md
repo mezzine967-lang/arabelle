@@ -85,14 +85,16 @@ Paquet de données 1 (actif)
 - **Clic droit** : ajouter à l'axe actif ou dans un nouvel onglet, **forcer le type**
   (Bool, Float, Texte, automatique), créer un groupe binaire avec la sélection,
   **voir les valeurs du CSV**, configurer la base de temps, diagnostic complet, fermer.
-- **Voir les valeurs du CSV…** (clic droit sur une ou plusieurs variables, 6 au plus) :
-  tableau de contrôle, une ligne par mesure :
+- **Voir les valeurs du CSV…** (clic droit sur une ou plusieurs variables, 6 au plus ; ou
+  clic droit sur un marqueur du TBM > « Voir dans le CSV ») : tableau de contrôle, une ligne
+  par mesure :
 
   | Colonne | Contenu |
   |---|---|
   | Ligne | n° de la ligne dans le fichier CSV |
   | temps (fichier) | texte de la 1re colonne, tel qu'il est écrit dans le CSV |
   | Δt (ms) | écart avec la mesure précédente, calculé en nanosecondes entières (temps entiers en ms -> Δt entier) |
+  | Remarque | anomalie de la ligne : trou avant elle, déphasage, horodatage en double, retour arrière, horodatage illisible ou aberrant, changement de fréquence ; cellule vide, « nan » / « inf » ou incompatible avec le type (ligne teintée en orange) |
   | variable (fichier) | texte de la cellule, relu sur le disque tel quel |
   | variable (valeur lue) | valeur utilisée par l'outil (« 4.50 » -> 4.5, « true » -> 1, cellule vide -> « (vide) ») |
 
@@ -100,6 +102,11 @@ Paquet de données 1 (actif)
   une ligne (surlignée, les lignes d'avant restent visibles au-dessus et la barre de défilement
   permet de remonter), « Copier la page » pour la coller dans Excel. Si le fichier a été modifié
   depuis son chargement, un message rouge le signale.
+
+  - **Seulement les anomalies** : n'affiche que les lignes qui ont une remarque (sur un gros
+    fichier, on voit directement les quelques lignes à problème).
+  - **Double-clic sur une ligne** : le curseur global de l'onglet actif se place à l'instant de
+    cette mesure (la vue zoomée est recentrée si besoin).
 - **Filtrer** : saisir une partie du nom des variables.
 - **Bulle d'aide** : la souris posée sur une ligne affiche son texte complet (utile quand
   l'arbre est étroit et que les colonnes sont tronquées). Idem dans le panneau de lecture.
@@ -140,7 +147,9 @@ et sa période, son statut s'il n'est pas OK, puis le nombre de chaque sorte d'a
 L'échelle verticale s'adapte aux Δt mesurés : de 0,5 à 1,5 période pour un raster régulier
 (les petits écarts restent visibles), jusqu'à 2,6 périodes s'il y a des trous. À l'écran,
 **survoler un marqueur** affiche le détail de l'anomalie (fichier, instant, ligne du CSV,
-Δt) et un **clic droit** sur la courbe ouvre le diagnostic complet d'un fichier. Dans le
+Δt) ; un **clic droit sur un marqueur** propose « Voir dans le CSV » (fenêtre des valeurs
+ouverte à la ligne de l'anomalie, surlignée) ; un **clic droit** sur la courbe ouvre aussi le
+diagnostic complet d'un fichier. Dans le
 rapport PDF, le résumé de chaque fichier est sur la page de traçabilité.
 
 **Masquer le TBM** n'est possible que si aucune base de temps affichée n'a
@@ -354,7 +363,7 @@ traçabilité des requis.
 | clic sur un axe | rend l'axe actif ; place le curseur |
 | clic sur une courbe | la sélectionne (sa valeur est portée par les curseurs) |
 | survol d'un marqueur du TBM | détail de l'anomalie |
-| clic droit sur le TBM | diagnostic complet d'un fichier |
+| clic droit sur le TBM | diagnostic complet d'un fichier ; sur un marqueur : « Voir dans le CSV » à la ligne de l'anomalie |
 | glisser la séparation entre deux axes | change leur hauteur |
 | glisser | déplace le curseur |
 | Maj + clic | niveau du curseur horizontal |
@@ -363,5 +372,6 @@ traçabilité des requis.
 | clic droit sur un axe | menu de l'axe (titre, unité, hauteur, curseurs, courbe sélectionnée et son aspect, échelle, légende) |
 | double-clic sur une variable de l'arbre | l'ajoute à l'axe actif |
 | clic droit sur une variable de l'arbre > Voir les valeurs du CSV… | cellules du fichier à côté des valeurs lues |
+| double-clic sur une ligne de « Valeurs du CSV » | curseur global à l'instant de cette mesure |
 | glisser une variable de l'arbre sur un axe | l'ajoute à cet axe |
 | clic molette sur le titre d'un onglet | ferme l'onglet |

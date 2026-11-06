@@ -10,7 +10,7 @@ from ptbg.core.csv_reader import (KIND_BOOL, KIND_EMPTY, KIND_NONFINITE, KIND_NU
                                   ReadCancelled, read_csv)
 from ptbg.core.data_package import load_source
 from ptbg.core.diagnostics import Severity
-from ptbg.core.raw_view import find_sample, read_rows, time_steps_ms, value_text
+from ptbg.core.raw_view import anomaly_samples, find_sample, read_rows, remarks, time_steps_ms, value_text
 from ptbg.core.signals import SignalType, auto_type, detect_indexed_groups, interpret
 from ptbg.core.vector_parse import parse_numbers
 
@@ -234,7 +234,7 @@ class RawViewTests(unittest.TestCase):
         source = load_source(path, Settings())
         table = source.table
         p, cond, label = table.columns
-        rows, changed = read_rows(table, [p.index, cond.index, label.index], 0)
+        rows, changed = read_rows(table, [p.index, cond.index, label.index], range(3))
         self.assertFalse(changed)
         self.assertEqual([r.line for r in rows], [2, 4, 5])
         self.assertEqual([r.time_text for r in rows], ["4977", "4988", "4998"])
@@ -244,23 +244,45 @@ class RawViewTests(unittest.TestCase):
         self.assertEqual([value_text(cond, i) for i in range(3)], ["1", "0", "1"])
         self.assertEqual(value_text(label, 1), "texte « b,c »")
         # Δt en nanosecondes entières : 4988 − 4977 = 11 ms tout rond.
-        self.assertEqual(time_steps_ms(source.conversion.seconds, 0, 3), ["", "11", "10"])
-        self.assertEqual(time_steps_ms(source.conversion.seconds, 1, 2), ["11", "10"])
+        self.assertEqual(time_steps_ms(source.conversion.seconds, [0, 1, 2]), ["", "11", "10"])
+        self.assertEqual(time_steps_ms(source.conversion.seconds, [2]), ["10"])
         self.assertEqual(find_sample(table, 3), 1)
-        page, _ = read_rows(table, [p.index], 2, 5)
+        page, _ = read_rows(table, [p.index], [2, 5])
         self.assertEqual([(r.sample, r.line) for r in page], [(2, 5)])
+
+    def test_anomalies_are_listed_with_a_remark(self):
+        """REQ 4101 : filtre « seulement les anomalies » et colonne « Remarque » : constats de
+        la base de temps et cellules à problème des variables affichées, rien d'autre."""
+        times = [0, 10, 20, 30, 60, 70, 75, 85, 85, 95, 105]
+        text = counter_csv(times, {"P": [1, 2, "", 4, 5, 6, 7, 8, 9, "nan", 11],
+                                   "B": [0, 1, 0, 1, 0, 1, 0, 1, 7, 1, 0]})
+        source = load_source(self.files.write("a.csv", text.replace("\n30,", "\nxx:30,")), Settings())
+        p, b = source.table.columns
+        source.set_type("B", SignalType.BOOL)                    # le 7 devient incompatible
+        flagged = anomaly_samples(source, [p, b]).tolist()
+        self.assertEqual(flagged, [2, 3, 4, 6, 8, 9])                  # 75 -> 85 : pas normal
+        self.assertEqual(anomaly_samples(source, []).tolist(), [3, 4, 6, 8])      # temps seul
+        notes = dict(zip(flagged, remarks(source, [p, b], flagged)))
+        self.assertEqual(notes[2], "P vide")
+        self.assertEqual(notes[3], "Horodatage illisible")
+        self.assertIn("Trou : mesures manquantes avant", notes[4])
+        self.assertIn("Déphasage", notes[6])
+        self.assertIn("Horodatage en double", notes[8])
+        self.assertIn("B incompatible avec le type Bool", notes[8])
+        self.assertEqual(notes[9], "P « nan » / « inf » (laissée vide)")
+        self.assertEqual(remarks(source, [p, b], [1]), [""])
 
     def test_changed_or_missing_file_is_reported(self):
         """Fichier modifié après chargement : signalé ; fichier supprimé : OSError (jamais de plantage)."""
         path = self.files.write("w.csv", counter_csv([0, 10, 20], {"P": [1, 2, 3]}))
         table = read_csv(path)
         self.files.write("w.csv", counter_csv([0, 10, 25], {"P": [1, 2, 9]}))
-        rows, changed = read_rows(table, [1], 0)
+        rows, changed = read_rows(table, [1], range(3))
         self.assertTrue(changed)
         self.assertEqual(rows[2].cells, ["9"])
         path.unlink()
         with self.assertRaises(OSError):
-            read_rows(table, [1], 0)
+            read_rows(table, [1], [0])
 
 
 if __name__ == "__main__":

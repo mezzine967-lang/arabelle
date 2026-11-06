@@ -11,6 +11,13 @@ temps chargé, le fichier a changé depuis son chargement : c'est signalé.
 
 Le Δt affiché est calculé en nanosecondes entières, comme l'analyse de la base
 de temps : avec des temps entiers en millisecondes, il est entier lui aussi.
+
+Remarques et filtre « seulement les anomalies » : pour chaque mesure, les
+anomalies de temps trouvées par l'analyse de la base de temps (trou, déphasage,
+doublon, retour arrière, horodatage illisible ou aberrant, changement de
+fréquence) et les cellules à problème des variables affichées (vide, « nan » /
+« inf », valeur incompatible avec le type). Rien n'est recalculé ici : ce sont
+les constats déjà utilisés par le TBM, le diagnostic et les courbes.
 """
 from __future__ import annotations
 
@@ -21,9 +28,21 @@ import numpy as np
 
 from ptbg.core.csv_reader import (KIND_BOOL, KIND_EMPTY, KIND_NONFINITE, KIND_NUMBER, CsvTable, RawColumn,
                                   _line_blocks, _ReadStats, _split_line)
-from ptbg.core.time_base import to_ns
+from ptbg.core.data_package import SourceFile
+from ptbg.core.time_base import _KIND_OF_CODE, EventKind, to_ns
 
 PAGE_ROWS = 500          # lignes affichées par page
+
+# Anomalies de temps d'une mesure, dans l'ordre de priorité croissante (la dernière
+# trouvée l'emporte), avec le texte de la colonne « Remarque ».
+TIME_REMARKS = {EventKind.FREQUENCY: "Changement de fréquence",
+                EventKind.MISSING: "Trou : mesures manquantes avant",
+                EventKind.PHASE: "Déphasage (Δt hors tolérance)",
+                EventKind.DUPLICATE: "Horodatage en double (Δt = 0)",
+                EventKind.BACKWARD: "Retour arrière du temps (Δt < 0)",
+                EventKind.OUTLIER: "Horodatage aberrant (exclu de l'analyse)",
+                EventKind.INVALID: "Horodatage illisible"}
+TIME_KINDS = (None,) + tuple(TIME_REMARKS)          # code 0 = aucune anomalie de temps
 
 
 @dataclass
@@ -63,29 +82,72 @@ def value_text(column: RawColumn, sample: int) -> str:
     return f"texte « {column.categories[code]} »" if 0 <= code < len(column.categories) else "(texte)"
 
 
-def time_steps_ms(seconds: np.ndarray, first: int, count: int) -> list[str]:
-    """Δt avec la mesure précédente, en ms, pour les mesures ``first`` à ``first + count``.
+def time_steps_ms(seconds: np.ndarray, samples: np.ndarray) -> list[str]:
+    """Δt de chaque mesure de ``samples`` avec la mesure qui la précède dans le fichier,
+    en ms (vide pour la 1re mesure ou un horodatage illisible).
 
     Différence de nanosecondes entières : aucun arrondi de flottant (voir en-tête)."""
-    begin = max(first - 1, 0)
-    ns = to_ns(seconds[begin:first + count])
-    steps = np.diff(ns)
-    if first == 0:
-        steps = np.concatenate(([np.nan], steps))
+    samples = np.asarray(samples, dtype=np.int64)
+    steps = np.full(samples.size, np.nan)
+    later = samples > 0
+    steps[later] = to_ns(seconds[samples[later]]) - to_ns(seconds[samples[later] - 1])
     return [ns_as_ms(step) for step in steps]
 
 
-def read_rows(table: CsvTable, column_indexes: list[int], first: int,
-              count: int = PAGE_ROWS) -> tuple[list[RawRow], bool]:
-    """Relit dans le fichier les mesures ``first`` à ``first + count`` (exclu).
+def _time_codes(source: SourceFile) -> np.ndarray:
+    """Pour chaque mesure : rang dans ``TIME_KINDS`` de son anomalie de temps (0 = aucune)."""
+    analysis = source.analysis
+    codes = np.zeros(analysis.n_samples, dtype=np.int8)
+    found = {EventKind.FREQUENCY: [segment.start for segment in analysis.segments[1:]],
+             EventKind.OUTLIER: analysis.excluded,
+             EventKind.INVALID: np.flatnonzero(~np.isfinite(source.conversion.seconds))}
+    for code, kind in _KIND_OF_CODE.items():
+        found[kind] = analysis.dt_index[analysis.dt_kinds == code]
+    for kind in TIME_REMARKS:                      # ordre de priorité croissante
+        codes[np.asarray(found.get(kind, []), dtype=np.int64)] = TIME_KINDS.index(kind)
+    return codes
+
+
+def anomaly_samples(source: SourceFile, columns: list[RawColumn]) -> np.ndarray:
+    """N° des mesures qui ont une anomalie de temps ou une cellule à problème dans une
+    des variables ``columns`` (filtre « seulement les anomalies »)."""
+    flagged = _time_codes(source) > 0
+    for column in columns:
+        signal = source.signal(column.name)
+        flagged |= signal.missing | signal.invalid
+    return np.flatnonzero(flagged)
+
+
+def remarks(source: SourceFile, columns: list[RawColumn], samples: np.ndarray) -> list[str]:
+    """Texte de la colonne « Remarque » pour chaque mesure de ``samples`` (vide si rien)."""
+    times = _time_codes(source)
+    signals = [source.signal(column.name) for column in columns]
+    result = []
+    for sample in np.asarray(samples, dtype=np.int64).tolist():
+        parts = [TIME_REMARKS[TIME_KINDS[times[sample]]]] if times[sample] else []
+        for column, signal in zip(columns, signals):
+            if column.kinds[sample] == KIND_EMPTY:
+                parts.append(f"{column.name} vide")
+            elif signal.missing[sample]:
+                parts.append(f"{column.name} « nan » / « inf » (laissée vide)")
+            elif signal.invalid[sample]:
+                parts.append(f"{column.name} incompatible avec le type {signal.type.value} (non tracée)")
+        result.append(" ; ".join(parts))
+    return result
+
+
+def read_rows(table: CsvTable, column_indexes: list[int], samples: np.ndarray) -> tuple[list[RawRow], bool]:
+    """Relit dans le fichier les mesures ``samples`` (n° croissants, pas forcément
+    consécutifs : filtre des anomalies).
 
     ``column_indexes`` : positions des colonnes dans le CSV (``RawColumn.index``).
     Renvoie les lignes et ``True`` si le fichier ne correspond plus à ce qui a
     été chargé (temps relu différent, ligne disparue). Lève ``OSError`` si le
     fichier n'est plus lisible."""
-    first = max(0, min(first, table.n_samples))
-    numbers = table.line_numbers[first:first + count].tolist()
-    wanted = {line: first + offset for offset, line in enumerate(numbers)}
+    samples = np.asarray(samples, dtype=np.int64)
+    samples = samples[(samples >= 0) & (samples < table.n_samples)]
+    numbers = table.line_numbers[samples].tolist()
+    wanted = dict(zip(numbers, samples.tolist()))
     rows: dict[int, RawRow] = {}
     if numbers:
         low, high = min(numbers), max(numbers)
@@ -94,14 +156,15 @@ def read_rows(table: CsvTable, column_indexes: list[int], first: int,
         with open(table.path, "rb") as raw:
             handle = io.TextIOWrapper(raw, encoding=encoding, errors=errors, newline=None)
             for start, _, lines in _line_blocks(handle, stats):
-                if start + len(lines) - 1 < low:
-                    continue                      # bloc entièrement avant la page : sauté
+                last = start + len(lines) - 1
+                if last < low:
+                    continue                      # bloc entièrement avant les lignes voulues : sauté
                 for number, text in enumerate(lines, start=start):
                     if number in wanted:
                         fields = _split_line(number, text, stats) or []
                         cells = [fields[i] if i < len(fields) else "" for i in column_indexes]
                         rows[number] = RawRow(wanted[number], number, fields[0] if fields else "", cells)
-                if start + len(lines) - 1 >= high:
+                if last >= high:
                     break
     changed = len(rows) != len(numbers)
     result = []

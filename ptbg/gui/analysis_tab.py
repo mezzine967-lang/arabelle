@@ -628,6 +628,20 @@ class AnalysisTab(ttk.Frame):
             self.state.t_global = self._view_fraction(0.5)
         self.update_cursors()
 
+    def place_global_cursor(self, instant: float) -> None:
+        """Curseur global posé à ``instant`` (double-clic dans « Valeurs du CSV ») ; une vue
+        zoomée qui ne le contient pas est recentrée sur lui, à la même largeur."""
+        self.leave_navigation()
+        self.state.global_cursor = True
+        self.global_cursor.set(True)
+        self.state.t_global = instant
+        master = self.renderer.axes_time_master() if self.renderer else None
+        if master is not None and self.state.xlim is not None and not self._in_view(instant):
+            lo, hi = sorted(master.get_xlim())
+            master.set_xlim(instant - (hi - lo) / 2, instant + (hi - lo) / 2)
+            self._full_draw()
+        self.update_cursors()
+
     def _toggle_panel(self) -> None:
         """Affiche ou masque le panneau de lecture."""
         if self.show_panel.get():
@@ -903,7 +917,9 @@ class AnalysisTab(ttk.Frame):
                 self._drag = "G"
                 self._move("G", event)
             elif event.button == 3:
-                self.controller.monitor_menu(self).tk_popup(int(event.guiEvent.x_root), int(event.guiEvent.y_root))
+                marker = self.renderer.monitor_marker_at(event)
+                self.controller.monitor_menu(self, marker).tk_popup(int(event.guiEvent.x_root),
+                                                                    int(event.guiEvent.y_root))
             return
         if index is None:
             return

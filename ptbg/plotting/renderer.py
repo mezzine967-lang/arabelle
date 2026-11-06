@@ -147,7 +147,7 @@ class TabRenderer:
         self._cursor_movables: list = []    # idem pour les étiquettes des curseurs (refaites à chaque mouvement)
         self._time_labels = True            # graduations de temps écrites sur l'axe en cours de dessin
         self._curve_lines: list = []        # (axe, courbe, ligne) : désignation d'une courbe à la souris
-        self._tbm_markers: list = []        # anomalies du TBM : (x, y, détail) pour la bulle de survol
+        self._tbm_markers: list = []        # anomalies du TBM : (x, y, détail, id fichier, n° de mesure)
         self._tip = None                    # bulle de détail du TBM (écran)
 
     # ------------------------------------------------------------------ build
@@ -545,19 +545,23 @@ class TabRenderer:
         if self._tip is not None and self._tip.get_visible():
             self.container.figure.draw_artist(self._tip)
 
+    def monitor_marker_at(self, event):
+        """Anomalie du TBM la plus proche de la souris (à moins de ``PICK_RADIUS_PX`` × 2) :
+        (x, y, détail, id du fichier, n° de mesure), ou None."""
+        if event.inaxes is not self.tbm_plot or not self._tbm_markers or event.x is None:
+            return None
+        points = self.tbm_plot.transData.transform([marker[:2] for marker in self._tbm_markers])
+        distance = np.hypot(points[:, 0] - event.x, points[:, 1] - event.y)
+        nearest = int(np.argmin(distance))
+        return self._tbm_markers[nearest] if distance[nearest] <= 2 * PICK_RADIUS_PX else None
+
     def show_monitor_tip(self, event) -> bool:
-        """Bulle de détail de l'anomalie du TBM la plus proche de la souris (à moins de
-        ``PICK_RADIUS_PX`` × 2) ; vrai si la bulle a changé (à redessiner)."""
+        """Bulle de détail de l'anomalie du TBM sous la souris ; vrai si la bulle a changé
+        (à redessiner)."""
         if self._tip is None:
             return False
-        text, xy = "", None
-        if event.inaxes is self.tbm_plot and self._tbm_markers and event.x is not None:
-            points = self.tbm_plot.transData.transform([(x, y) for x, y, _ in self._tbm_markers])
-            distance = np.hypot(points[:, 0] - event.x, points[:, 1] - event.y)
-            nearest = int(np.argmin(distance))
-            if distance[nearest] <= 2 * PICK_RADIUS_PX:
-                x, y, text = self._tbm_markers[nearest]
-                xy = (x, y)
+        marker = self.monitor_marker_at(event)
+        text, xy = (marker[2], marker[:2]) if marker else ("", None)
         if text == self._tip.get_text() and self._tip.get_visible() == bool(text):
             return False
         self._tip.set_text(text)

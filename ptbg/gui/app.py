@@ -515,13 +515,33 @@ class Application:
             TextWindow(self.root, f"Diagnostic — {source.name}", file_report(source, self.workspace.timeline()),
                        markdown=True)
 
-    def show_raw_values(self, source: SourceFile, names: list[str]) -> RawValuesWindow | None:
-        """Fenêtre des cellules d'origine du CSV à côté des valeurs lues (variables choisies)."""
+    def show_raw_values(self, source: SourceFile, names: list[str], sample: int | None = None):
+        """Fenêtre des cellules d'origine du CSV à côté des valeurs lues (variables choisies) ;
+        ``sample`` : mesure à montrer surlignée (lien depuis un marqueur du TBM)."""
         if not source.is_loaded:
             return None
         if len(names) > MAX_VARIABLES:
             self.notify(f"Valeurs du CSV : les {MAX_VARIABLES} premières variables sélectionnées sont affichées.")
-        return RawValuesWindow(self.root, source, names)
+        window = RawValuesWindow(self.root, source, names, on_pick=self.show_instant)
+        if sample is not None:
+            window.show_sample(sample)
+        return window
+
+    def show_instant(self, source: SourceFile, sample: int) -> None:
+        """Double-clic dans « Valeurs du CSV » : curseur global de l'onglet actif à l'instant
+        de cette mesure."""
+        line = source.line_of(sample)
+        if self.workspace.find(source.id) is None:
+            self.notify(f"{source.name} a été fermé : curseur non placé (ligne {line}).", "AVERTISSEMENT")
+            return
+        tab = self.graph.active_tab()
+        instant = float(self.workspace.timeline().x(source)[sample])
+        if tab is None or not np.isfinite(instant):
+            self.notify(f"Ligne {line} : horodatage illisible, instant inconnu.", "AVERTISSEMENT")
+            return
+        tab.place_global_cursor(instant)
+        shown = "" if source.id in tab.state.file_ids() else f" ({source.name} n'est pas affiché dans cet onglet)"
+        self.notify(f"Curseur global placé à la ligne {line} de {source.name}{shown}.")
 
     def compare_sources(self, package_id: str | None = None) -> None:
         """Fenêtre de comparaison des sources du paquet (REQ 2102, 2104)."""
@@ -680,9 +700,17 @@ class Application:
         if dialog.result:
             tab.set_curve_style(*dialog.result)
 
-    def monitor_menu(self, tab):
-        """Clic droit sur le Time Base Monitor : diagnostic complet de chaque fichier affiché."""
+    def monitor_menu(self, tab, marker=None):
+        """Clic droit sur le Time Base Monitor : sur un marqueur, « Voir dans le CSV » (fenêtre
+        des valeurs ouverte à la ligne de l'anomalie) ; puis le diagnostic de chaque fichier."""
         menu = tk.Menu(self.root, tearoff=False)
+        source = self.workspace.find(marker[3]) if marker else None
+        if source is not None and source.is_loaded:
+            names = list(dict.fromkeys(ref.name for axle in tab.state.axles for ref in axle.curves
+                                       if ref.file_id == source.id and not ref.is_group))
+            menu.add_command(label=f"Voir dans le CSV — ligne {source.line_of(marker[4])} de {source.name}…",
+                             command=lambda: self.show_raw_values(source, names, marker[4]))
+            menu.add_separator()
         for source in tab.sources():
             menu.add_command(label=f"Diagnostic complet — {source.name}…",
                              command=lambda s=source: self.show_diagnostic(s))

@@ -720,7 +720,7 @@ class InterfaceTests(unittest.TestCase):
                       [text.get_text() for text in legend.get_texts()])
         self.assertGreaterEqual(legend.get_window_extent().y0, renderer.tbm_plot.get_window_extent().y1)
         self.assertTrue(renderer._tbm_markers)
-        x, y, detail = renderer._tbm_markers[0]
+        x, y, detail = renderer._tbm_markers[0][:3]
         x_px, y_px = renderer.tbm_plot.transData.transform((x, y))
         tab.canvas.callbacks.process("motion_notify_event",
                                      MouseEvent("motion_notify_event", tab.canvas, x_px, y_px))
@@ -743,7 +743,7 @@ class InterfaceTests(unittest.TestCase):
         fields = lines[1].split(",")
         output = next(c for c in source.table.columns if c.name == "output")
         self.assertEqual(first[1], fields[0])
-        self.assertEqual(first[3], fields[output.index])                # texte exact du fichier
+        self.assertEqual(first[4], fields[output.index])                # texte exact du fichier
         self.assertEqual(len(window.view.get_children()), 500)
         window.next_page()
         self.assertEqual(window.page[0][0], "502")
@@ -763,6 +763,47 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(window.page[-1][0], str(source.table.line_numbers[-1]))
         window.copy_page()
         self.assertTrue(self.root.clipboard_get().startswith("Ligne\t"))
+        window.destroy()
+
+    def test_csv_window_links_with_monitor_and_cursor(self):
+        """REQ 4101 / 5405 : clic droit sur un marqueur du TBM -> « Voir dans le CSV » à la
+        ligne de l'anomalie ; filtre des anomalies ; double-clic -> curseur global."""
+        (source,) = self.load(DEMO / "PLC_A_10ms_pretrig.csv")
+        tab = self.ctl.graph.active_tab()
+        tab.add_curves([(source.id, "P_circuit_bar", False)], 0)
+        self.root.update()
+        marker = next(m for m in tab.renderer._tbm_markers if "manquantes" in m[2])
+        event = mock.Mock(inaxes=tab.renderer.tbm_plot)
+        event.x, event.y = tab.renderer.tbm_plot.transData.transform(marker[:2])
+        self.assertIs(tab.renderer.monitor_marker_at(event), marker)
+        menu = self.ctl.monitor_menu(tab, marker)
+        label = menu.entrycget(0, "label")
+        self.assertEqual(label, f"Voir dans le CSV — ligne {source.line_of(marker[4])} de {source.name}…")
+        menu.invoke(0)
+        window = [w for w in self.root.winfo_children() if isinstance(w, tk.Toplevel)
+                  and w.title().startswith("Valeurs du CSV")][-1]
+        selected = window.view.item(window.view.selection()[0], "values")
+        self.assertEqual(str(selected[0]), str(source.line_of(marker[4])))   # ligne de l'anomalie
+        self.assertIn("Trou : mesures manquantes avant", selected[3])
+        self.assertEqual([c.name for c in window.columns], ["P_circuit_bar"])
+        # Filtre : seulement les lignes à remarque.
+        window.only_anomalies.set(True)
+        window.toggle_anomalies()
+        self.assertTrue(window.page and all(values[3] for values in window.page))
+        self.assertTrue(window.position.cget("text").startswith("Anomalies 1 à"))
+        # Double-clic sur la 1re ligne : curseur global à l'instant de cette mesure.
+        item = window.view.get_children()[0]
+        window.view.see(item)
+        self.root.update()
+        _, y, _, height = window.view.bbox(item)
+        window._on_double_click(mock.Mock(y=y + height // 2))
+        sample = window.rows[0].sample
+        self.assertTrue(tab.state.global_cursor)
+        self.assertEqual(tab.state.t_global, float(self.ctl.workspace.timeline().x(source)[sample]))
+        self.ctl.workspace.packages[0].files.clear()                   # fichier fermé, fenêtre restée ouverte
+        with mock.patch.object(self.ctl, "notify") as notify:
+            window._on_double_click(mock.Mock(y=y + height // 2))
+        self.assertIn("a été fermé", notify.call_args[0][0])
         window.destroy()
 
     def test_absolute_time_mode(self):

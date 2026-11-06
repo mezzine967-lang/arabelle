@@ -175,7 +175,8 @@ def draw_monitor(text_ax, plot_ax, sources: list[SourceFile], timeline: Timeline
     Légende (voir l'en-tête) : au-dessus de la courbe ; ``legend_xy`` : place
     choisie à la souris (coin bas-gauche, fraction de la courbe).
     Renvoie les (ligne, x, y) des courbes de Δt, que le rendu réduit au zoom comme
-    les autres courbes, et les marqueurs d'anomalie (x, y, texte du détail)."""
+    les autres courbes, et les marqueurs d'anomalie (x, y, texte du détail, id du
+    fichier, n° de la mesure)."""
     status = monitor_status(sources) if sources else Severity.OK
     color = SEVERITY_COLORS[status]
     text_ax.set_axis_off()
@@ -245,7 +246,8 @@ def _draw_source(ax, source, timeline, color, top, relative, markers: list):
     """Δt d'un fichier, période de référence par segment, bande de tolérance,
     anomalies ; les Δt hors échelle sont posés sur le bord supérieur (▲).
     ``relative`` : ordonnée = Δt / période du segment (sans unité). Chaque anomalie
-    est ajoutée à ``markers`` (x, y, détail) pour la bulle de survol."""
+    est ajoutée à ``markers`` (x, y, détail, id du fichier, n° de mesure) pour la bulle
+    de survol et le lien « Voir dans le CSV »."""
     analysis = source.analysis
     x_all = timeline.x(source)
     x = x_all[analysis.dt_index]
@@ -281,6 +283,6 @@ def _draw_source(ax, source, timeline, color, top, relative, markers: list):
             ey = np.full(len(events), top / 2)
         else:
             ax.plot(ex, ey, marker, ls="none", ms=6, color=event_color, mec="white", mew=0.5)
-        markers += [(float(x), float(y), _event_detail(source, timeline, event, x))
+        markers += [(float(x), float(y), _event_detail(source, timeline, event, x), source.id, event.index)
                     for x, y, event in zip(ex, ey, events)]
     return line, x, shown
