@@ -1,0 +1,1062 @@
+"""Onglet d'analyse graphique : une disposition d'axes et ses outils.
+
+Requis servis (l'état est dans ``TabState``, le dessin dans plotting/renderer) :
+
+- REQ_COMMON_KH_5104 / 5106 : zone graphique principale, un onglet par disposition ;
+- REQ_COMMON_KH_5400 : curseur vertical simple, activé AXE PAR AXE (axe actif) ;
+- REQ_COMMON_KH_5401 : il porte l'instant et la valeur de la courbe sélectionnée ;
+- REQ_COMMON_KH_5402 : panneau de lecture à droite, mis à jour quand on déplace un curseur
+  (le mode « suivi souris » a été retiré à la demande du relecteur) ;
+- REQ_COMMON_KH_5403 / 5404 : double curseur, instants posés automatiquement ;
+- REQ_COMMON_KH_5405 : curseur global sur tous les axes, déplacés ensemble ;
+- REQ_COMMON_KH_5406 : curseur horizontal réservé aux axes analogiques ;
+- REQ_COMMON_KH_5408 : désignation d'un point du nuage X/Y ;
+- REQ_COMMON_KH_4103 : masquage du TBM refusé en cas d'alerte.
+
+Souris : clic sur une courbe = la sélectionner, clic ailleurs = placer le
+curseur, glisser = le déplacer, Maj+clic = niveau du curseur horizontal, clic
+droit = menu de l'axe (titre, unité, aspect de la courbe, hauteur), glisser la
+séparation entre deux axes = changer leur hauteur (curseur ↕). Légendes
+(axes, TBM), noms des pistes logiques et étiquettes des curseurs : glisser =
+les déplacer (place conservée à l'écran, dans le projet et le rapport) ; clic
+sur une entrée de la légende = sélectionner cette courbe. Time Base Monitor :
+survol d'un marqueur = détail de l'anomalie, clic droit = diagnostic complet.
+Clavier : flèches gauche / droite = échantillon précédent / suivant de la
+courbe sélectionnée ; Ctrl+Z / Ctrl+Y = retour arrière / refaire (contrôleur) ;
+les curseurs (simple, double, global) se posent sur la mesure réelle la plus
+proche de la courbe sélectionnée, d'où un Δt exact entre deux horodatages ;
+Ctrl enfoncé pendant le clic ou le glisser : curseur libre (Δt du panneau de
+lecture marqué « (libre) ») ;
+Échap = relâcher Zoomer / Déplacer la vue (la vue reste telle quelle).
+Barre de navigation sous le graphique (la nôtre, en français, à la place de
+celle de Matplotlib dont les boutons, les fenêtres en anglais et l'historique
+de vues séparé n'étaient pas maîtrisés), en trois groupes :
+  - Réinitialiser la vue (toute la durée, échelles automatiques, même après un
+    changement d'onglet), Zoomer, Déplacer la vue ;
+  - ← Retour arrière, Refaire → (grisés s'il n'y a rien à défaire ou refaire) ;
+  - Enregistrer en image.
+Seuls les mécanismes publics de Matplotlib pour le zoom au rectangle et le
+déplacement sont réutilisés (``Navigation``). Quand Zoomer ou Déplacer la vue
+est enfoncé, les clics lui sont réservés ; Échap ou l'activation d'un curseur
+relâche ce bouton (pas de zoom involontaire) et le curseur est placé dans la
+vue affichée.
+
+Annulation : chaque action terminée (clic relâché, menu, touche) enregistre
+l'état précédent de l'onglet (``UNDO_DEPTH`` états au plus).
+"""
+from __future__ import annotations
+
+import copy
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+
+import numpy as np
+from matplotlib.backend_bases import NavigationToolbar2
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
+
+from ptbg.core.arrangement import CurveRef, TabState
+from ptbg.core.curves import resolve
+from ptbg.core.readings import compute_readings, xy_data
+from ptbg.core.sampling import sample_at, step_index
+from ptbg.core.signals import SignalType
+from ptbg.core.xy import nearest_point
+from ptbg.gui.reading_panel import ReadingPanel
+from ptbg.gui.tooltip import WidgetTooltip
+from ptbg.plotting import monitor
+from ptbg.plotting.renderer import TabRenderer
+from ptbg.plotting.styles import ACTIVE_AXLE_COLOR, curve_color
+
+PICK_TOLERANCE_PX = 8
+UNDO_DEPTH = 50         # états d'onglet mémorisés pour Ctrl+Z
+HEIGHT_STEP = 1.5       # facteur appliqué par « Agrandir / Réduire l'axe »
+GAP_MARGIN_PX = 5       # marge (pixels) autour de la séparation de deux axes pour la saisir
+MIN_SHARE = 0.12        # part minimale d'un axe dans la hauteur de deux axes redimensionnés
+FLOW_MARGIN = 4         # marge gauche et droite de la barre d'outils (pixels)
+PANEL_WIDTH = 420       # largeur initiale du panneau de lecture (pixels)
+GROUP_GAP_PX = 22      # espace entre deux groupes de boutons de la barre de navigation
+TOGGLE_ON_COLOR = "#cfe3f7"   # fond d'un bouton Zoomer / Déplacer la vue enfoncé
+IMAGE_DPI = 150         # résolution de « Enregistrer l'image » (PNG)
+IMAGE_TYPES = [("Image PNG", "*.png"), ("Image vectorielle SVG", "*.svg"), ("Document PDF", "*.pdf")]
+CURSOR_MODES = (("none", "Aucun curseur vertical"), ("single", "Curseur simple"), ("double", "Double curseur"))
+
+
+class FlowBar(ttk.Frame):
+    """Barre d'outils dont les éléments passent à la ligne quand la largeur manque."""
+
+    def __init__(self, master) -> None:
+        """Barre vide ; ``add`` y range les éléments dans l'ordre."""
+        super().__init__(master)
+        self._items: list[tuple] = []          # (élément, espace après, début de ligne imposé)
+        self._width = 0
+        self.bind("<Configure>", self._reflow)
+
+    def add(self, widget, gap: int = 4, new_line: bool = False):
+        """Ajoute un élément (créé avec la barre pour parent) ; le renvoie."""
+        self._items.append((widget, gap, new_line))
+        return widget
+
+    def _reflow(self, _event=None) -> None:
+        """Place les éléments ligne par ligne selon la largeur disponible."""
+        width = self.winfo_width()
+        if width <= 1 or width == self._width:
+            return
+        self._width = width
+        x, y, row_height = FLOW_MARGIN, 2, 0
+        for widget, gap, new_line in self._items:
+            needed, height = widget.winfo_reqwidth(), widget.winfo_reqheight()
+            if x > FLOW_MARGIN and (new_line or x + needed > width - FLOW_MARGIN):
+                x, y, row_height = FLOW_MARGIN, y + row_height + 2, 0
+            widget.place(x=x, y=y)
+            x += needed + gap
+            row_height = max(row_height, height)
+        self.configure(height=y + row_height + 2)
+
+
+class Navigation(NavigationToolbar2):
+    """Zoom au rectangle et déplacement de Matplotlib, SANS sa barre de boutons.
+
+    Seuls les mécanismes publics de Matplotlib sont gardés (modes « zoom » et
+    « déplacer », tracé du rectangle) ; les boutons sont ceux de l'onglet
+    (``AnalysisTab._build_navigation``), qui restent enfoncés tant que le mode
+    est actif."""
+
+    def __init__(self, canvas, tab) -> None:
+        """Branche le zoom et le déplacement sur la figure de l'onglet ``tab``."""
+        self._tab = tab
+        self._rubberband: list[int] = []        # rectangle de zoom dessiné sur le canevas Tk
+        super().__init__(canvas)
+
+    def zoom(self, *args) -> None:
+        """Active / désactive le zoom au rectangle ; le bouton suit l'état réel."""
+        super().zoom(*args)
+        self._tab.sync_navigation()
+
+    def pan(self, *args) -> None:
+        """Active / désactive le déplacement ; le bouton suit l'état réel."""
+        super().pan(*args)
+        self._tab.sync_navigation()
+
+    def draw_rubberband(self, event, x0, y0, x1, y1) -> None:
+        """Rectangle de zoom en cours (trait noir doublé d'un pointillé blanc)."""
+        self.remove_rubberband()
+        widget = self.canvas.get_tk_widget()
+        height = self.canvas.figure.bbox.height
+        y0, y1 = height - y0, height - y1          # Matplotlib compte les y depuis le bas
+        self._rubberband = [widget.create_rectangle(x0, y0, x1, y1),
+                            widget.create_rectangle(x0, y0, x1, y1, outline="white", dash=(3, 3))]
+
+    def remove_rubberband(self) -> None:
+        """Efface le rectangle de zoom."""
+        widget = self.canvas.get_tk_widget()
+        for item in self._rubberband:
+            widget.delete(item)
+        self._rubberband = []
+
+
+class AnalysisTab(ttk.Frame):
+    """Un onglet : barre d'outils, figure Matplotlib, panneau de lecture."""
+
+    def __init__(self, notebook, controller, state: TabState) -> None:
+        """Crée la barre d'outils et la zone graphique ; le dessin est fait par ``redraw``."""
+        super().__init__(notebook)
+        self.controller = controller
+        self.state = state
+        self.active_axle = 0
+        self.renderer: TabRenderer | None = None
+        self._drag: str | None = None
+        self._grab = None                  # ((sorte, élément), x, y) du clic sur un élément déplaçable
+        self._resize = None                # (axe du dessus, axe du dessous) dont on glisse la séparation
+        self._guide = None                 # trait montrant la future séparation pendant le glisser
+        self._pending_motion = None
+        self._resize_job = None
+        self._refresh_job = None
+        self._background = None            # rendu figé sans curseurs (mise à jour rapide)
+        self._undo: list[dict] = []        # états précédents (Ctrl+Z)
+        self._redo: list[dict] = []        # états annulés (Ctrl+Y)
+        self._snapshot: dict | None = None # dernier état enregistré
+        self._build_toolbar()
+        self._build_body()
+
+    # ------------------------------------------------------------- widgets
+    def _build_toolbar(self) -> None:
+        """Deux lignes d'outils : sélection (axe, courbe) puis curseurs et TBM ; dans une
+        fenêtre étroite, les outils passent à la ligne au lieu de sortir de l'écran."""
+        bar = FlowBar(self)
+        bar.pack(fill="x")
+        self.axle_choice = tk.StringVar()
+        self.curve_choice = tk.StringVar()
+        self.cursor_mode = tk.StringVar(value="none")
+        self.global_cursor = tk.BooleanVar(value=self.state.global_cursor)
+        self.show_panel = tk.BooleanVar(value=True)
+        bar.add(ttk.Label(bar, text=f"Modèle : {self.state.template.name}"), gap=10)
+        axle = ttk.Frame(bar)
+        ttk.Label(axle, text="Axe actif").pack(side="left")
+        self.axle_box = ttk.Combobox(axle, textvariable=self.axle_choice, width=10, state="readonly")
+        self.axle_box.pack(side="left", padx=(2, 0))
+        self.axle_box.bind("<<ComboboxSelected>>", lambda _e: self.set_active_axle(self.axle_box.current()))
+        bar.add(axle, gap=10)
+        curve = ttk.Frame(bar)
+        ttk.Label(curve, text="Courbe sélectionnée").pack(side="left")
+        self.curve_box = ttk.Combobox(curve, textvariable=self.curve_choice, width=28, state="readonly")
+        self.curve_box.pack(side="left", padx=(2, 0))
+        self.curve_box.bind("<<ComboboxSelected>>", lambda _e: self._select_curve(self.curve_box.current()))
+        bar.add(curve, gap=10)
+        bar.add(ttk.Button(bar, text="Retirer la courbe", command=self.remove_selected_curve))
+        bar.add(ttk.Button(bar, text="Vider l'axe", command=self.clear_axle))
+        cursor = ttk.Menubutton(bar, text="Curseur vertical")
+        menu = tk.Menu(cursor, tearoff=False)
+        for value, label in CURSOR_MODES:
+            menu.add_radiobutton(label=label, value=value, variable=self.cursor_mode,
+                                 command=lambda v=value: self.set_cursor_mode(v))
+        cursor["menu"] = menu
+        bar.add(cursor, gap=8, new_line=True)
+        bar.add(ttk.Checkbutton(bar, text="Curseur global", variable=self.global_cursor,
+                                command=self._toggle_global), gap=8)
+        bar.add(ttk.Button(bar, text="Curseur horizontal…", command=self.controller.horizontal_cursor))
+        bar.add(ttk.Button(bar, text="Nuage X/Y…", command=self.controller.configure_xy))
+        self.tbm_button = bar.add(ttk.Button(bar, text="Masquer le TBM", width=15, command=self.toggle_monitor))
+        bar.add(ttk.Button(bar, text="Vue d'origine", command=self.reset_view), gap=10)
+        bar.add(ttk.Checkbutton(bar, text="Panneau de lecture", variable=self.show_panel, command=self._toggle_panel))
+
+    def _build_body(self) -> None:
+        """Figure Matplotlib intégrée à Tk, barre de zoom et panneau de lecture."""
+        self.paned = tk.PanedWindow(self, orient="horizontal", sashwidth=6, sashrelief="raised")
+        self.paned.pack(fill="both", expand=True)
+        holder = ttk.Frame(self.paned)
+        self.figure = Figure(figsize=(9, 6), dpi=100)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=holder)
+        self.toolbar = Navigation(self.canvas, self)
+        self._build_navigation(holder)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        self.paned.add(holder, minsize=400, stretch="always")
+        self.panel = ReadingPanel(self.paned)
+        self.paned.add(self.panel, width=PANEL_WIDTH, minsize=150, stretch="never")
+        hint = ttk.Label(self, foreground="#555555", padding=(4, 0),
+                         text="Clic sur une courbe ou sur son nom dans la légende : la sélectionner · Clic "
+                              "ailleurs : placer le curseur · Glisser : le déplacer · Maj+clic : niveau du "
+                              "curseur H · Flèches gauche/droite : échantillon voisin · Légendes, noms des pistes "
+                              "et étiquettes : glisser pour les déplacer · Séparation entre deux axes : glisser pour "
+                              "changer leur hauteur · Clic droit : menu de l'axe (titre, "
+                              "unité, aspect, hauteur) · TBM : survol d'un marqueur = détail, clic droit = "
+                              "diagnostic · Ctrl+Z : retour arrière, Ctrl+Y : refaire · Zoomer / Déplacer la "
+                              "vue (sous le graphique) : Échap ou recliquer pour revenir aux curseurs", justify="left")
+        hint.pack(fill="x")
+        hint.bind("<Configure>", lambda e: hint.configure(wraplength=max(e.width - 8, 200)))
+        for name, handler in (("button_press_event", self._on_press), ("motion_notify_event", self._on_motion),
+                              ("button_release_event", self._on_release), ("key_press_event", self._on_key),
+                              ("draw_event", self._on_draw)):
+            self.canvas.mpl_connect(name, handler)
+        self.canvas.get_tk_widget().bind("<Configure>", self._on_resize, add=True)
+
+    def _build_navigation(self, holder) -> None:
+        """Barre sous le graphique, en trois groupes espacés : la vue (tout afficher,
+        zoomer, déplacer), l'historique (retour arrière, refaire) et l'image. Chaque
+        bouton a sa bulle d'aide. La barre passe à la ligne si la largeur manque."""
+        bar = FlowBar(holder)
+        bar.pack(side="bottom", fill="x", pady=2)
+        self.zoom_on = tk.BooleanVar(value=False)
+        self.pan_on = tk.BooleanVar(value=False)
+        self.navigation_buttons = {}
+        groups = (
+            (("home", "Réinitialiser la vue", None, self.home_view,
+              "Annuler le zoom et le déplacement : toute la durée des fichiers, échelles verticales "
+              "automatiques.\nLes légendes déplacées restent où elles sont (« Vue d'origine », en haut, les "
+              "replace aussi)."),
+             ("zoom", "Zoomer", self.zoom_on, self.toolbar.zoom,
+              "Tracer un rectangle à la souris sur la zone à agrandir.\nRecliquer sur « Zoomer » (ou Échap) "
+              "pour revenir aux curseurs."),
+             ("pan", "Déplacer la vue", self.pan_on, self.toolbar.pan,
+              "Faire glisser le graphique avec le clic gauche (clic droit glissé : étirer ou resserrer "
+              "l'échelle).\nRecliquer sur « Déplacer la vue » pour revenir aux curseurs.")),
+            (("undo", "← Retour arrière", None, self.controller.undo,
+              "Défaire la dernière action de l'onglet : courbe ajoutée, curseur, zoom, titre… (Ctrl+Z)."),
+             ("redo", "Refaire →", None, self.controller.redo,
+              "Refaire ce que « Retour arrière » vient de défaire, si on est revenu trop loin (Ctrl+Y).")),
+            (("image", "Enregistrer en image…", None, self.save_image,
+              "Enregistrer l'onglet tel qu'il est affiché, curseurs compris : image PNG, SVG ou PDF."),))
+        for group in groups:
+            for position, (key, label, variable, command, help_text) in enumerate(group):
+                if variable is None:
+                    widget = ttk.Button(bar, text=label, command=command)
+                else:
+                    # Bouton à bascule Tk : il reste enfoncé (et bleuté) tant que le mode est actif.
+                    widget = tk.Checkbutton(bar, text=label, variable=variable, command=command,
+                                            indicatoron=False, padx=10, pady=3, selectcolor=TOGGLE_ON_COLOR)
+                bar.add(widget, gap=GROUP_GAP_PX if position == len(group) - 1 else 3)
+                WidgetTooltip(widget, help_text)
+                self.navigation_buttons[key] = widget
+        self.sync_history()
+
+    def sync_navigation(self) -> None:
+        """Boutons Zoomer / Déplacer enfoncés selon le mode réellement actif."""
+        self.zoom_on.set(self.toolbar.mode == "zoom rect")
+        self.pan_on.set(self.toolbar.mode == "pan/zoom")
+
+    def sync_history(self) -> None:
+        """« Retour arrière » et « Refaire » grisés quand il n'y a rien à défaire ou à refaire."""
+        for key, stack in (("undo", self._undo), ("redo", self._redo)):
+            self.navigation_buttons[key].state(["!disabled"] if stack else ["disabled"])
+
+    def save_image(self) -> None:
+        """« Enregistrer l'image… » : choix du fichier puis écriture."""
+        name = "".join(c if c.isalnum() or c in "-_ " else "_" for c in self.state.title).strip() or "onglet"
+        path = filedialog.asksaveasfilename(parent=self, title="Enregistrer l'image de l'onglet",
+                                            defaultextension=".png", initialfile=f"{name}.png",
+                                            filetypes=IMAGE_TYPES)
+        if path:
+            self.write_image(Path(path))
+
+    def write_image(self, path: Path) -> bool:
+        """Image de l'onglet tel qu'il est affiché, curseurs compris (Matplotlib dessine les
+        éléments « animés » quand il enregistre). Renvoie vrai si l'image est écrite ; une
+        erreur est affichée, jamais levée."""
+        if self.renderer is None:
+            return False
+        try:
+            self.figure.savefig(path, dpi=IMAGE_DPI, facecolor="white")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Enregistrer l'image", f"Image non enregistrée :\n{exc}", parent=self)
+            return False
+        finally:
+            self._full_draw()
+        self.controller.notify(f"Image enregistrée : {path.name}.")
+        return True
+
+    # --------------------------------------------------------------- dessin
+    def sources(self):
+        """Fichiers présents dans l'onglet (courbes, nuage X/Y, conditions)."""
+        return [s for s in (self.controller.workspace.find(fid) for fid in self.state.file_ids()) if s]
+
+    def redraw(self) -> None:
+        """Reconstruction complète (contenu, disposition ou axe des temps changé)."""
+        allowed, _reason = monitor.can_hide(self.sources())
+        if not self.state.tbm_visible and not allowed:
+            self.state.tbm_visible = True       # REQ 4103 : une alerte réaffiche le TBM
+            self.controller.notify(f"Onglet « {self.state.title} » : Time Base Monitor réaffiché "
+                                   "(alerte de base de temps).", "AVERTISSEMENT")
+        self.renderer = TabRenderer(self.figure, self.state, self.controller.workspace,
+                                    self.controller.workspace.timeline(),
+                                    self.controller.settings.max_points_per_curve,
+                                    active_axle=self.active_axle)
+        self.renderer.draw()
+        master = self.renderer.axes_time_master()
+        if master is not None:
+            master.callbacks.connect("xlim_changed", self._on_xlim_changed)
+        self.toolbar.update()               # vide la pile de vues de Matplotlib (Ctrl+Z la remplace)
+        self._full_draw()
+        self.tbm_button.configure(text="Masquer le TBM" if self.state.tbm_visible else "Afficher le TBM")
+        self._sync_toolbar()
+        self.refresh_readings()
+        self._checkpoint()
+
+    def update_cursors(self, record: bool = True) -> None:
+        """Mise à jour légère : curseurs et lectures seulement.
+
+        Les curseurs sont redessinés seuls sur le rendu figé du reste de la figure
+        (« blitting ») : un mouvement de souris ne redessine ni les courbes, ni
+        les axes, ni le TBM (fluidité avec de gros fichiers, REQ 4105).
+        ``record`` : enregistrer l'état pour Ctrl+Z (pas pendant un glisser)."""
+        if self.renderer is None:
+            return
+        self.renderer.draw_cursors()
+        self._blit()
+        self.refresh_readings()
+        if record:
+            self._checkpoint()
+
+    def _blit(self) -> None:
+        """Redessine curseurs et bulle du TBM sur le rendu figé (ou tout, s'il manque)."""
+        if self._background is not None:
+            self.canvas.restore_region(self._background)
+            self.renderer.draw_cursor_artists()
+            self.canvas.blit(self.figure.bbox)
+        else:
+            self.canvas.draw_idle()
+
+    # ------------------------------------------------------------ annulation
+    def _checkpoint(self) -> None:
+        """Fin d'une action : l'état précédent, s'il diffère, rejoint la pile d'annulation."""
+        current = self.state.to_dict()
+        if self._snapshot is not None and current != self._snapshot:
+            self._undo.append(self._snapshot)
+            del self._undo[:-UNDO_DEPTH]
+            self._redo.clear()
+        self._snapshot = current
+        self.sync_history()
+
+    def undo(self) -> bool:
+        """Ctrl+Z : revient à l'état précédent de l'onglet ; faux s'il n'y en a pas."""
+        return self._step(self._undo, self._redo)
+
+    def redo(self) -> bool:
+        """Ctrl+Y : rétablit l'état annulé ; faux s'il n'y en a pas."""
+        return self._step(self._redo, self._undo)
+
+    def _step(self, source: list, target: list) -> bool:
+        """Remplace l'état par le dernier de ``source`` ; l'état courant passe dans ``target``."""
+        if not source:
+            return False
+        target.append(self.state.to_dict())
+        previous = source.pop()
+        restored = TabState.from_dict(copy.deepcopy(previous))
+        self.state.__dict__.update(restored.__dict__)      # même objet : le contrôleur le garde
+        self._snapshot = previous
+        self.sync_history()
+        self.active_axle = min(self.active_axle, len(self.state.axles) - 1)
+        self.global_cursor.set(self.state.global_cursor)
+        self.master.tab(self, text=self.state.title)
+        self.redraw()
+        return True
+
+    def _full_draw(self) -> None:
+        """Redessin complet différé ; le rendu figé des curseurs devient périmé."""
+        self._background = None
+        self.canvas.draw_idle()
+
+    def _on_draw(self, event) -> None:
+        """Après chaque dessin complet à l'écran : mémorise le rendu sans curseurs,
+        puis y pose les curseurs (affichés avec le reste de la figure)."""
+        if self.renderer is None or event.canvas is not self.canvas or self.canvas.is_saving():
+            return
+        self._background = self.canvas.copy_from_bbox(self.figure.bbox)
+        self.renderer.draw_cursor_artists()
+
+    def refresh_readings(self) -> None:
+        """Recalcule le panneau de lecture à droite (REQ 5402)."""
+        rows = compute_readings(self.state, self.controller.workspace, self.controller.workspace.timeline())
+        self.panel.show(rows)
+
+    def _on_xlim_changed(self, ax) -> None:
+        """Zoom / déplacement : mémorise la fenêtre et planifie la réduction des points."""
+        self.state.xlim = list(ax.get_xlim())
+        if self._refresh_job is None:
+            self._refresh_job = self.after(40, self._refresh_zoom)
+
+    def _refresh_zoom(self) -> None:
+        """Recalcule les points affichés pour la nouvelle fenêtre de temps."""
+        self._refresh_job = None
+        if self.renderer is not None:
+            self.renderer.refresh_decimation()
+            self._full_draw()
+
+    def _on_resize(self, _event) -> None:
+        """Redimensionnement : redessin complet différé (évite les redessins en rafale)."""
+        self._background = None                 # rendu figé d'une autre taille
+        if self.renderer is None:               # pas encore dessiné, ou onglet en cours de fermeture
+            return
+        if self._resize_job is not None:
+            self.after_cancel(self._resize_job)
+        self._resize_job = self.after(400, self._after_resize)
+
+    def _after_resize(self) -> None:
+        """Redessin complet après redimensionnement."""
+        self._resize_job = None
+        if self.renderer is not None:
+            self.redraw()                      # recalcule la hauteur du bandeau du TBM
+
+    # -------------------------------------------------------- axes, courbes
+    def axle(self):
+        """État de l'axe actif."""
+        return self.state.axles[min(self.active_axle, len(self.state.axles) - 1)]
+
+    def set_active_axle(self, index: int) -> None:
+        """Désigne l'axe actif (cadre bleu) qui reçoit courbes et curseurs (REQ 5400)."""
+        if index is None or index < 0 or index >= len(self.state.axles):
+            return
+        self.active_axle = index
+        if self.renderer is not None:
+            self.renderer.active_axle = index
+            for position, ax in enumerate(self.renderer.axes):
+                for spine in ax.spines.values():
+                    spine.set_edgecolor(ACTIVE_AXLE_COLOR if position == index else "black")
+                    spine.set_linewidth(2.0 if position == index else 0.8)
+            self._full_draw()
+        self._sync_toolbar()
+        self.controller.on_tab_changed()
+
+    def _sync_toolbar(self) -> None:
+        """Aligne listes et cases de la barre d'outils sur l'état de l'onglet."""
+        self.axle_box["values"] = [f"Axe {i + 1}" + (" (X/Y)" if a.kind == "xy" else "")
+                                   for i, a in enumerate(self.state.axles)]
+        self.axle_box.current(self.active_axle)
+        axle = self.axle()
+        labels = []
+        for ref in axle.curves:
+            curve = resolve(ref, self.controller.workspace)
+            labels.append(curve.label if curve else f"{ref.name} (indisponible)")
+        self.curve_box["values"] = labels
+        if labels:
+            self.curve_box.current(min(axle.selected, len(labels) - 1))
+        else:
+            self.curve_choice.set("")
+        self.cursor_mode.set(axle.cursor_mode)
+        self.global_cursor.set(self.state.global_cursor)
+
+    def _select_curve(self, index: int) -> None:
+        """Change la courbe sélectionnée de l'axe actif (valeur portée par le curseur)."""
+        self.axle().selected = max(index, 0)
+        self.redraw()
+
+    def add_curves(self, refs: list[tuple[str, str, bool]], axle_index: int | None = None) -> None:
+        """Ajoute des variables/groupes (file_id, nom, groupe ?) à un axe.
+
+        Un axe porte soit des courbes analogiques, soit des pistes logiques :
+        une courbe de l'autre famille est placée sur le premier axe
+        compatible, ou refusée avec une explication.
+        """
+        if axle_index is not None:
+            self.set_active_axle(axle_index)
+        axle = self.axle()
+        if axle.kind == "xy":
+            self._assign_xy(refs)
+            return
+        workspace = self.controller.workspace
+        used = sum(len(a.curves) for a in self.state.axles)
+        for file_id, name, is_group in refs:
+            ref = CurveRef(file_id, name, is_group, curve_color(used))
+            curve = resolve(ref, workspace)
+            if curve is None:
+                continue
+            target = self._compatible_axle(curve.signal_type.is_digital)
+            if target is None:
+                messagebox.showwarning(
+                    "Axe incompatible",
+                    f"« {name} » ({curve.signal_type.value}) ne peut pas rejoindre des courbes "
+                    f"{'analogiques' if curve.signal_type.is_digital else 'logiques'}. Videz un axe ou "
+                    "ouvrez un onglet avec un autre modèle.", parent=self)
+                continue
+            if any(c.file_id == file_id and c.name == name for c in target.curves):
+                continue
+            target.curves.append(ref)
+            used += 1
+            self.controller.notify(f"{name} ajouté à l'axe {self.state.axles.index(target) + 1} "
+                                   f"de « {self.state.title} ».")
+        self.redraw()
+
+    def _compatible_axle(self, digital: bool):
+        """Axe actif s'il convient, sinon premier axe temporel vide ou de même famille."""
+        def family(axle):
+            """None si l'axe est vide, sinon vrai pour un axe logique (Bool / Texte)."""
+            curves = [resolve(r, self.controller.workspace) for r in axle.curves]
+            curves = [c for c in curves if c is not None]
+            return None if not curves else all(c.signal_type.is_digital for c in curves)
+
+        candidates = [self.axle()] + [a for a in self.state.axles if a is not self.axle()]
+        for axle in candidates:
+            if axle.kind == "time" and family(axle) in (None, digital):
+                return axle
+        return None
+
+    def _assign_xy(self, refs) -> None:
+        """Glisser sur un axe X/Y : 1re variable en X puis en Y."""
+        axle = self.axle()
+        for file_id, name, is_group in refs:
+            if is_group:
+                continue
+            ref = CurveRef(file_id, name)
+            if axle.xy_x is None or axle.xy_y is not None:
+                axle.xy_x, axle.xy_y = ref, None       # nouveau couple : X d'abord
+            else:
+                axle.xy_y = ref
+        self.redraw()
+
+    def remove_selected_curve(self) -> None:
+        """Retire la courbe sélectionnée de l'axe actif."""
+        axle = self.axle()
+        if axle.curves:
+            removed = axle.curves.pop(min(axle.selected, len(axle.curves) - 1))
+            axle.selected = 0
+            self.controller.notify(f"{removed.name} retiré de l'axe {self.active_axle + 1}.")
+            self.redraw()
+
+    def clear_axle(self) -> None:
+        """Vide l'axe actif : courbes, nuage X/Y, curseurs et condition."""
+        axle = self.axle()
+        axle.curves.clear()
+        axle.xy_x = axle.xy_y = None
+        axle.h_enabled, axle.h_condition, axle.cursor_mode = False, None, "none"
+        self.redraw()
+
+    # ------------------------------------------------------------- curseurs
+    def _view_fraction(self, fraction: float) -> float:
+        """Instant situé à une fraction de la fenêtre visible (position initiale d'un curseur)."""
+        master = self.renderer.axes_time_master() if self.renderer else None
+        if master is None:
+            return 0.0
+        lo, hi = master.get_xlim()
+        return lo + fraction * (hi - lo)
+
+    def _in_view(self, instant: float | None) -> bool:
+        """Vrai si l'instant est dans la fenêtre de temps affichée."""
+        master = self.renderer.axes_time_master() if self.renderer else None
+        if instant is None or master is None:
+            return False
+        lo, hi = sorted(master.get_xlim())
+        return lo <= instant <= hi
+
+    def leave_navigation(self) -> None:
+        """Relâche les boutons Zoomer ou Déplacer la vue : le clic suivant place le curseur au lieu
+        de zoomer (remarque du relecteur)."""
+        if self.toolbar.mode == "zoom rect":
+            self.toolbar.zoom()
+        elif self.toolbar.mode == "pan/zoom":
+            self.toolbar.pan()
+
+    def set_cursor_mode(self, mode: str) -> None:
+        """REQ 5400 / 5403 : curseurs de l'axe actif ; instants posés automatiquement
+        dans la vue affichée (un curseur resté hors de la vue zoomée y est ramené)."""
+        axle = self.axle()
+        if axle.kind == "xy":
+            messagebox.showinfo("Curseur", "Sur un nuage X/Y, cliquer sur un point pour le désigner.",
+                                parent=self)
+            self.cursor_mode.set("none")
+            return
+        axle.cursor_mode = mode
+        if mode in ("single", "double"):
+            self.leave_navigation()
+            if not self._in_view(axle.t1):
+                axle.t1 = self._snap(self._view_fraction(0.35))
+        if mode == "double" and not self._in_view(axle.t2):
+            axle.t2 = self._snap(self._view_fraction(0.65))
+        self.update_cursors()
+
+    def _toggle_global(self) -> None:
+        """Case « Curseur global » : ligne commune à tous les axes (REQ 5405), posée au
+        centre de la vue affichée à chaque activation, zoom désactivé."""
+        self.state.global_cursor = self.global_cursor.get()
+        if self.state.global_cursor:
+            self.leave_navigation()
+            self.state.t_global = self._snap(self._view_fraction(0.5))
+        self.update_cursors()
+
+    def place_global_cursor(self, instant: float) -> None:
+        """Curseur global posé à ``instant`` (double-clic dans « Valeurs du CSV ») ; une vue
+        zoomée qui ne le contient pas est recentrée sur lui, à la même largeur."""
+        self.leave_navigation()
+        self.state.global_cursor = True
+        self.global_cursor.set(True)
+        self.state.t_global = instant
+        master = self.renderer.axes_time_master() if self.renderer else None
+        if master is not None and self.state.xlim is not None and not self._in_view(instant):
+            lo, hi = sorted(master.get_xlim())
+            master.set_xlim(instant - (hi - lo) / 2, instant + (hi - lo) / 2)
+            self._full_draw()
+        self.update_cursors()
+
+    def _toggle_panel(self) -> None:
+        """Affiche ou masque le panneau de lecture."""
+        if self.show_panel.get():
+            self.paned.add(self.panel, width=PANEL_WIDTH, minsize=150, stretch="never")
+        else:
+            self.paned.forget(self.panel)
+
+    def home_view(self) -> None:
+        """« Réinitialiser la vue » : toute la durée des fichiers et échelles verticales automatiques
+        (légendes et étiquettes déplacées restent où l'utilisateur les a mises)."""
+        self.state.xlim = None
+        for axle in self.state.axles:
+            axle.ylim = None
+        self.redraw()
+
+    def reset_view(self) -> None:
+        """Revient à la vue d'origine : toute la durée des fichiers, échelles verticales
+        automatiques, légendes et étiquettes déplacées remises à leur place automatique.
+        Les courbes, curseurs et réglages de l'onglet sont conservés (une légende
+        masquée le reste)."""
+        self.state.xlim = None
+        self.state.tbm_legend_xy = None
+        for axle in self.state.axles:
+            axle.ylim = None
+            axle.label_offsets.clear()
+            if axle.legend == "free":
+                axle.legend, axle.legend_xy = "auto", None
+        self.redraw()
+
+    def set_axle_title(self, index: int, title: str) -> None:
+        """Titre de l'axe ``index`` (vide = « Axe n »), repris dans le rapport."""
+        self.state.axles[index].title = title.strip()
+        self.redraw()
+
+    def set_axle_unit(self, index: int, unit: str) -> None:
+        """Unité des valeurs de l'axe ``index`` : titre de l'axe vertical et étiquettes
+        des curseurs (le CSV ne porte pas d'unité, REQ 2303)."""
+        self.state.axles[index].unit = unit.strip()
+        self.redraw()
+
+    def set_axle_height(self, index: int, factor: float | None) -> None:
+        """Hauteur relative de l'axe ``index`` multipliée par ``factor`` (None = celle du modèle)."""
+        axle = self.state.axles[index]
+        axle.height = 1.0 if factor is None else min(max(axle.height * factor, 0.25), 8.0)
+        self.redraw()
+
+    def set_curve_style(self, color: str, width: float, linestyle: str) -> None:
+        """Aspect de la courbe sélectionnée de l'axe actif (couleur, épaisseur, trait)."""
+        ref = self.axle().selected_curve()
+        if ref is not None:
+            ref.color, ref.width, ref.linestyle = color, width, linestyle
+            self.redraw()
+
+    def set_legend(self, index: int, mode: str) -> None:
+        """Légende de l'axe ``index`` : « auto » (place automatique) ou « hidden »."""
+        axle = self.state.axles[index]
+        axle.legend, axle.legend_xy = mode, None
+        self.redraw()
+
+    def reset_labels(self, index: int) -> None:
+        """Étiquettes de l'axe ``index`` (noms des pistes, curseurs) remises à leur place."""
+        self.state.axles[index].label_offsets.clear()
+        self.redraw()
+
+    def _grab_under(self, event):
+        """Élément déplaçable sous la souris : étiquette, légende d'un axe ou du TBM."""
+        label = self.renderer.movable_at(event)
+        if label is not None:
+            return ("label", label)
+        for index, ax in enumerate(self.renderer.axes):
+            legend = ax.get_legend()
+            if legend is not None and legend.contains(event)[0]:
+                return ("legend", index)
+        tbm = self.renderer.tbm_plot
+        if tbm is not None and tbm.get_legend() is not None and tbm.get_legend().contains(event)[0]:
+            return ("tbm", None)
+        return None
+
+    def _inside_figure(self, box) -> tuple[float, float]:
+        """Coin bas-gauche (pixels) d'un cadre ramené dans la figure : un élément lâché
+        au bord n'est jamais perdu."""
+        figure = self.figure.bbox
+        return (min(max(box.x0, figure.x0), max(figure.x1 - box.width, figure.x0)),
+                min(max(box.y0, figure.y0), max(figure.y1 - box.height, figure.y0)))
+
+    def _released(self, event) -> None:
+        """Fin d'un clic sur un élément déplaçable : sa nouvelle place est mémorisée
+        (écran, projet, rapport) ; un simple clic sur un nom de légende sélectionne
+        cette courbe."""
+        (kind, item), x0, y0 = self._grab
+        self._grab = None
+        moved = abs(event.x - x0) + abs(event.y - y0) > 3
+        if kind == "label":
+            if moved:
+                self._store_label(*item)
+            return
+        if kind == "tbm":
+            legend = self.renderer.tbm_plot.get_legend()
+            if moved and legend is not None:
+                x, y = self.renderer.tbm_plot.transAxes.inverted().transform(
+                    self._inside_figure(legend.get_window_extent()))
+                self.state.tbm_legend_xy = [float(x), float(y)]
+            return
+        index = item
+        ax = self.renderer.axes[index]
+        legend = ax.get_legend()
+        if legend is None:
+            return
+        axle = self.state.axles[index]
+        if moved:
+            # Glissée par Matplotlib : on retient son coin bas-gauche en fraction de l'axe.
+            x, y = ax.transAxes.inverted().transform(self._inside_figure(legend.get_window_extent()))
+            axle.legend, axle.legend_xy = "free", [float(x), float(y)]
+            return
+        if axle.kind != "time":
+            return
+        # Entrée désignée par sa hauteur : clic sur le nom OU sur le trait de la courbe.
+        for position, text in enumerate(legend.get_texts()):
+            box = text.get_window_extent()
+            if box.y0 - 3 <= event.y <= box.y1 + 3:
+                self.set_active_axle(index)
+                self._select_curve(position)
+                return
+
+    def _store_label(self, artist, index: int, key: str, auto) -> None:
+        """Étiquette lâchée : son décalage par rapport à sa place automatique est retenu
+        en fraction de la taille de l'axe (même place relative dans le rapport),
+        ramené si besoin pour qu'elle reste dans la figure."""
+        box = artist.get_window_extent()
+        left, bottom = self._inside_figure(box)
+        scale = 72.0 / self.figure.dpi                       # pixels -> points
+        dx = artist.xyann[0] + (left - box.x0) * scale - auto[0]
+        dy = artist.xyann[1] + (bottom - box.y0) * scale - auto[1]
+        size = artist.axes.bbox
+        self.state.axles[index].label_offsets[key] = [float(dx / (size.width * scale)),
+                                                      float(dy / (size.height * scale))]
+        self.update_cursors()
+
+    def toggle_monitor(self) -> None:
+        """REQ 4103 : masquage possible seulement sans avertissement ni erreur."""
+        if self.state.tbm_visible:
+            allowed, reason = monitor.can_hide(self.sources())
+            if not allowed:
+                messagebox.showwarning("Time Base Monitor", reason, parent=self)
+                return
+            self.state.tbm_visible = False
+            self.controller.notify(f"Time Base Monitor masqué dans « {self.state.title} » (base de temps conforme).")
+        else:
+            self.state.tbm_visible = True
+        self.redraw()
+
+    def _target_for(self, index, event) -> str | None:
+        """Curseur à déplacer pour un clic sur l'axe ``index``."""
+        axle = self.state.axles[index]
+        if axle.h_enabled and event.ydata is not None:
+            near_h = axle.h_level is not None and abs(
+                event.inaxes.transData.transform((0, axle.h_level))[1] - event.y) <= PICK_TOLERANCE_PX
+            if near_h or event.key == "shift" or (axle.cursor_mode == "none" and not self.state.global_cursor):
+                return "H"
+        if self.state.global_cursor:
+            return "G"
+        if axle.cursor_mode == "single":
+            return "C1"
+        if axle.cursor_mode == "double":
+            to_px = event.inaxes.transData.transform
+            d1 = abs(to_px((axle.t1, 0))[0] - event.x) if axle.t1 is not None else np.inf
+            d2 = abs(to_px((axle.t2, 0))[0] - event.x) if axle.t2 is not None else np.inf
+            return "C1" if d1 <= d2 else "C2"
+        return None
+
+    def _near_cursor(self, axle, event) -> bool:
+        """Vrai si le clic tombe sur un curseur affiché : le saisir prime sur la sélection
+        de la courbe qu'il recouvre."""
+        to_px = event.inaxes.transData.transform
+        instants = [t for t in (axle.t1 if axle.cursor_mode != "none" else None,
+                                axle.t2 if axle.cursor_mode == "double" else None,
+                                self.state.t_global if self.state.global_cursor else None) if t is not None]
+        if any(abs(to_px((t, 0))[0] - event.x) <= PICK_TOLERANCE_PX for t in instants):
+            return True
+        return axle.h_enabled and axle.h_level is not None and \
+            abs(to_px((0, axle.h_level))[1] - event.y) <= PICK_TOLERANCE_PX
+
+    def _move(self, target: str, event) -> None:
+        """Place le curseur visé à la position de la souris (enregistré au relâchement)."""
+        axle = self.axle()
+        if target == "H" and event.ydata is not None:
+            axle.h_level = float(event.ydata)
+        elif target == "G" and event.xdata is not None:
+            self.state.t_global = self._snap(float(event.xdata), event)
+        elif target in ("C1", "C2") and event.xdata is not None:
+            setattr(axle, "t1" if target == "C1" else "t2", self._snap(float(event.xdata), event))
+        self.update_cursors(record=False)
+
+    def _snap(self, instant: float, event=None) -> float:
+        """Instant de la mesure réelle la plus proche, sur la courbe sélectionnée de l'axe
+        actif (à défaut, la 1re courbe d'un axe temporel) : un curseur est posé sur un
+        horodatage du fichier, et le Δt du double curseur est l'écart exact de deux
+        horodatages (temps entiers en ms -> Δt entier en ms). Ctrl enfoncé pendant le
+        clic ou le glisser (``event``) : curseur libre, instant inchangé. Sans courbe :
+        inchangé."""
+        if event is not None and (event.key in ("control", "ctrl")
+                                  or "ctrl" in (getattr(event, "modifiers", None) or ())):
+            return instant
+        refs = [self.axle().selected_curve()] + [ref for axle in self.state.axles if axle.kind == "time"
+                                                  for ref in axle.curves]
+        for ref in refs:
+            curve = resolve(ref, self.controller.workspace) if ref is not None else None
+            if curve is not None:
+                sample = sample_at(self.controller.workspace.timeline().grid(curve.source), curve.values,
+                                   instant, False)
+                return float(sample.x) if sample is not None else instant
+        return instant
+
+    # ------------------------------------------------- hauteur des axes à la souris
+    def _boundary_at(self, event) -> tuple[int, int] | None:
+        """(axe du dessus, axe du dessous) dont la séparation est sous la souris, ou None."""
+        if self.renderer is None or event.inaxes is not None or event.x is None:
+            return None
+        boxes = [(index, ax.get_window_extent()) for index, (ax, axle)
+                 in enumerate(zip(self.renderer.axes, self.state.axles)) if axle.kind == "time"]
+        best = None
+        for upper, a in boxes:
+            for lower, b in boxes:
+                gap = a.y0 - b.y1
+                if gap < -1 or not (max(a.x0, b.x0) <= event.x <= min(a.x1, b.x1)):
+                    continue
+                if b.y1 - GAP_MARGIN_PX <= event.y <= a.y0 + GAP_MARGIN_PX and (best is None or gap < best[0]):
+                    best = (gap, upper, lower)
+        return None if best is None else (best[1], best[2])
+
+    def _show_resize_cursor(self, visible: bool) -> None:
+        """Curseur de souris « ↕ » au-dessus d'une séparation d'axes."""
+        widget = self.canvas.get_tk_widget()
+        wanted = "sb_v_double_arrow" if visible else ""
+        if widget.cget("cursor") != wanted:
+            widget.configure(cursor=wanted)
+
+    def _move_guide(self, y: float) -> None:
+        """Trait pointillé à la hauteur ``y`` (pixels) : future séparation des deux axes."""
+        fraction = y / self.figure.bbox.height
+        if self._guide is None:
+            self._guide = self.figure.add_artist(Line2D([0.02, 0.99], [fraction, fraction], color=ACTIVE_AXLE_COLOR,
+                                                        lw=1.5, ls="--", animated=True))
+        self._guide.set_ydata([fraction, fraction])
+        if self._background is not None:
+            self.canvas.restore_region(self._background)
+            self.renderer.draw_cursor_artists()
+            self.figure.draw_artist(self._guide)
+            self.canvas.blit(self.figure.bbox)
+
+    def _finish_resize(self, y: float) -> None:
+        """Séparation lâchée à ``y`` : hauteurs des deux rangées d'axes recalculées (leur hauteur
+        totale ne change pas), puis redessin (enregistré pour Ctrl+Z)."""
+        upper, lower = self._resize
+        self._resize = None
+        if self._guide is not None:
+            self._guide.remove()
+            self._guide = None
+        self._show_resize_cursor(False)
+        a = self.renderer.axes[upper].get_window_extent()
+        b = self.renderer.axes[lower].get_window_extent()
+        share = min(max((a.y1 - y) / ((a.y1 - b.y0) or 1.0), MIN_SHARE), 1 - MIN_SHARE)
+        total = a.height + b.height
+        slots = self.state.template.slots
+        for index, wanted in ((upper, share * total), (lower, (1 - share) * total)):
+            factor = wanted / (self.renderer.axes[index].get_window_extent().height or 1.0)
+            row = slots[index].row
+            for slot, axle in zip(slots, self.state.axles):
+                if slot.row == row and slot.rowspan == 1:
+                    axle.height = min(max(axle.height * factor, 0.25), 8.0)
+        self.redraw()
+
+    def _on_press(self, event) -> None:
+        """Clic : séparation d'axes, légende, axe actif, menu contextuel, ou prise d'un
+        curseur / d'un point X/Y."""
+        if self.renderer is None or self.toolbar.mode:
+            return
+        if event.button == 1:
+            boundary = self._boundary_at(event)
+            if boundary is not None:           # glisser la séparation : hauteur des deux axes
+                self._resize = boundary
+                self._move_guide(event.y)
+                return
+            grabbed = self._grab_under(event)
+            if grabbed is not None:            # Matplotlib le déplace ; rien d'autre ne bouge
+                self._grab = (grabbed, event.x, event.y)
+                return
+        if event.inaxes is None:
+            return
+        index = self.renderer.axle_index_of(event.inaxes)
+        if event.inaxes is self.renderer.tbm_plot:
+            if event.button == 1 and self.state.global_cursor and event.xdata is not None:
+                self._drag = "G"
+                self._move("G", event)
+            elif event.button == 3:
+                marker = self.renderer.monitor_marker_at(event)
+                self.controller.monitor_menu(self, marker).tk_popup(int(event.guiEvent.x_root),
+                                                                    int(event.guiEvent.y_root))
+            return
+        if index is None:
+            return
+        if index != self.active_axle:
+            self.set_active_axle(index)
+        if event.button == 3:
+            self.controller.axle_context_menu(self, index).tk_popup(int(event.guiEvent.x_root),
+                                                                    int(event.guiEvent.y_root))
+            return
+        if event.button != 1:
+            return
+        axle = self.state.axles[index]
+        if axle.kind == "xy":
+            self._pick_xy(axle, event)
+            return
+        # Maj (curseur H) et Ctrl (curseur libre) : le clic place un curseur, même sur une courbe.
+        hit = (self.renderer.curve_at(event) if event.key not in ("shift", "control", "ctrl")
+               and not self._near_cursor(axle, event) else None)
+        if hit is not None and hit[1] != min(axle.selected, len(axle.curves) - 1):
+            self._select_curve(hit[1])          # clic sur une autre courbe : elle devient sélectionnée
+            return
+        self._drag = self._target_for(index, event)
+        if self._drag:
+            self._move(self._drag, event)
+
+    def _pick_xy(self, axle, event) -> None:
+        """REQ 5408 : désigne le point du nuage le plus proche du clic."""
+        data = xy_data(axle, self.controller.workspace, self.controller.workspace.timeline())
+        if data is None or event.xdata is None:
+            return
+        x0, x1 = event.inaxes.get_xlim()
+        y0, y1 = event.inaxes.get_ylim()
+        point = nearest_point(data, event.xdata, event.ydata, x1 - x0, y1 - y0)
+        if point is not None:
+            axle.xy_t = float(data.t[point])
+            if self.state.global_cursor:
+                self.state.t_global = axle.xy_t
+            self.update_cursors()
+
+    def _on_motion(self, event) -> None:
+        """Mouvement : glisser un curseur (mouvements regroupés par ``after_idle``) ;
+        bulle de détail au survol d'un marqueur du Time Base Monitor."""
+        if self.renderer is None:
+            return
+        if self._resize is not None:
+            if event.y is not None:
+                self._move_guide(event.y)
+            return
+        if self.toolbar.mode or self._grab:
+            return
+        self._show_resize_cursor(not self._drag and self._boundary_at(event) is not None)
+        if not self._drag and self.renderer.show_monitor_tip(event):
+            self._blit()
+        if event.inaxes is None:
+            return
+        if not self._drag:
+            return
+        self._pending_motion = (self._drag, event)
+        self.after_idle(self._apply_motion)        # regroupe les mouvements rapides
+
+    def _apply_motion(self) -> None:
+        """Applique le dernier mouvement en attente (un seul redessin par cycle)."""
+        if self._pending_motion is not None:
+            target, event = self._pending_motion
+            self._pending_motion = None
+            self._move(target, event)
+
+    def _on_release(self, event) -> None:
+        """Fin du glisser (séparation d'axes, curseur, légende, zoom) : l'action est
+        enregistrée pour Ctrl+Z."""
+        if self._resize is not None and self.renderer is not None:
+            self._finish_resize(event.y if event.y is not None else 0.0)
+            return
+        self._drag = None
+        if self._grab is not None and self.renderer is not None:
+            self._released(event)
+        self._checkpoint()
+
+    def _on_key(self, event) -> None:
+        """Flèches : déplace le curseur actif à l'échantillon voisin de la courbe sélectionnée."""
+        if event.key not in ("left", "right"):
+            return
+        axle = self.axle()
+        curve = resolve(axle.selected_curve(), self.controller.workspace) if axle.selected_curve() else None
+        if curve is None:
+            return
+        grid = self.controller.workspace.timeline().grid(curve.source)
+        direction = 1 if event.key == "right" else -1
+        if self.state.global_cursor and self.state.t_global is not None:
+            self.state.t_global = step_index(grid, self.state.t_global, direction)
+        elif axle.cursor_mode in ("single", "double") and axle.t1 is not None:
+            axle.t1 = step_index(grid, axle.t1, direction)
+        self.update_cursors()
+
+    def dispose(self) -> None:
+        """Annule les rafraîchissements différés avant destruction de l'onglet
+        (évite les « invalid command name … » de Tk et du dessin Matplotlib)."""
+        self.renderer = None                # plus aucun redessin planifié à partir d'ici
+        for job in (self._resize_job, self._refresh_job):
+            if job is not None:
+                self.after_cancel(job)
+        self._resize_job = self._refresh_job = None
+        self.update_idletasks()             # exécute le dessin différé en attente
+        self.figure.clear()
+
+    def capture(self) -> TabState:
+        """Copie figée de l'état avec le zoom courant (rapport pas à pas, REQ 6004)."""
+        if self.renderer is not None:
+            self.renderer.capture_view()
+        return self.state.copy()
+
+    def float_curve_selected(self) -> bool:
+        """Le curseur horizontal exige une courbe Float sélectionnée (REQ 5406)."""
+        axle = self.axle()
+        curve = resolve(axle.selected_curve(), self.controller.workspace) if axle.selected_curve() else None
+        return curve is not None and curve.signal_type is SignalType.FLOAT and axle.kind == "time"

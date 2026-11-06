@@ -1,0 +1,5 @@
+Dossier réservé au contrôle automatique de traçabilité des requis
+(tools/verifier_tracabilite.py et le test test_architecture.test_every_requirement_is_traced).
+
+Il est vide dans l'outil livré : sans fichier ici, l'outil fonctionne normalement ;
+seul ce contrôle est sauté.

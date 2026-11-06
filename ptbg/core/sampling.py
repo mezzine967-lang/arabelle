@@ -1,0 +1,220 @@
+"""Lecture des échantillons : curseurs, croisements, réduction d'affichage.
+
+Requis servis : REQ_COMMON_KH_5401 / 5402 / 5403 (valeur croisée par un
+curseur vertical), 5406 / 5407 (curseur horizontal et croisements), 4105
+(fluidité avec des millions de points).
+
+Règle constante : AUCUNE interpolation de valeur. Le curseur lit
+l'échantillon réel :
+- Float : l'échantillon le plus proche dans le temps ;
+- Bool / Texte / groupe : l'échantillon précédent (état maintenu jusqu'au
+  suivant), ce qui correspond au tracé en escalier.
+Le temps de l'échantillon lu et sa ligne CSV sont toujours restitués.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class Sample:
+    """Échantillon lu par un curseur."""
+    index: int          # indice dans le fichier
+    x: float            # abscisse de l'échantillon (et non du curseur)
+    value: float        # NaN si la cellule est vide ou invalide
+
+
+# Recul toléré entre deux abscisses (s) : les arrondis flottants de l'horodatage
+# régularisé (≈ 1e-15 s) ne doivent pas faire croire à un retour arrière.
+ORDER_TOLERANCE_S = 1e-9
+
+
+def is_sorted(x: np.ndarray) -> bool:
+    """Vrai si les abscisses valides sont croissantes (recherche dichotomique possible)."""
+    finite = x[np.isfinite(x)]
+    return bool(finite.size < 2 or np.all(np.diff(finite) >= -ORDER_TOLERANCE_S))
+
+
+class TimeGrid:
+    """Abscisses des échantillons d'un fichier, préparées UNE fois pour les
+    curseurs et non à chaque mouvement de souris (REQ 4105) : abscisses
+    finies, leurs positions et leur ordre. Les données ne sont pas modifiées."""
+
+    def __init__(self, x: np.ndarray) -> None:
+        """Repère les abscisses finies et vérifie leur ordre."""
+        self.x = x
+        valid = np.isfinite(x)
+        self.positions = None if valid.all() else np.flatnonzero(valid)   # None : toutes finies
+        self.finite = x if self.positions is None else x[self.positions]
+        self.ordered = is_sorted(self.finite)
+        self._steps: np.ndarray | None = None
+
+    @property
+    def steps(self) -> np.ndarray:
+        """Abscisses finies triées (flèches clavier), calculées au premier besoin."""
+        if self._steps is None:
+            self._steps = np.sort(self.finite)
+        return self._steps
+
+
+def sample_at(grid: TimeGrid, values: np.ndarray, position: float, hold: bool) -> Sample | None:
+    """Échantillon lu à l'abscisse ``position`` (voir règle du module).
+
+    Abscisses croissantes : recherche dichotomique. Les abscisses non
+    croissantes (doublons, retours arrière) restent lisibles par une recherche
+    directe, plus lente mais exacte.
+    """
+    x = grid.x
+    if x.size == 0 or not np.isfinite(position):
+        return None
+    if grid.ordered:
+        xs = grid.finite
+        if xs.size == 0:
+            return None
+        right = int(np.searchsorted(xs, position, side="right"))
+        if hold:
+            if right == 0:
+                return None             # avant le 1er échantillon : rien à maintenir
+            k = right - 1
+        else:
+            lo, hi = max(right - 1, 0), min(right, xs.size - 1)
+            k = lo if abs(xs[lo] - position) <= abs(xs[hi] - position) else hi
+        pick = k if grid.positions is None else int(grid.positions[k])
+    else:
+        valid = np.isfinite(x)
+        if hold:
+            distance = np.where(valid & (x <= position), position - x, np.inf)
+        else:
+            distance = np.where(valid, np.abs(x - position), np.inf)
+        if not np.isfinite(distance).any():
+            return None
+        pick = int(np.argmin(distance))
+    return Sample(int(pick), float(x[pick]), float(values[pick]))
+
+
+def step_index(grid: TimeGrid, position: float, direction: int) -> float | None:
+    """Abscisse de l'échantillon suivant (+1) ou précédent (-1) : flèches clavier."""
+    finite = grid.steps
+    if finite.size == 0:
+        return None
+    if direction > 0:
+        i = int(np.searchsorted(finite, position, side="right"))
+        return float(finite[min(i, finite.size - 1)])
+    i = int(np.searchsorted(finite, position, side="left")) - 1
+    return float(finite[max(i, 0)])
+
+
+def break_at(x: np.ndarray, y: np.ndarray, starts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Insère un NaN avant chaque indice de ``starts`` : la courbe est
+    interrompue sur un trou de la base de temps au lieu de le traverser."""
+    if starts.size == 0:
+        return x, y
+    return np.insert(x, starts, np.nan), np.insert(y, starts, np.nan)
+
+
+def missing_markers(x: np.ndarray, values: np.ndarray, missing: np.ndarray) -> np.ndarray:
+    """Indices des croix encadrant les cellules VIDES d'une variable.
+
+    Pour chaque suite de cellules vides : le dernier échantillon connu avant
+    et le premier connu après. Seules les cellules vides du CSV produisent des
+    croix (pas un saut de temps, pas une valeur invalide).
+    """
+    if not missing.any():
+        return np.empty(0, dtype=np.int64)
+    known = np.isfinite(values) & ~missing
+    padded = np.concatenate(([False], missing, [False])).astype(np.int8)
+    edges = np.flatnonzero(np.diff(padded))
+    run_starts, run_ends = edges[0::2], edges[1::2]   # [début, fin exclue)
+    known_index = np.flatnonzero(known)
+    # Dichotomie pour toutes les suites d'un coup (et non une recherche par suite :
+    # des milliers de cellules vides restent instantanées, REQ 4105).
+    before = np.searchsorted(known_index, run_starts) - 1      # dernier connu avant la suite
+    after = np.searchsorted(known_index, run_ends)             # premier connu après la suite
+    markers = np.concatenate((known_index[before[before >= 0]], known_index[after[after < known_index.size]]))
+    return np.unique(markers.astype(np.int64))
+
+
+class DisplayCurve:
+    """Courbe complète conservée pour l'affichage ; ``window`` en extrait les
+    points à dessiner pour le zoom courant. L'ordre des abscisses n'est analysé
+    qu'une fois, et non à chaque zoom ou déplacement (fluidité, REQ 4105)."""
+
+    def __init__(self, x: np.ndarray, y: np.ndarray) -> None:
+        """Mémorise la courbe ; l'analyse de l'ordre est faite au premier zoom utile."""
+        self.x, self.y = x, y
+        self._monotone: np.ndarray | None = None
+        self._checked = False
+
+    def window(self, x_min: float, x_max: float, max_points: int) -> tuple[np.ndarray, np.ndarray]:
+        """Réduit la courbe pour l'affichage en conservant min et max par paquet.
+
+        Les pics et les transitions logiques restent visibles, les NaN (ruptures)
+        sont conservés. Les données d'origine ne sont pas modifiées : le curseur lit
+        toujours les vrais échantillons.
+        """
+        x, y = self.x, self.y
+        if x.size <= max_points:
+            return x, y
+        if not self._checked:
+            self._checked = True
+            if is_sorted(x):
+                # Abscisses rendues monotones (NaN des ruptures neutralisés) pour la dichotomie.
+                self._monotone = np.maximum.accumulate(np.where(np.isnan(x), -np.inf, x))
+        if self._monotone is not None:
+            lo = max(int(np.searchsorted(self._monotone, x_min, side="left")) - 1, 0)
+            hi = min(int(np.searchsorted(self._monotone, x_max, side="right")) + 1, x.size)
+            x, y = x[lo:hi], y[lo:hi]
+        else:
+            # Temps non monotone (retours arrière réels) : fenêtre par masque.
+            keep = np.isnan(x) | ((x >= x_min) & (x <= x_max))
+            x, y = x[keep], y[keep]
+        if x.size <= max_points:
+            return x, y
+        buckets = max(max_points // 2, 1)
+        size = int(np.ceil(x.size / buckets))
+        pad = buckets * size - x.size
+        xp = np.concatenate((x, np.full(pad, np.nan)))
+        yp = np.concatenate((y, np.full(pad, np.nan))).reshape(buckets, size)
+        nan_rows = np.isnan(yp)
+        lo_idx = np.argmin(np.where(nan_rows, np.inf, yp), axis=1)
+        hi_idx = np.argmax(np.where(nan_rows, -np.inf, yp), axis=1)
+        first = np.minimum(lo_idx, hi_idx)
+        second = np.maximum(lo_idx, hi_idx)
+        base = np.arange(buckets) * size
+        picks = np.stack((base + first, base + second), axis=1).ravel()
+        out_x, out_y = xp[picks], yp.ravel()[picks]
+        # Un paquet contenant une rupture la conserve (NaN après ses extrêmes).
+        gap_rows = np.flatnonzero(nan_rows.any(axis=1) & ~nan_rows.all(axis=1))
+        if gap_rows.size:
+            insert_at = (gap_rows + 1) * 2
+            out_x = np.insert(out_x, insert_at, np.nan)
+            out_y = np.insert(out_y, insert_at, np.nan)
+        return out_x, out_y
+
+
+@dataclass(frozen=True)
+class Crossing:
+    """Franchissement d'un seuil par un signal analogique (REQ 5406)."""
+    index: int          # 1er échantillon APRÈS le franchissement
+    x: float
+    rising: bool
+
+
+def crossings(x: np.ndarray, y: np.ndarray, level: float,
+              allowed: np.ndarray | None = None) -> list[Crossing]:
+    """Franchissements du niveau ``level`` entre deux échantillons valides
+    consécutifs. ``allowed`` (masque booléen) restreint aux instants où la
+    condition est vraie sur LES DEUX échantillons (REQ 5407)."""
+    valid = np.isfinite(y) & np.isfinite(x)
+    if allowed is not None:
+        valid &= allowed
+    index = np.flatnonzero(valid)
+    if index.size < 2:
+        return []
+    contiguous = np.diff(index) == 1          # pas de franchissement à travers un manque
+    above = y[index] >= level
+    change = (above[1:] != above[:-1]) & contiguous
+    after = index[1:][change]
+    return [Crossing(int(i), float(x[i]), bool(y[i] >= level)) for i in after]

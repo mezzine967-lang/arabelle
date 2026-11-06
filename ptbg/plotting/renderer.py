@@ -1,0 +1,737 @@
+"""Rendu d'un onglet (``TabState``) dans une figure Matplotlib.
+
+Utilisé à l'identique pour l'écran et pour le PDF (``for_print=True``).
+
+Requis servis :
+- REQ_COMMON_KH_5300 : grille d'axes issue du modèle ;
+- REQ_COMMON_KH_4102 : Time Base Monitor ajouté automatiquement en bas de
+  chaque disposition, sur le même axe des temps que les courbes ;
+- REQ_COMMON_KH_4104 : à l'impression, TBM toujours présent, ou indication de
+  conformité s'il a été retiré de la mise en page ;
+- REQ_COMMON_KH_2200 / 2201 : Float en trait continu, Bool et Texte en
+  escalier sur des pistes logiques, groupe binaire = pistes regroupées ;
+- REQ_COMMON_KH_5400 à 5408 : dessin des curseurs et du nuage X/Y ;
+- REQ_COMMON_KH_4101 : courbe interrompue sur un trou de la base de temps,
+  croix sur les échantillons qui encadrent une cellule vide.
+
+Les axes temporels d'un onglet partagent leur abscisse (``sharex``) : zoom et
+déplacement sont synchronisés, ce qui réalise la synchronisation des axes
+demandée par REQ_COMMON_KH_5405.
+
+Réglages de présentation choisis par l'utilisateur (remarques du relecteur) :
+titre et unité de chaque axe, hauteur relative des axes, couleur / épaisseur /
+style de trait de chaque courbe. La légende ne porte que le nom de la
+variable ; le nom du fichier n'y est ajouté que si deux fichiers de l'axe ont
+une variable du même nom (sinon les courbes seraient indiscernables).
+"""
+from __future__ import annotations
+
+import textwrap
+
+import numpy as np
+from matplotlib import rc_context, style
+from matplotlib.transforms import blended_transform_factory
+
+from ptbg.core.arrangement import AxleState, TabState
+from ptbg.core.curves import CurveData, resolve
+from ptbg.core.data_package import Timeline, Workspace
+from ptbg.core.readings import cursor_positions, horizontal_crossings, xy_data
+from ptbg.core.conditional import evaluate, true_intervals
+from ptbg.core.sampling import DisplayCurve, break_at, missing_markers, sample_at
+from ptbg.core.signals import SignalType, short_label
+from ptbg.core.time_base import duration_text, to_ns
+from ptbg.core.xy import point_at_time
+from ptbg.plotting import monitor
+from ptbg.plotting.styles import (ACTIVE_AXLE_COLOR, CURSOR_COLORS, FONT_NORMAL, FONT_SMALL, REPORT_FONT,
+                                  SEVERITY_COLORS, apply_grid, curve_color)
+from ptbg.plotting.time_axis import apply_time_axis, axis_title
+
+LANE_STEP = 1.25        # espacement vertical des pistes logiques
+LANE_HEIGHT = 0.8       # amplitude 0 -> 1 d'une piste
+MAX_MARKERS = 3000      # croix / marqueurs dessinés au plus par courbe
+MAX_SHADED = 400        # périodes de condition ombrées au plus
+MAX_XY_POINTS = 20000
+HSPACE = 0.45           # espace vertical entre axes (fraction de hauteur moyenne)
+PRINT_HSPACE = 0.8      # idem dans le rapport, où chaque axe porte ses graduations de temps
+CHAR_WIDTH_EM = 0.62    # largeur moyenne d'un caractère (fraction de la taille de police)
+LINE_PT = 1.35          # hauteur d'une ligne de texte (fraction de la taille de police)
+MIN_TBM_PLOT_IN = 0.45  # hauteur minimale de la courbe des Δt du TBM (pouces)
+PICK_RADIUS_PX = 6      # distance (pixels) à laquelle un clic désigne une courbe
+
+
+def _time_slot_below(tpl, slot) -> bool:
+    """Vrai si un autre axe temporel est placé sous ``slot``, dans les mêmes colonnes."""
+    columns = set(range(slot.col, slot.col + slot.colspan))
+    return any(other.kind == "time" and other.row >= slot.row + slot.rowspan
+               and columns & set(range(other.col, other.col + other.colspan)) for other in tpl.slots)
+
+
+def _height_pt(ax) -> float:
+    """Hauteur réelle d'un axe en points (connue dès sa création, avant tout dessin)."""
+    return ax.bbox.height * 72.0 / ax.figure.dpi
+
+
+def _representable_limits(arrays) -> tuple[float, float] | None:
+    """Limites à imposer si l'étendue des valeurs dépasse le flottant 64 bits.
+
+    Des valeurs proches de ±1,8e308 (dépassement PLC) donnent une étendue
+    infinie : Matplotlib ne peut plus construire sa transformation (« Singular
+    matrix »). La vue est alors bornée à ±1e307 ; les valeurs ne sont pas
+    modifiées et restent lisibles aux curseurs. None dans tous les autres cas."""
+    finite = [values[np.isfinite(values)] for values in arrays]
+    finite = [values for values in finite if values.size]
+    if not finite:
+        return None
+    lo = min(float(values.min()) for values in finite)
+    hi = max(float(values.max()) for values in finite)
+    with np.errstate(over="ignore"):
+        span = hi - lo
+    return None if np.isfinite(span) else (max(lo, -1e307), min(hi, 1e307))
+
+
+def _row_ratios(tpl, axles) -> list[float]:
+    """Hauteurs relatives des rangées : celles du modèle, multipliées par la hauteur
+    choisie pour les axes de la rangée (le plus haut d'une rangée l'emporte)."""
+    ratios = []
+    for row, ratio in enumerate(tpl.row_ratios):
+        heights = [axle.height for slot, axle in zip(tpl.slots, axles) if slot.row == row and slot.rowspan == 1]
+        ratios.append(ratio * max(heights or [1.0]))
+    return ratios
+
+
+def _legend_labels(curves) -> list[str]:
+    """Libellés de légende : nom de la variable seul, fichier ajouté en cas d'homonymie."""
+    names = [curve.ref.name for curve in curves]
+    labels = []
+    for curve in curves:
+        label = ("Groupe " if curve.ref.is_group else "") + curve.ref.name
+        labels.append(f"{label} [{curve.source.name}]" if names.count(curve.ref.name) > 1 else label)
+    return labels
+
+
+def _bound_axes(ax, xlim, ylim) -> None:
+    """Applique ces limites, l'échelle automatique coupée AVANT (elle déborderait)."""
+    if xlim:
+        ax.set_autoscalex_on(False)
+    if ylim:
+        ax.set_autoscaley_on(False)
+    if xlim:
+        ax.set_xlim(*xlim)
+    if ylim:
+        ax.set_ylim(*ylim)
+
+
+class TabRenderer:
+    """Construit et met à jour le dessin d'un onglet."""
+
+    def __init__(self, container, tab: TabState, workspace: Workspace, timeline: Timeline,
+                 max_points: int, for_print: bool = False, active_axle: int | None = None,
+                 height_in: float | None = None) -> None:
+        """Mémorise l'état à dessiner ; ``draw`` construit la figure."""
+        self.container = container          # Figure ou SubFigure
+        # Hauteur réelle de la zone (pouces) : dimensionne le bandeau texte du TBM.
+        self.height_in = height_in or container.figure.get_figheight()
+        self.tab = tab
+        self.workspace = workspace
+        self.timeline = timeline
+        self.max_points = max_points
+        self.for_print = for_print
+        self.active_axle = active_axle
+        self.axes: list = []                # un axe Matplotlib par axe du modèle
+        self.tbm_plot = None
+        self._lines: list = []              # (axe, ligne, DisplayCurve : courbe complète)
+        self._lanes: dict = {}              # (axe, courbe) -> (base, échelle) des pistes
+        self._digital_axles: set = set()    # axes dessinés en pistes logiques
+        self._cursor_artists: list = []
+        self._h_cache: dict = {}
+        self._legend_outside = False        # légende de l'axe en cours de dessin hors du graphique
+        self._movables: list = []           # étiquettes déplaçables du dessin : (élément, axe, clé, décalage auto)
+        self._cursor_movables: list = []    # idem pour les étiquettes des curseurs (refaites à chaque mouvement)
+        self._time_labels = True            # graduations de temps écrites sur l'axe en cours de dessin
+        self._curve_lines: list = []        # (axe, courbe, ligne) : désignation d'une courbe à la souris
+        self._tbm_markers: list = []        # anomalies du TBM : (x, y, détail, id fichier, n° de mesure)
+        self._tip = None                    # bulle de détail du TBM (écran)
+
+    # ------------------------------------------------------------------ build
+    def sources_in_tab(self):
+        """Fichiers référencés par l'onglet (pour le Time Base Monitor)."""
+        return [s for s in (self.workspace.find(fid) for fid in self.tab.file_ids()) if s is not None]
+
+    def draw(self) -> None:
+        """(Re)construit tout le dessin, avec le style Matplotlib par défaut.
+
+        Le contexte de style protège le rendu d'un style global modifié dans la
+        console (Spyder, ``plt.style.use``…) sans toucher aux réglages de l'utilisateur.
+        Le rapport utilise une police à chasse fixe, comme les rapports de test du projet.
+        """
+        with style.context("default"), rc_context({"font.family": REPORT_FONT} if self.for_print else {}):
+            self._draw_all()
+
+    def _draw_all(self) -> None:
+        self.container.clear()
+        self.axes, self._lines, self._lanes, self._h_cache = [], [], {}, {}
+        self._digital_axles, self._cursor_artists, self.tbm_plot = set(), [], None
+        self._movables, self._cursor_movables, self._curve_lines = [], [], []
+        self._tbm_markers, self._tip = [], None
+        tpl = self.tab.template
+        sources = self.sources_in_tab()
+        with_tbm = self.tab.tbm_visible
+        with_note = self.for_print and not with_tbm      # REQ 4104
+        hspace = PRINT_HSPACE if self.for_print else HSPACE
+        ratios = _row_ratios(tpl, self.tab.axles)
+        total = float(sum(ratios))
+        if with_tbm:
+            ratios.append(0.38 * total)
+        elif with_note:
+            ratios.append(0.12 * total * (1 + 0.5 * len(sources)))
+        # Caractères par ligne du texte du TBM : largeur de la zone / largeur d'un caractère.
+        right = 0.84 if self.for_print else 0.985
+        width_pt = self.container.bbox.width * 72.0 / self.container.figure.dpi * (right - 0.075)
+        chars = int(width_pt / (CHAR_WIDTH_EM * (FONT_SMALL - 0.5)))
+        if with_tbm:
+            # Petite fenêtre : la bande du TBM grandit assez pour son texte et une courbe
+            # lisible (sans dépasser 60 % de la hauteur), au lieu que le texte morde la courbe.
+            rows, others = len(ratios), sum(ratios[:-1])
+            scale = self.height_in * 0.89 * rows / (rows + hspace * (rows - 1))
+            needed = monitor.text_height_in(sources, width_pt / 72.0) + MIN_TBM_PLOT_IN
+            if scale > needed:
+                ratios[-1] = max(ratios[-1], min(needed * others / (scale - needed), 1.5 * others))
+        grid = self.container.add_gridspec(
+            len(ratios), tpl.ncols, height_ratios=ratios, width_ratios=list(tpl.col_ratios),
+            left=0.075, right=right, top=0.965, bottom=0.075,
+            hspace=hspace, wspace=0.22)
+        master = None
+        for index, (slot, axle) in enumerate(zip(tpl.slots, self.tab.axles)):
+            spec = grid[slot.row:slot.row + slot.rowspan, slot.col:slot.col + slot.colspan]
+            # Rapport : légende hors du graphique seulement à droite de la dernière colonne.
+            self._legend_outside = self.for_print and slot.col + slot.colspan == tpl.ncols
+            if slot.kind == "time":
+                ax = self.container.add_subplot(spec, sharex=master)
+                master = master or ax
+            else:
+                ax = self.container.add_subplot(spec)
+            self.axes.append(ax)
+            # Temps commun : à l'écran, graduations lues sur l'axe du bas de la colonne (le
+            # titre de l'axe suivant ne bute pas sur les nombres de celui-ci) ; dans le
+            # rapport, chaque axe porte les siennes (page lue sans revenir à l'axe du bas).
+            self._time_labels = self.for_print or not _time_slot_below(tpl, slot)
+            try:
+                if axle.kind == "xy":
+                    self._draw_xy_axle(index, ax, axle)
+                else:
+                    self._draw_time_axle(index, ax, axle)
+            except Exception as exc:  # noqa: BLE001 - REQ 4105 : un axe en défaut n'empêche pas les autres
+                self._axle_failed(ax, exc)
+        if with_tbm:
+            # Hauteur réelle de la bande TBM (formule de GridSpec avec hspace).
+            rows = len(ratios)
+            band_in = (self.height_in * 0.89 * rows * ratios[-1]
+                       / (sum(ratios) * (rows + HSPACE * (rows - 1))))
+            text_in = monitor.text_height_in(sources, width_pt / 72.0)
+            text_share = text_in / max(band_in - text_in, 0.35)
+            band = grid[tpl.nrows, :].subgridspec(2, 1, height_ratios=[text_share, 1], hspace=0.04)
+            text_ax = self.container.add_subplot(band[0])
+            self.tbm_plot = self.container.add_subplot(band[1], sharex=master)
+            lines, self._tbm_markers = monitor.draw_monitor(
+                text_ax, self.tbm_plot, sources, self.timeline, legend_xy=self.tab.tbm_legend_xy)
+            for line, x, y in lines:
+                self._lines.append((self.tbm_plot, line, DisplayCurve(x, y)))
+            if not self.for_print:
+                self._tip = self.tbm_plot.annotate(
+                    "", xy=(0, 0), xytext=(8, 8), textcoords="offset points", fontsize=FONT_SMALL, zorder=10,
+                    visible=False, animated=True, annotation_clip=False,
+                    bbox=dict(fc="#fffde7", ec="#999999", lw=0.6, pad=2))
+            if self.tbm_plot.get_legend() is not None and not self.for_print:
+                self.tbm_plot.get_legend().set_draggable(True)
+            apply_time_axis(self.tbm_plot, self.timeline, True)
+            self.tbm_plot.set_xlabel(axis_title(self.timeline), fontsize=FONT_SMALL)
+        elif with_note:
+            note_ax = self.container.add_subplot(grid[tpl.nrows, :])
+            note_ax.set_axis_off()
+            status = monitor.monitor_status(sources)
+            note_ax.text(0.0, 1.0, monitor.confirmation_text(sources, chars), transform=note_ax.transAxes,
+                         va="top", ha="left", fontsize=FONT_SMALL - 0.5,
+                         bbox=dict(boxstyle="round", fc="#f4f8f4", ec=SEVERITY_COLORS[status]))
+        if master is not None:
+            if self.tab.xlim:
+                master.set_xlim(*self.tab.xlim)
+            else:
+                self._fit_time_range(master)
+            if not with_tbm:
+                master.set_xlabel(axis_title(self.timeline), fontsize=FONT_SMALL)
+        self.refresh_decimation()
+        self.draw_cursors()
+
+    def _fit_time_range(self, master) -> None:
+        """Vue initiale : toute la durée des fichiers affichés. Les horodatages
+        aberrants isolés (signalés dans le TBM) ne servent pas au cadrage : ils
+        restent dessinés, visibles en dézoomant, sans écraser toute la vue."""
+        sources = [source for source in self.sources_in_tab() if source.is_loaded]
+        abscissae = [self.timeline.x(source) if not source.analysis.excluded.size
+                     else np.delete(self.timeline.x(source), source.analysis.excluded) for source in sources] \
+            or [curve.x for _, _, curve in self._lines]
+        bounds = []
+        for x in abscissae:
+            # Min / max sans copier les abscisses (NaN ignorés) ; ±inf : abscisses finies seules.
+            lo, hi = (np.fmin.reduce(x), np.fmax.reduce(x)) if x.size else (np.nan, np.nan)
+            if not (np.isfinite(lo) and np.isfinite(hi)):
+                finite = x[np.isfinite(x)]
+                lo, hi = (finite.min(), finite.max()) if finite.size else (np.nan, np.nan)
+            if np.isfinite(lo):
+                bounds.append((float(lo), float(hi)))
+        if bounds:
+            lo = min(low for low, _ in bounds)
+            hi = max(high for _, high in bounds)
+            pad = (hi - lo) * 0.01 or 1.0
+            master.set_xlim(lo - pad, hi + pad)
+
+    def _style_axle(self, index: int, ax, axle: AxleState) -> None:
+        """Quadrillage, titre (« Axe n » ou celui choisi ; centré dans le rapport) et cadre
+        bleu de l'axe actif."""
+        apply_grid(ax)
+        ax.tick_params(labelsize=FONT_SMALL)
+        ax.set_title(axle.display_title(index), loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
+        if not self.for_print and index == self.active_axle:
+            for spine in ax.spines.values():
+                spine.set_edgecolor(ACTIVE_AXLE_COLOR)
+                spine.set_linewidth(2.0)
+
+    def _title_side(self) -> str:
+        """Titre d'axe centré dans le rapport (comme les rapports de test), à gauche à l'écran."""
+        return "center" if self.for_print else "left"
+
+    def _axle_failed(self, ax, exc: Exception) -> None:
+        """Axe impossible à dessiner : il est vidé et l'erreur y est écrite (écran et PDF)."""
+        self._lines = [entry for entry in self._lines if entry[0] is not ax]
+        ax.clear()
+        ax.text(0.5, 0.5, f"Affichage impossible : {type(exc).__name__} : {exc}", transform=ax.transAxes,
+                ha="center", va="center", fontsize=FONT_NORMAL, color="#c62828", wrap=True)
+
+    def _placeholder(self, ax, text: str) -> None:
+        """Texte d'aide dans un axe vide (écran seulement, jamais dans le PDF)."""
+        if not self.for_print:
+            ax.text(0.5, 0.5, text, transform=ax.transAxes, ha="center", va="center",
+                    fontsize=FONT_NORMAL, color="#777777", clip_on=True)
+
+    def _draw_time_axle(self, index: int, ax, axle: AxleState) -> None:
+        """Axe temporel : analogique ou pistes logiques selon ses courbes."""
+        self._style_axle(index, ax, axle)
+        apply_time_axis(ax, self.timeline, self._time_labels)
+        curves = [c for c in (resolve(ref, self.workspace) for ref in axle.curves) if c is not None]
+        if not curves:
+            self._placeholder(ax, "Double-cliquer ou glisser une variable de l'arbre ici")
+            return
+        if all(c.signal_type.is_digital for c in curves):
+            self._digital_axles.add(index)
+            self._draw_digital(index, ax, axle, curves)
+        else:
+            self._draw_analog(index, ax, axle, curves)
+        if axle.ylim:
+            ax.set_ylim(*axle.ylim)
+        if not self.timeline.is_absolute and any(c.source.conversion.pretrig_samples for c in curves):
+            ax.axvline(0.0, color="#555555", ls=":", lw=1.0)
+            ax.text(0.0, 0.02, " déclenchement (t = 0)", clip_on=True,
+                    transform=blended_transform_factory(ax.transData, ax.transAxes),
+                    fontsize=FONT_SMALL - 1, color="#555555")
+
+    def _register(self, ax, x, y, **style):
+        """Trace une courbe (réduite pour l'affichage) et la mémorise pour le zoom."""
+        line, = ax.plot(x[:2], y[:2], **style)
+        self._lines.append((ax, line, DisplayCurve(x, y)))
+        return line
+
+    def _register_curve(self, index: int, position: int, ax, x, y, curve: CurveData, selected: bool, **style):
+        """Trace la courbe ``position`` de l'axe ``index`` avec l'aspect choisi pour elle
+        (épaisseur automatique : plus forte pour la courbe sélectionnée) ; la mémorise
+        pour la désigner à la souris."""
+        width = curve.ref.width or 1.0
+        line = self._register(ax, x, y, lw=width + (0.8 if selected else 0.0), ls=curve.ref.linestyle or "-",
+                              **style)
+        line.set_pickradius(PICK_RADIUS_PX)
+        self._curve_lines.append((index, position, line))
+        return line
+
+    def curve_at(self, event) -> tuple[int, int] | None:
+        """(axe, courbe) tracée sous la souris, ou None (désignation par clic)."""
+        for index, position, line in self._curve_lines:
+            if line.axes is event.inaxes and line.contains(event)[0]:
+                return index, position
+        return None
+
+    def _draw_analog(self, index, ax, axle, curves: list[CurveData]) -> None:
+        """Courbes Float : trait continu, courbe sélectionnée épaissie, croix des cellules vides."""
+        for position, (curve, label) in enumerate(zip(curves, _legend_labels(curves))):
+            color = curve.ref.color or curve_color(position)
+            selected = position == min(axle.selected, len(curves) - 1)
+            x = self.timeline.x(curve.source)
+            xb, yb = break_at(x, curve.values, curve.source.gap_starts())
+            # Rapport : nom du fichier à la ligne, la légende tient dans la marge de droite.
+            label = label.replace(" [", "\n[") if self.for_print else label
+            self._register_curve(index, position, ax, xb, yb, curve, selected, color=color,
+                                 label=("► " if selected else "") + label)
+            if curve.signal is not None:
+                marks = missing_markers(x, curve.values, curve.signal.missing)[:MAX_MARKERS]
+                if marks.size:
+                    ax.plot(x[marks], curve.values[marks], "x", color=color, ms=7, mew=1.6)
+        _bound_axes(ax, None, _representable_limits([curve.values for curve in curves]))
+        if axle.unit.strip():
+            ax.set_ylabel(axle.unit.strip(), fontsize=FONT_SMALL)
+        self._legend(ax, axle)
+
+    def _legend(self, ax, axle: AxleState) -> None:
+        """Légende de l'axe : masquée, à la place choisie à la souris, ou automatique
+        (dans l'axe à l'écran ; dans le rapport, à droite hors des courbes pour les
+        axes de la dernière colonne). À l'écran, elle se déplace à la souris."""
+        if axle.legend == "hidden":
+            return
+        if axle.legend == "free" and axle.legend_xy:
+            legend = ax.legend(loc=tuple(axle.legend_xy), fontsize=FONT_SMALL, framealpha=0.85)
+        elif self._legend_outside:
+            legend = ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0, fontsize=FONT_SMALL)
+        else:
+            legend = ax.legend(loc="best", fontsize=FONT_SMALL, framealpha=0.85)
+        if not self.for_print:
+            legend.set_draggable(True)
+
+    def _draw_digital(self, index, ax, axle, curves: list[CurveData]) -> None:
+        """Pistes logiques empilées de haut en bas, étiquetées à gauche.
+
+        Axe trop bas pour écrire le nom au-dessus de chaque piste (rapport à
+        4 axes, petite fenêtre) : le nom est écrit au milieu de sa piste et les
+        étiquettes 0/1, qui se chevaucheraient, sont retirées."""
+        lanes = sum(len(c.members) if c.ref.is_group else 1 for c in curves)
+        span = (lanes - 1) * LANE_STEP + LANE_HEIGHT + 0.7          # hauteur des données (ylim)
+        lane_pt = _height_pt(ax) * LANE_STEP / span
+        compact = lane_pt < 3.2 * FONT_SMALL
+        ticks, lane = [], 0
+        for position, curve in enumerate(curves):
+            color = curve.ref.color or curve_color(position)
+            members = curve.members if curve.ref.is_group else [curve.signal]
+            for member in members:
+                base = -lane * LANE_STEP
+                values = member.values
+                scale = LANE_HEIGHT
+                name = member.name
+                if curve.ref.is_group and not member.name.startswith(curve.ref.name):
+                    name = f"{curve.ref.name}.{member.name}"      # bit d'un groupe créé à la main
+                if member.type is SignalType.TEXT:
+                    scale = LANE_HEIGHT / max(len(member.categories) - 1, 1)
+                    name += (" (" + "/".join(short_label(c, 20) for c in member.categories[:5])
+                             + ("…" if len(member.categories) > 5 else "") + ")")
+                x = self.timeline.x(curve.source)
+                y = base + scale * values
+                xb, yb = break_at(x, y, curve.source.gap_starts())
+                selected = position == min(axle.selected, len(curves) - 1)
+                self._register_curve(index, position, ax, xb, yb, curve, selected, color=color,
+                                     drawstyle="steps-post")
+                marks = missing_markers(x, values, member.missing)[:MAX_MARKERS]
+                if marks.size:
+                    ax.plot(x[marks], y[marks], "x", color=color, ms=6, mew=1.4)
+                self._lanes[(index, position)] = (base, scale)
+                # Nom de la piste DANS l'axe : les noms longs ne sont pas tronqués.
+                # Découpé au cadre de l'axe : un nom ne déborde pas quand on déplace la vue.
+                self._label(ax, index, f"piste:{name}", ("► " if selected else "") + name,
+                            (0.003, base + (LANE_HEIGHT / 2 if compact else LANE_HEIGHT + 0.05)),
+                            blended_transform_factory(ax.transAxes, ax.transData),
+                            fontsize=FONT_SMALL - (1 if compact else 0), color=color,
+                            va="center" if compact else "bottom", ha="left", clip_on=True,
+                            bbox=dict(fc="white", ec="none", alpha=0.75, pad=0.5))
+                ticks += [base, base + LANE_HEIGHT]
+                lane += 1
+        ax.set_yticks(ticks)
+        # Pistes trop serrées : les étiquettes 0/1 se chevaucheraient, seuls les traits restent.
+        ax.set_yticklabels([] if compact else ["0", "1"] * (len(ticks) // 2), fontsize=FONT_SMALL - 1)
+        ax.set_ylim(-(lane - 1) * LANE_STEP - 0.3, LANE_HEIGHT + 0.4)
+
+    def _draw_xy_axle(self, index: int, ax, axle: AxleState) -> None:
+        """Nuage X/Y et corrélation dans le titre (REQ 5408 ; pas de droite de régression)."""
+        self._style_axle(index, ax, axle)
+        name = axle.display_title(index)
+        data = xy_data(axle, self.workspace, self.timeline)
+        if data is None:
+            self._placeholder(ax, "Nuage X/Y : Outils > Nuage X/Y…")
+            ax.set_title(f"{name} — nuage X/Y", loc=self._title_side(), fontsize=FONT_NORMAL, pad=3)
+            return
+        step = max(1, data.n // MAX_XY_POINTS)
+        ax.plot(data.x[::step], data.y[::step], ".", ms=2.5, color=curve_color(0), alpha=0.7)
+        _bound_axes(ax, _representable_limits([data.x]), _representable_limits([data.y]))
+        apply_grid(ax, minor_y=True)
+        ax.set_xlabel(f"X : {axle.xy_x.name}", fontsize=FONT_SMALL)
+        unit = f" ({axle.unit.strip()})" if axle.unit.strip() else ""
+        ax.set_ylabel(f"Y : {axle.xy_y.name}{unit}", fontsize=FONT_SMALL)
+        # Titre coupé à la largeur de l'axe : rien n'est rogné au bord de la figure.
+        chars = int(self._width_pt(ax) / (CHAR_WIDTH_EM * FONT_SMALL))
+        ax.set_title(textwrap.fill(f"{name} — X/Y : {data.describe()}", max(chars, 20)),
+                     loc=self._title_side(), fontsize=FONT_SMALL, pad=3)
+        if axle.ylim:
+            ax.set_ylim(*axle.ylim)
+
+    # ------------------------------------------------------- mise à jour zoom
+    def refresh_decimation(self) -> None:
+        """Recalcule les points affichés pour le zoom courant (appelé après
+        chaque zoom/déplacement) ; les petits nombres de points sont marqués."""
+        for ax, line, curve in self._lines:
+            lo, hi = ax.get_xlim()
+            xd, yd = curve.window(lo, hi, self.max_points)
+            line.set_data(xd, yd)
+            visible = np.count_nonzero((xd >= lo) & (xd <= hi))
+            line.set_marker("o" if visible < 120 else "")
+            line.set_markersize(2.5)
+        for ax in self.axes:
+            if ax.lines and ax.get_autoscaley_on():
+                ax.relim()
+                ax.autoscale_view(scalex=False)
+
+    def axes_time_master(self):
+        """Premier axe temporel : les autres partagent son abscisse."""
+        return next((ax for ax, axle in zip(self.axes, self.tab.axles) if axle.kind == "time"), None)
+
+    # ---------------------------------------------------------------- curseurs
+    def draw_cursors(self) -> None:
+        """Redessine uniquement les curseurs (appelé à chaque mouvement)."""
+        for artist in self._cursor_artists:
+            artist.remove()
+        self._cursor_artists, self._cursor_movables = [], []
+        for index, (ax, axle) in enumerate(zip(self.axes, self.tab.axles)):
+            try:
+                if axle.kind == "xy":
+                    self._draw_xy_cursor(index, ax, axle)
+                    continue
+                self._draw_vertical_cursors(index, ax, axle)
+                self._draw_horizontal_cursor(index, ax, axle)
+            except Exception as exc:  # noqa: BLE001 - REQ 4105 : même règle que pour le tracé
+                self._keep(ax.text(0.5, 0.02, f"Curseur non affichable : {exc}", transform=ax.transAxes,
+                                   ha="center", va="bottom", fontsize=FONT_SMALL, color="#c62828"))
+        if self.tbm_plot is not None and self.tab.global_cursor and self.tab.t_global is not None:
+            self._keep(self.tbm_plot.axvline(self.tab.t_global, color=CURSOR_COLORS["Global"], ls="--", lw=1.1))
+
+    def _label(self, ax, index: int, key: str, text: str, xy, xycoords, offset=(0.0, 0.0),
+               cursor: bool = False, **style):
+        """Étiquette du graphique que l'utilisateur peut déplacer à la souris (écran).
+
+        Sa place = place automatique (``offset``, en points) + déplacement choisi,
+        mémorisé dans l'axe (``label_offsets``, en fraction de la largeur et de la
+        hauteur de l'axe : même place par rapport aux courbes à l'écran et dans le
+        rapport, où l'axe est plus petit) ; conservé au redessin et dans le projet. ``cursor`` : étiquette de curseur (refaite à
+        chaque mouvement, dessinée par-dessus le rendu figé)."""
+        fx, fy = self.tab.axles[index].label_offsets.get(key, (0.0, 0.0))
+        dx, dy = fx * self._width_pt(ax), fy * _height_pt(ax)
+        style.setdefault("annotation_clip", False)
+        artist = ax.annotate(text, xy=xy, xycoords=xycoords, xytext=(offset[0] + dx, offset[1] + dy),
+                             textcoords="offset points", **style)
+        if not self.for_print:
+            artist.draggable(True)
+        (self._cursor_movables if cursor else self._movables).append((artist, index, key, tuple(offset)))
+        if cursor:
+            self._keep(artist)
+        return artist
+
+    def movable_at(self, event):
+        """Étiquette déplaçable sous la souris : (élément, axe, clé, décalage auto) ou None."""
+        for item in reversed(self._cursor_movables + self._movables):
+            if item[0].get_visible() and item[0].contains(event)[0]:
+                return item
+        return None
+
+    def _keep(self, artist):
+        """Mémorise un élément de curseur pour l'effacer au prochain redessin. À
+        l'écran il est « animé » : redessiné seul, sans le reste de la figure
+        (``draw_cursor_artists``) ; dans le PDF il est dessiné normalement."""
+        if not self.for_print:
+            artist.set_animated(True)
+        self._cursor_artists.append(artist)
+        return artist
+
+    def draw_cursor_artists(self) -> None:
+        """Dessine les seuls curseurs (et la bulle du TBM) sur le rendu déjà présent (écran)."""
+        for artist in self._cursor_artists:
+            self.container.figure.draw_artist(artist)
+        if self._tip is not None and self._tip.get_visible():
+            self.container.figure.draw_artist(self._tip)
+
+    def monitor_marker_at(self, event):
+        """Anomalie du TBM la plus proche de la souris (à moins de ``PICK_RADIUS_PX`` × 2) :
+        (x, y, détail, id du fichier, n° de mesure), ou None."""
+        if event.inaxes is not self.tbm_plot or not self._tbm_markers or event.x is None:
+            return None
+        points = self.tbm_plot.transData.transform([marker[:2] for marker in self._tbm_markers])
+        distance = np.hypot(points[:, 0] - event.x, points[:, 1] - event.y)
+        nearest = int(np.argmin(distance))
+        return self._tbm_markers[nearest] if distance[nearest] <= 2 * PICK_RADIUS_PX else None
+
+    def show_monitor_tip(self, event) -> bool:
+        """Bulle de détail de l'anomalie du TBM sous la souris ; vrai si la bulle a changé
+        (à redessiner)."""
+        if self._tip is None:
+            return False
+        marker = self.monitor_marker_at(event)
+        text, xy = (marker[2], marker[:2]) if marker else ("", None)
+        if text == self._tip.get_text() and self._tip.get_visible() == bool(text):
+            return False
+        self._tip.set_text(text)
+        self._tip.set_visible(bool(text))
+        if xy is not None:
+            self._tip.xy = xy
+            # Bulle placée du côté où il reste de la place (bord droit de la courbe).
+            left, right = self.tbm_plot.get_xlim()
+            self._tip.set_horizontalalignment("right" if xy[0] > (left + right) / 2 else "left")
+            self._tip.xyann = (-8 if xy[0] > (left + right) / 2 else 8, 8)
+        return True
+
+    def _draw_vertical_cursors(self, index: int, ax, axle: AxleState) -> None:
+        """Curseurs global, C1, C2 : ligne, instant, valeur de la courbe sélectionnée, Δt.
+
+        Les étiquettes ne se chevauchent pas : chacune prend la première rangée
+        (depuis le haut) où elle ne touche aucune autre ; axe trop bas pour deux
+        lignes par étiquette : l'instant seul (la valeur reste dans les lectures)."""
+        to_axes = blended_transform_factory(ax.transData, ax.transAxes)
+        curve = resolve(axle.selected_curve(), self.workspace) if axle.selected_curve() else None
+        labels = []
+        for label, position in cursor_positions(self.tab, axle):
+            color = CURSOR_COLORS[label]
+            self._keep(ax.axvline(position, color=color, lw=1.2, ls="--" if label == "Global" else "-"))
+            lines = [f"{label}  {self.timeline.format(position)}"]
+            if curve is not None:
+                sample = sample_at(self.timeline.grid(curve.source), curve.values, position, curve.hold)
+                if sample is not None:
+                    unit = f" {axle.unit.strip()}" if axle.unit.strip() and not curve.hold else ""
+                    lines.append(f"{curve.ref.name} = {curve.format_at(sample.index)}{unit}")
+                    y_mark = self._display_y(index, axle, curve, sample.value)
+                    if y_mark is not None:
+                        self._keep(ax.plot(sample.x, y_mark, "o", ms=6, mfc="none", mec=color, mew=1.5)[0])
+            labels.append((position, color, lines))
+        double = axle.cursor_mode == "double" and axle.t1 is not None and axle.t2 is not None
+        height = _height_pt(ax) - (2.2 * FONT_SMALL if double else 0)       # place du Δt en bas
+        for depth in (2, 1):
+            placed = self._place_labels(ax, [(x, lines[:depth]) for x, _, lines in labels])
+            used = max((row + 1 for row in placed), default=0)
+            if depth == 1 or used * (depth * LINE_PT * FONT_SMALL + 5) <= height:
+                break
+        for (position, color, lines), row, (key, _) in zip(labels, placed, cursor_positions(self.tab, axle)):
+            text = "\n".join(lines[:depth])
+            left, right = ax.get_xlim()
+            flip = self._label_width(text) > (right - position) / (right - left) * self._width_pt(ax)
+            self._label(ax, index, key, text, (position, 1.0), to_axes,
+                        (-3 if flip else 3, -2 - row * (depth * LINE_PT * FONT_SMALL + 5)), cursor=True,
+                        va="top", ha="right" if flip else "left", fontsize=FONT_SMALL, color=color, zorder=5,
+                        bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.6, pad=1.5))
+        if double:
+            self._keep(ax.annotate("", xy=(axle.t2, 0.06), xytext=(axle.t1, 0.06), xycoords=to_axes,
+                                   arrowprops=dict(arrowstyle="<->", color="#333333", lw=1.0)))
+            self._label(ax, index, "Δt", f"Δt = {duration_text(float(to_ns(axle.t2) - to_ns(axle.t1)))}", ((axle.t1 + axle.t2) / 2, 0.09), to_axes,
+                        cursor=True, ha="center", va="bottom", fontsize=FONT_SMALL,
+                        bbox=dict(fc="#fffde7", ec="#999999", lw=0.5, pad=1.2))
+
+    @staticmethod
+    def _label_width(text: str) -> float:
+        """Largeur estimée d'une étiquette (points), cadre compris."""
+        return max(len(line) for line in text.split("\n")) * CHAR_WIDTH_EM * FONT_SMALL + 6
+
+    @staticmethod
+    def _width_pt(ax) -> float:
+        """Largeur réelle d'un axe en points."""
+        return ax.bbox.width * 72.0 / ax.figure.dpi
+
+    def _place_labels(self, ax, items) -> list[int]:
+        """Rangée de chaque étiquette (x, lignes) : la première libre à cet endroit."""
+        left, right = ax.get_xlim()
+        scale = self._width_pt(ax) / ((right - left) or 1.0)
+        occupied: list[list[tuple[float, float]]] = []
+        rows = []
+        for x, lines in items:
+            width = self._label_width("\n".join(lines))
+            start = (x - left) * scale
+            span = (start - width, start) if start + width > self._width_pt(ax) else (start, start + width)
+            row = next((n for n, taken in enumerate(occupied)
+                        if all(span[1] < a or span[0] > b for a, b in taken)), len(occupied))
+            if row == len(occupied):
+                occupied.append([])
+            occupied[row].append(span)
+            rows.append(row)
+        return rows
+
+    def _display_y(self, index, axle, curve, value):
+        """Ordonnée affichée d'une valeur (piste logique : base + échelle × valeur)."""
+        if not np.isfinite(value) or curve.ref.is_group:
+            return None
+        if index in self._digital_axles:
+            lane = self._lanes.get((index, min(axle.selected, len(axle.curves) - 1)))
+            return None if lane is None else lane[0] + lane[1] * value
+        return value
+
+    def _draw_horizontal_cursor(self, index: int, ax, axle: AxleState) -> None:
+        """Curseur horizontal (Float uniquement) et condition Bool (REQ 5406 / 5407)."""
+        if not axle.h_enabled or axle.h_level is None:
+            return
+        key = (axle.h_level, axle.h_condition.describe() if axle.h_condition else "",
+               tuple(s.revision for s in self.sources_in_tab()), axle.selected, len(axle.curves))
+        cached = self._h_cache.get(index)
+        if cached is None or cached[0] != key:
+            result = horizontal_crossings(axle, self.workspace, self.timeline)
+            intervals = []
+            if result is not None and axle.h_condition and axle.h_condition.terms:
+                curve = result[0]
+                mask = evaluate(axle.h_condition, curve.source, self.workspace.find, self.timeline)
+                intervals = true_intervals(self.timeline.x(curve.source), mask)
+            cached = (key, result, intervals)
+            self._h_cache[index] = cached
+        _, result, intervals = cached
+        if result is None:
+            return
+        curve, found = result
+        color = CURSOR_COLORS["H"]
+        self._keep(ax.axhline(axle.h_level, color=color, lw=1.2))
+        for start, end in intervals[:MAX_SHADED]:
+            self._keep(ax.axvspan(start, end, color="#ffb74d", alpha=0.18, lw=0))
+        if found:
+            fx = np.array([c.x for c in found[:MAX_MARKERS]])
+            self._keep(ax.plot(fx, np.full(fx.size, axle.h_level), "|", ms=10, mew=1.5, color=color)[0])
+        condition = f"\nsi {axle.h_condition.describe()}" if axle.h_condition and axle.h_condition.terms else ""
+        self._label(ax, index, "H", f"H = {axle.h_level:.6g} : {len(found)} franchissement(s){condition}",
+                    (0.995, axle.h_level), blended_transform_factory(ax.transAxes, ax.transData), cursor=True,
+                    ha="right", va="top", fontsize=FONT_SMALL, color=color, zorder=6,
+                    bbox=dict(fc="white", ec=color, alpha=0.85, lw=0.5, pad=1.2))
+
+    def _draw_xy_cursor(self, index: int, ax, axle: AxleState) -> None:
+        """Point désigné du nuage : deux curseurs (X et Y) ou point de croisement seul."""
+        data = xy_data(axle, self.workspace, self.timeline)
+        if data is None:
+            return
+        marks = []
+        instant = axle.xy_t if axle.xy_t is not None else (
+            self.tab.t_global if self.tab.global_cursor else None)
+        if instant is not None:
+            marks.append(("X/Y", instant))
+        time_axles = [a for a in self.tab.axles if a.kind == "time"]
+        if time_axles:
+            marks += [(label, x) for label, x in cursor_positions(self.tab, time_axles[0]) if label != "Global"]
+        for label, instant in marks:
+            point = point_at_time(data, instant)
+            if point is None:
+                continue
+            px, py = data.x[point], data.y[point]
+            color = CURSOR_COLORS[label]
+            if label == "X/Y" and axle.xy_mode == "two_cursors":
+                self._keep(ax.axvline(px, color=color, lw=1.0))
+                self._keep(ax.axhline(py, color=color, lw=1.0))
+            self._keep(ax.plot(px, py, "o", ms=9 if label == "X/Y" else 6, mfc="none", mec=color, mew=1.8)[0])
+            self._label(ax, index, f"xy:{label}", f"{label} {self.timeline.format(data.t[point])}\nX = {px:.6g}"
+                        f"\nY = {py:.6g}", (px, py), "data", (8, 8), cursor=True, fontsize=FONT_SMALL,
+                        color=color, bbox=dict(fc="white", ec=color, alpha=0.88, lw=0.5, pad=1.2))
+
+    # ------------------------------------------------------------- utilitaires
+    def axle_index_of(self, mpl_axes) -> int | None:
+        """Indice de l'axe du modèle correspondant à un axe Matplotlib cliqué."""
+        for index, ax in enumerate(self.axes):
+            if ax is mpl_axes:
+                return index
+        return None
+
+    def capture_view(self) -> None:
+        """Recopie le zoom courant dans l'état (avant une capture de rapport)."""
+        time_axes = [ax for ax, axle in zip(self.axes, self.tab.axles) if axle.kind == "time"]
+        if time_axes:
+            self.tab.xlim = list(time_axes[0].get_xlim())
+        for ax, axle in zip(self.axes, self.tab.axles):
+            if not ax.get_autoscaley_on():
+                axle.ylim = list(ax.get_ylim())
